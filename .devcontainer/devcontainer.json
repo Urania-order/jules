@@ -1,0 +1,25 @@
+{
+  "name": "Jules Co-SMOS Codespace",
+  "image": "mcr.microsoft.com/devcontainers/javascript-node:1-20-bookworm",
+  "features": {
+    "ghcr.io/devcontainers/features/github-cli:1": {}
+  },
+  "postCreateCommand": "bash .devcontainer/setup.sh",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "GitHub.copilot",
+        "eamodio.gitlens",
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode"
+      ]
+    }
+  },
+  "remoteEnv": {
+    "JULES_PROJECT_ROOT": "${containerWorkspaceFolder}"
+  },
+  "forwardPorts": [3000, 5173, 8080],
+  "mounts": [
+    "source=jules-history,target=${containerWorkspaceFolder}/.jules/history,type=volume"
+  ]
+}
