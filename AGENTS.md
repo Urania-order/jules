@@ -516,3 +516,22 @@ If `jules-complete.sh` fails at any step, you can run the steps manually:
     git push -u origin <branch>
     gh pr create --fill
     gh pr checks && gh pr merge --squash --admin --delete-branch
+
+---
+
+# 23. Autonomous Task Queue
+
+The Codespace agent processes tasks autonomously via the task queue subsystem.
+
+## 23.1 Queue Structure
+
+- `.jules/queue/pending/` — tasks waiting for execution (sorted by priority and creation time)
+- `.jules/queue/running/` — task currently being executed along with its session metadata
+- `.jules/queue/completed/` — archived execution records (successful and failed tasks)
+
+## 23.2 Management Scripts
+
+- `scripts/jules-queue-add.sh <task-description> [priority]` — enqueues a new task. Priority can be an integer or text (`high`=10, `normal`=5, `low`=1).
+- `scripts/jules-queue-status.sh` — displays the state of pending, running, and completed queues.
+- `scripts/jules-queue-runner.sh [--once|--loop] [--dry-run]` — executes queued tasks ordered by highest priority.
+- `scripts/jules-queue-clear.sh [--completed|--all]` — clears archived or all task files from the queue.

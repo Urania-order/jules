@@ -19,10 +19,10 @@ and AI.
 - `.github/workflows/` — CI (validate + pytest)
 - `.jules/` — Task artifacts
 - `.co-smos/` — Orchestrator state (local, gitignored)
-- `scripts/` — Orchestration scripts (8 scripts)
+- `scripts/` — Orchestration and queue scripts (11 scripts)
 - `smos/` — Co-SMOS application
-- `tests/` — pytest suite (52 tests)
-- `AGENTS.md` — Jules instructions (22 sections)
+- `tests/` — pytest suite (58 tests)
+- `AGENTS.md` — Jules instructions (23 sections)
 - `pyproject.toml` — Python dependencies (uv)
 
 ## Quick start
@@ -32,6 +32,30 @@ and AI.
 3. `./scripts/jules-status.sh` — check current state
 4. `./scripts/jules-task.sh "Add a new service for ..."` — dispatch task
 5. `./scripts/jules-complete.sh <task-id> <session-id> feat/my-feature` — finalize
+
+## Task Queue
+
+The task queue allows autonomous processing of tasks by the Codespace agent.
+
+- `.jules/queue/pending/` — pending tasks waiting for execution
+- `.jules/queue/running/` — current task and active session ID
+- `.jules/queue/completed/` — archived execution history
+
+### Queue Usage
+
+```bash
+# Add a task to queue with optional priority (default: 5 or normal)
+./scripts/jules-queue-add.sh "Refactor memory service" high
+
+# View current queue status
+./scripts/jules-queue-status.sh
+
+# Run pending tasks in queue
+./scripts/jules-queue-runner.sh --loop
+
+# Clear completed or all queued tasks
+./scripts/jules-queue-clear.sh --completed
+```
 
 ## Orchestration scripts
 
@@ -43,6 +67,10 @@ and AI.
 | `jules-review.sh <task-id>` | Review task readiness |
 | `jules-recover.sh` | Reset stuck task |
 | `jules-complete.sh` | Full completion automation |
+| `jules-queue-add.sh` | Add a task to the queue |
+| `jules-queue-status.sh` | Show queue status |
+| `jules-queue-runner.sh` | Process pending queue tasks |
+| `jules-queue-clear.sh` | Clear queue entries |
 | `validate.sh` | Validate project structure |
 
 ## Testing
