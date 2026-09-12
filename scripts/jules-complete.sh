@@ -1,81 +1,90 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# ============================================================
+# Jules Complete — автоматизація завершення завдання
+# ============================================================
+#
+# Usage:
+#   ./scripts/jules-complete.sh <task-id> <session-id> <branch-name>
+#
+# Example:
+#   ./scripts/jules-complete.sh task-20260912-194341 7828326494924666542 feat/my-feature
+#
+# ============================================================
+
 PROJECT_ROOT="${JULES_PROJECT_ROOT:-$(git rev-parse --show-toplevel)}"
 cd "$PROJECT_ROOT"
 
-SESSION_ID="${1:-}"
+TASK_ID="${1:-}"
+SESSION_ID="${2:-}"
+BRANCH_NAME="${3:-}"
 
-if [ -z "$SESSION_ID" ]; then
-    echo "Usage: ./scripts/jules-complete.sh <session-id>"
+if [ -z "$TASK_ID" ] || [ -z "$SESSION_ID" ] || [ -z "$BRANCH_NAME" ]; then
+    echo "Usage: ./scripts/jules-complete.sh <task-id> <session-id> <branch-name>"
     echo ""
-    echo "Get session ID with:"
-    echo "  jules remote list --session"
+    echo "Example:"
+    echo "  ./scripts/jules-complete.sh task-20260912-194341 7828326494924666542 feat/my-feature"
+    echo ""
+    echo "Available tasks:"
+    ls -1t .jules/tasks/*.md 2>/dev/null | sed 's|.jules/tasks/||; s|\.md$||' | head -5 | sed 's/^/  /' || echo "  (none)"
     exit 1
 fi
 
 STATE_FILE=".co-smos/state.json"
+TASK_FILE=".jules/tasks/${TASK_ID}.md"
 
 echo ""
 echo "════════════════════════════════════════════"
-echo "  COMPLETE: session $SESSION_ID"
+echo "  JULES COMPLETE"
 echo "════════════════════════════════════════════"
 echo ""
-
-# --- [1/3] Pull result from Jules ---
-echo "[1/3] Pulling result from Jules..."
-
-if ! command -v jules >/dev/null 2>&1; then
-    echo "  ❌ jules CLI not found"
-    exit 1
-fi
-
-set +e
-jules remote pull --session "$SESSION_ID" --apply 2>&1 | tail -10
-PULL_EXIT=$?
-set -e
-
-if [ $PULL_EXIT -ne 0 ]; then
-    echo ""
-    echo "  ⚠️  Pull failed (exit $PULL_EXIT)."
-    echo "  This may be because:"
-    echo "    - no changes to apply"
-    echo "    - conflicts with local changes"
-    echo "  Check git status and resolve manually."
-    echo ""
-fi
-
-# --- [2/3] Git status ---
-echo ""
-echo "[2/3] Git status:"
-git status --short
+echo "Task ID:     $TASK_ID"
+echo "Session ID:  $SESSION_ID"
+echo "Branch:      $BRANCH_NAME"
 echo ""
 
-# --- [3/3] Update state ---
-echo "[3/3] Updating Co-SMOS state..."
+# --- Step 1: Pull result from Jules ---
+echo "[1/8] Pulling result from Jules..."
+
+if ! jules remote pull --session "$SESSION_ID" --apply 2>&1 | tail -5; then
+    echo ""
+    echo "❌ Pull failed. Check:"
+    echo "  - session ID is correct"
+    echo "  - no conflicts with local changes"
+    echo "  - jules CLI is logged in"
+    echo ""
+    read -rp "Continue anyway? [y/N] " CONTINUE
+    if [ "$CONTINUE" != "y" ] && [ "$CONTINUE" != "Y" ]; then
+        echo "Aborted."
+        exit 1
+    fi
+fi
+echo ""
+
+# --- Step 2: Update state.json ---
+echo "[2/8] Updating state.json..."
 
 if [ -f "$STATE_FILE" ]; then
-    python3 - "$STATE_FILE" "$SESSION_ID" <<'PY'
+    python3 - "$STATE_FILE" "$TASK_ID" "$SESSION_ID" "$BRANCH_NAME" <<'PY'
 import json, sys
 from datetime import datetime, timezone
 from pathlib import Path
 
 state_file = Path(sys.argv[1])
-session_id = sys.argv[2]
+task_id = sys.argv[2]
+session_id = sys.argv[3]
+branch = sys.argv[4]
+
 state = json.loads(state_file.read_text())
-
-active = state.get("active_task")
-
-if not active:
-    print("  (no active task in state)")
-    sys.exit(0)
+active = state.get("active_task") or {}
 
 now = datetime.now(timezone.utc).isoformat()
 completed = {
-    "id": active["id"],
+    "id": task_id,
     "status": "completed",
     "session_id": session_id,
-    "branch": active.get("branch"),
+    "branch": branch,
     "request": active.get("request"),
     "started_at": active.get("started_at"),
     "finished_at": now,
@@ -86,21 +95,123 @@ state["active_task"] = None
 state["status"] = "ready"
 state.setdefault("history", []).append(completed)
 state_file.write_text(json.dumps(state, indent=2, ensure_ascii=False) + "\n")
-print(f"  Task {active['id']} marked as completed")
+print(f"  ✅ Task {task_id} marked as completed")
 PY
 else
-    echo "  (no state.json)"
+    echo "  ⚠️  state.json not found"
 fi
+echo ""
 
+# --- Step 3: Review task ---
+echo "[3/8] Reviewing task..."
+
+if [ -x "./scripts/jules-review.sh" ]; then
+    ./scripts/jules-review.sh "$TASK_ID" 2>&1 | tail -15
+else
+    echo "  ⚠️  jules-review.sh not found"
+fi
 echo ""
+
+# --- Step 4: Validate project ---
+echo "[4/8] Validating project..."
+
+if [ -x "./scripts/validate.sh" ]; then
+    if ./scripts/validate.sh >/tmp/validate.log 2>&1; then
+        echo "  ✅ Validation passed"
+    else
+        echo "  ❌ Validation failed"
+        tail -10 /tmp/validate.log
+        read -rp "Continue anyway? [y/N] " CONTINUE
+        if [ "$CONTINUE" != "y" ] && [ "$CONTINUE" != "Y" ]; then
+            echo "Aborted."
+            exit 1
+        fi
+    fi
+else
+    echo "  ⚠️  validate.sh not found"
+fi
+echo ""
+
+# --- Step 5: Run tests ---
+echo "[5/8] Running tests..."
+
+if command -v uv >/dev/null 2>&1; then
+    if uv run pytest tests/ -q \
+        --ignore=tests/test_ecology_service.py \
+        --ignore=tests/test_value_service.py \
+        --ignore=tests/test_mcp.py >/tmp/pytest.log 2>&1; then
+        RESULT=$(tail -1 /tmp/pytest.log)
+        echo "  ✅ $RESULT"
+    else
+        echo "  ❌ Tests failed"
+        tail -15 /tmp/pytest.log
+        read -rp "Continue anyway? [y/N] " CONTINUE
+        if [ "$CONTINUE" != "y" ] && [ "$CONTINUE" != "Y" ]; then
+            echo "Aborted."
+            exit 1
+        fi
+    fi
+else
+    echo "  ⚠️  uv not found — skipping tests"
+fi
+echo ""
+
+# --- Step 6: Git commit ---
+echo "[6/8] Committing changes..."
+
+git checkout -b "$BRANCH_NAME"
+git add -A
+
+if git diff --cached --quiet; then
+    echo "  ⚠️  Nothing to commit — working tree clean"
+else
+    COMMIT_MSG="feat: complete ${TASK_ID}
+
+Jules session: ${SESSION_ID}
+Task: ${TASK_ID}"
+    git commit -m "$COMMIT_MSG" 2>&1 | tail -3
+    echo "  ✅ Committed"
+fi
+echo ""
+
+# --- Step 7: Push and create PR ---
+echo "[7/8] Pushing and creating PR..."
+
+git push -u origin "$BRANCH_NAME" 2>&1 | tail -3
+
+if command -v gh >/dev/null 2>&1; then
+    gh pr create --fill 2>&1 | tail -3 || echo "  ⚠️  PR may already exist"
+else
+    echo "  ⚠️  gh not found — create PR manually"
+fi
+echo ""
+
+# --- Step 8: Wait for CI and merge ---
+echo "[8/8] Waiting for CI and merging..."
+
+sleep 30
+
+if command -v gh >/dev/null 2>&1; then
+    echo ""
+    gh pr checks 2>&1 | tail -10
+    echo ""
+    read -rp "Merge PR? [y/N] " MERGE
+    if [ "$MERGE" = "y" ] || [ "$MERGE" = "Y" ]; then
+        gh pr merge --squash --admin --delete-branch 2>&1 | tail -5
+        git checkout main
+        git pull origin main
+        echo ""
+        echo "  ✅ Merged and returned to main"
+    else
+        echo "  ⚠️  PR left open for manual review"
+    fi
+fi
+echo ""
+
 echo "════════════════════════════════════════════"
-echo "  DONE"
+echo "  COMPLETE"
 echo "════════════════════════════════════════════"
 echo ""
-echo "Next:"
-echo "  git diff"
-echo "  git add ."
-echo "  git commit -m \"feat: apply Jules task result\""
-echo "  git push"
-echo "  gh pr create"
+echo "Task:   $TASK_ID"
+echo "Branch: $BRANCH_NAME"
 echo ""
