@@ -1,4 +1,6 @@
 import json
+import os
+import shutil
 import subprocess
 import pytest
 from pathlib import Path
@@ -107,6 +109,130 @@ def test_queue_runner_dry_run(queue_dirs):
     completed_data = json.loads(completed_files[0].read_text())
     assert completed_data["request"] == "Task High"
     assert completed_data["status"] == "completed"
+
+
+def test_queue_runner_priority_order_loop(queue_dirs):
+    run_script("jules-queue-add.sh", "Task Low", "low")       # 1
+    run_script("jules-queue-add.sh", "Task High", "high")     # 10
+    run_script("jules-queue-add.sh", "Task Medium", "normal") # 5
+
+    res = run_script("jules-queue-runner.sh", "--dry-run", "--loop")
+    assert res.returncode == 0
+
+    log_content = (queue_dirs["queue"] / "runner.log").read_text()
+
+    assert "Task High" in log_content
+    assert "Task Medium" in log_content
+    assert "Task Low" in log_content
+
+    # Check order in log
+    idx_high = log_content.find("Task High")
+    idx_med = log_content.find("Task Medium")
+    idx_low = log_content.find("Task Low")
+
+    assert idx_high < idx_med < idx_low
+
+    pending_files = list(queue_dirs["pending"].glob("*.json"))
+    completed_files = list(queue_dirs["completed"].glob("*.json"))
+
+    assert len(pending_files) == 0
+    assert len(completed_files) == 3
+
+
+def test_queue_runner_waiting_and_completion(queue_dirs, tmp_path):
+    mock_bin = tmp_path / "mock_bin"
+    mock_bin.mkdir()
+
+    scripts_dir = tmp_path / "scripts"
+    scripts_dir.mkdir(parents=True, exist_ok=True)
+
+    shutil.copy(PROJECT_ROOT / "scripts" / "jules-queue-runner.sh", scripts_dir / "jules-queue-runner.sh")
+    (scripts_dir / "jules-queue-runner.sh").chmod(0o755)
+
+    mock_jules_task = scripts_dir / "jules-task.sh"
+    mock_jules_task.write_text("""#!/usr/bin/env bash
+mkdir -p .co-smos .jules/results
+cat > .co-smos/state.json <<EOF
+{
+  "active_task": {
+    "id": "task-mock-999",
+    "request": "$1"
+  }
+}
+EOF
+cat > .jules/results/task-mock-999.log <<EOF
+Session created: session-mock-888
+EOF
+exit 0
+""")
+    mock_jules_task.chmod(0o755)
+
+    mock_jules_complete = scripts_dir / "jules-complete.sh"
+    mock_jules_complete.write_text("""#!/usr/bin/env bash
+echo "jules-complete called with task=$1 session=$2 branch=$3" >> .jules/complete.log
+exit 0
+""")
+    mock_jules_complete.chmod(0o755)
+
+    mock_jules_cli = mock_bin / "jules"
+    counter_file = tmp_path / "jules_poll_count"
+    mock_jules_cli.write_text(f"""#!/usr/bin/env bash
+if [ "$1" = "remote" ] && [ "$2" = "list" ]; then
+    counter_file="{counter_file}"
+    count=0
+    if [ -f "$counter_file" ]; then
+        count=$(cat "$counter_file")
+    fi
+    count=$((count + 1))
+    echo "$count" > "$counter_file"
+    if [ "$count" -ge 2 ]; then
+        echo "session-mock-888   Completed"
+    else
+        echo "session-mock-888   In Progress"
+    fi
+fi
+""")
+    mock_jules_cli.chmod(0o755)
+
+    env = dict(os.environ)
+    env["PATH"] = f"{mock_bin}:{env.get('PATH', '')}"
+    env["JULES_PROJECT_ROOT"] = str(tmp_path)
+    env["JULES_POLL_INTERVAL"] = "1"
+    env["JULES_POLL_TIMEOUT"] = "10"
+
+    # Add task
+    run_script("jules-queue-add.sh", "Integration test task", "high")
+
+    # Run queue runner in real mode
+    runner_script = scripts_dir / "jules-queue-runner.sh"
+    res = subprocess.run(
+        ["bash", str(runner_script), "--once"],
+        capture_output=True,
+        text=True,
+        env=env,
+        cwd=tmp_path
+    )
+    assert res.returncode == 0, f"Stdout: {res.stdout}, Stderr: {res.stderr}"
+
+    # Verify task completed
+    completed_files = list((tmp_path / ".jules" / "queue" / "completed").glob("*.json"))
+    assert len(completed_files) == 1
+    data = json.loads(completed_files[0].read_text())
+    assert data["status"] == "completed"
+    assert data["session_id"] == "session-mock-888"
+    assert data["jules_task_id"] == "task-mock-999"
+
+    # Verify jules-complete.sh was called
+    complete_log = (tmp_path / ".jules" / "complete.log").read_text()
+    assert "task-mock-999" in complete_log
+    assert "session-mock-888" in complete_log
+    assert "feat/task-mock-999" in complete_log
+
+    # Verify runner log
+    runner_log = (tmp_path / ".jules" / "queue" / "runner.log").read_text()
+    assert "Selected task for execution" in runner_log
+    assert "Session session-mock-888 status is Completed." in runner_log
+    assert "Calling jules-complete.sh" in runner_log
 
 
 def test_queue_clear(queue_dirs):
