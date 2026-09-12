@@ -18,8 +18,5 @@
   "remoteEnv": {
     "JULES_PROJECT_ROOT": "${containerWorkspaceFolder}"
   },
-  "forwardPorts": [3000, 5173, 8080],
-  "mounts": [
-    "source=jules-history,target=${containerWorkspaceFolder}/.jules/history,type=volume"
-  ]
+  "forwardPorts": [3000, 5173, 8080]
 }
