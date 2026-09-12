@@ -189,13 +189,53 @@ echo ""
 # --- Step 8: Wait for CI and merge ---
 echo "[8/8] Waiting for CI and merging..."
 
-sleep 30
-
 if command -v gh >/dev/null 2>&1; then
+    echo "  Waiting for CI checks..."
+    MAX_WAIT=300
+    WAITED=0
+    INTERVAL=15
+    CI_STATUS="unknown"
+
+    while [ "$WAITED" -lt "$MAX_WAIT" ]; do
+        CHECKS=$(gh pr checks 2>&1 || true)
+
+        if echo "$CHECKS" | grep -qiE 'pending|queued|in progress'; then
+            echo "  [$WAITED/${MAX_WAIT}s] CI still running..."
+            sleep "$INTERVAL"
+            WAITED=$((WAITED + INTERVAL))
+        elif echo "$CHECKS" | grep -qiE 'fail|error'; then
+            CI_STATUS="failed"
+            break
+        elif echo "$CHECKS" | grep -qiE 'pass|success'; then
+            CI_STATUS="passed"
+            break
+        else
+            echo "  [$WAITED/${MAX_WAIT}s] Waiting for checks to appear..."
+            sleep "$INTERVAL"
+            WAITED=$((WAITED + INTERVAL))
+        fi
+    done
+
     echo ""
     gh pr checks 2>&1 | tail -10
     echo ""
-    read -rp "Merge PR? [y/N] " MERGE
+
+    if [ "$CI_STATUS" = "failed" ]; then
+        echo "  ❌ CI failed. PR left open for manual review."
+        exit 1
+    fi
+
+    if [ "$CI_STATUS" != "passed" ]; then
+        echo "  ⚠️  CI did not finish within ${MAX_WAIT}s."
+        echo "  PR left open for manual review."
+        exit 0
+    fi
+
+    echo "  ✅ CI passed."
+    echo ""
+    printf "Merge PR? [y/N] "
+    read -r MERGE </dev/tty || MERGE="n"
+
     if [ "$MERGE" = "y" ] || [ "$MERGE" = "Y" ]; then
         gh pr merge --squash --admin --delete-branch 2>&1 | tail -5
         git checkout main
