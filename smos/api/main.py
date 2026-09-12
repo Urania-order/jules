@@ -43,8 +43,8 @@ def _get_observatory(db: Session) -> ObservatoryService:
     val = ValueEcologyService(db)
     com = CommonsService(db)
     disc = DiscoverySystem(db)
-    fed = FederationService(db)
-    return ObservatoryService(db, [eco, val, com, disc, fed])
+    res = ResearchService(db)
+    return ObservatoryService(db, [eco, val, com, disc, res])
 
 def _cosine_similarity(a: List[float], b: List[float]) -> float:
     if not a or not b:
@@ -189,14 +189,43 @@ def assess_value(node_id: int, benefit: float, impact: float, db: Session = Depe
     return svc.assess_knowledge_value(node_id, benefit, impact)
 
 @app.post("/research/portal")
-def open_research_portal(hypothesis_id: int, db: Session = Depends(get_db)):
+def open_research_portal(hypothesis_id: int, initial_budget: float = 0.0, db: Session = Depends(get_db)):
     svc = ResearchService(db)
-    return svc.open_portal(hypothesis_id)
+    return svc.open_portal(hypothesis_id, initial_budget=initial_budget)
+
+@app.get("/research/portals")
+def list_research_portals(status: Optional[str] = None, db: Session = Depends(get_db)):
+    svc = ResearchService(db)
+    return svc.list_portals(status=status)
+
+@app.get("/research/portal/{portal_id}")
+def get_research_portal(portal_id: int, db: Session = Depends(get_db)):
+    svc = ResearchService(db)
+    portal = svc.get_portal(portal_id)
+    if not portal:
+        raise HTTPException(status_code=404, detail="Research portal not found")
+    return portal
 
 @app.post("/research/sponsor")
-def sponsor_research(portal_id: int, sponsor_id: int, amount: float, db: Session = Depends(get_db)):
+def sponsor_research(portal_id: int, sponsor_id: int, amount: float, is_transparent: bool = True, db: Session = Depends(get_db)):
     svc = ResearchService(db)
-    return svc.sponsor_research(portal_id, sponsor_id, amount)
+    return svc.sponsor_research(portal_id, sponsor_id, amount, is_transparent=is_transparent)
+
+@app.post("/research/portal/{portal_id}/outcome")
+def record_portal_outcome(portal_id: int, outcome: str, db: Session = Depends(get_db)):
+    svc = ResearchService(db)
+    portal = svc.record_outcome(portal_id, outcome)
+    if not portal:
+        raise HTTPException(status_code=404, detail="Research portal not found")
+    return portal
+
+@app.post("/research/portal/{portal_id}/close")
+def close_research_portal(portal_id: int, reason: Optional[str] = None, db: Session = Depends(get_db)):
+    svc = ResearchService(db)
+    portal = svc.close_portal(portal_id, reason=reason)
+    if not portal:
+        raise HTTPException(status_code=404, detail="Research portal not found")
+    return portal
 
 @app.post("/reputation/credit")
 def issue_credit(cosmonaut_id: int, amount: float, reason: str, db: Session = Depends(get_db)):

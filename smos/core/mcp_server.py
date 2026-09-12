@@ -209,6 +209,18 @@ def fund_research(hypothesis_id: int, amount: float, sponsor_id: int) -> str:
     return f"Research funded for hypothesis {hypothesis_id} with amount: {amount}"
 
 @mcp.tool()
+def record_research_outcome(portal_id: int, outcome: str) -> str:
+    """Record a research outcome or milestone for a research portal"""
+    db = SessionLocal()
+    from smos.services.research_service import ResearchService
+    svc = ResearchService(db)
+    portal = svc.record_outcome(portal_id, outcome)
+    db.close()
+    if portal:
+        return f"Outcome recorded for portal {portal_id}: {outcome}"
+    return f"Portal {portal_id} not found."
+
+@mcp.tool()
 def verify_provenance(node_id: int) -> str:
     """Verify the origin and contributors of a piece of knowledge"""
     db = SessionLocal()
