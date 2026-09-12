@@ -51,3 +51,15 @@ class Constellation(Base):
     recipes = Column(JSON, default=[]) # Shared recipes
     reputation_score = Column(Float, default=0.0)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+class Collaboration(Base):
+    __tablename__ = "collaborations"
+    id = Column(Integer, primary_key=True, index=True)
+    cosmonaut_a_id = Column(Integer, ForeignKey("cosmonauts.id"))
+    cosmonaut_b_id = Column(Integer, ForeignKey("cosmonauts.id"))
+    goal = Column(String)
+    status = Column(String, default="active")
+    outcome = Column(String, nullable=True)
+    metrics = Column(JSON, default={})
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())

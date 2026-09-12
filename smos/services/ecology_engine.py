@@ -52,10 +52,10 @@ class EcologyEngine(Observable):
     def get_health_metrics(self) -> Dict[str, Any]:
         clusters = self.db.query(IntellectualCluster).all()
         if not clusters:
-            return {"health": 1.0, "active_clusters": 0}
+            return {"health": 1.0, "active_clusters": 0, "total_resonance": 0.0}
 
-        avg_health = sum(getattr(c, "health", 1.0) for c in clusters) / len(clusters)
-        total_resonance = sum(getattr(c, "resonance", 0.0) for c in clusters)
+        avg_health = sum(getattr(c, "health", None) or 1.0 for c in clusters) / len(clusters)
+        total_resonance = sum(getattr(c, "resonance", None) or 0.0 for c in clusters)
         return {
             "health": avg_health,
             "active_clusters": len(clusters),

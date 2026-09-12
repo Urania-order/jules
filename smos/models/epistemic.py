@@ -22,6 +22,10 @@ class IntellectualCluster(Base):
     dormant_topics = Column(JSON, default=[])
     activation_threshold = Column(Float, default=0.5)
     ambassador_id = Column(Integer, ForeignKey("cosmonauts.id"), nullable=True)
+    health = Column(Float, default=1.0)
+    resonance = Column(Float, default=0.0)
+    activity = Column(Float, default=0.0)
+    knowledge_inflow = Column(Float, default=0.0)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 class ClusterRelation(Base):

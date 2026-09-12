@@ -50,10 +50,10 @@ class ValueEcologyService(Observable):
     def get_health_metrics(self) -> Dict[str, Any]:
         assessments = self.db.query(ValueAssessment).all()
         if not assessments:
-            return {"avg_value": 0.0}
+            return {"avg_value": 0.0, "total_social_impact": 0.0}
         return {
-            "avg_value": sum(a.knowledge_value for a in assessments) / len(assessments),
-            "total_social_impact": sum(a.social_impact for a in assessments)
+            "avg_value": sum(a.knowledge_value or 0.0 for a in assessments) / len(assessments),
+            "total_social_impact": sum(a.social_impact or 0.0 for a in assessments)
         }
 
     def get_evolution_summary(self) -> List[Dict[str, Any]]:
