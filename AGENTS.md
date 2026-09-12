@@ -463,3 +463,56 @@ Standard flow for a non-trivial change:
 7. Human merges when CI is green
 
 Jules never pushes to `main` directly.
+
+---
+
+# 22. Task automation with jules-complete.sh
+
+After Jules completes a task, use `jules-complete.sh` to automate
+the entire completion workflow:
+
+    ./scripts/jules-complete.sh <task-id> <session-id> <branch-name>
+
+Example:
+
+    ./scripts/jules-complete.sh task-20260912-202630 10793142310330324252 feat/observatory-api
+
+The script performs 8 steps:
+
+1. Pull result from Jules (`jules remote pull --apply`)
+2. Update `.co-smos/state.json` (active_task → last_task + history)
+3. Review task (`jules-review.sh`)
+4. Validate project (`validate.sh`)
+5. Run tests (`pytest` with ignore list)
+6. Create branch, commit changes
+7. Push and create PR
+8. Wait for CI, prompt to merge
+
+## 22.1 When to use it
+
+Use `jules-complete.sh` for **every** task completed by Jules.
+It replaces 8 manual steps with a single command.
+
+## 22.2 CI wait behavior
+
+The script polls `gh pr checks` every 15 seconds, up to 300 seconds
+(5 minutes). Three outcomes:
+
+- **passed** — prompts `Merge PR? [y/N]`
+- **failed** — exits with error, PR left open
+- **timeout** — exits cleanly, PR left open
+
+## 22.3 Manual fallback
+
+If `jules-complete.sh` fails at any step, you can run the steps manually:
+
+    jules remote pull --session <id> --apply
+    python3 -c "..."  # update state.json
+    ./scripts/jules-review.sh <task-id>
+    ./scripts/validate.sh
+    uv run pytest tests/ -q --ignore=tests/test_ecology_service.py \
+      --ignore=tests/test_value_service.py --ignore=tests/test_mcp.py
+    git checkout -b <branch> && git add -A && git commit -m "..."
+    git push -u origin <branch>
+    gh pr create --fill
+    gh pr checks && gh pr merge --squash --admin --delete-branch
