@@ -14,19 +14,21 @@ from smos.services.evolution_service import EvolutionService
 from smos.services.community_service import CommunityService
 from smos.services.reconstruction_service import ReconstructionService
 from smos.services.epistemic_service import EpistemicService
-from smos.services.discovery_system import DiscoverySystem as DiscoveryService
+from smos.services.discovery_system import DiscoverySystem, DiscoverySystem as DiscoveryService
 from smos.services.lost_knowledge_service import LostKnowledgeService
 from smos.services.coevolution_service import CoevolutionService
 from smos.services.impact_service import ImpactService
 from smos.services.translator_service import TranslatorService
-from smos.services.ecology_engine import EcologyEngine as EcologyService
+from smos.services.ecology_engine import EcologyEngine, EcologyEngine as EcologyService
 from smos.services.resonance_service import ResonanceService
 from smos.services.signal_service import SignalService
 from smos.services.causality_service import CausalityService
-from smos.services.value_ecology_service import ValueEcologyService as ValueService
+from smos.services.value_ecology_service import ValueEcologyService, ValueEcologyService as ValueService
 from smos.services.research_service import ResearchService
 from smos.services.sovereignty_service import SovereigntyService
 from smos.services.economy_service import EconomyService
+from smos.services.observatory_service import ObservatoryService
+from smos.services.commons_service import CommonsService
 import numpy as np
 from pydantic import BaseModel
 from typing import Optional, Dict, Any, List
@@ -34,6 +36,13 @@ from datetime import datetime
 from pgvector.sqlalchemy import Vector
 
 app = FastAPI(title="Co-SMOS API", version="0.1")
+
+def _get_observatory(db: Session) -> ObservatoryService:
+    eco = EcologyEngine(db)
+    val = ValueEcologyService(db)
+    com = CommonsService(db)
+    disc = DiscoverySystem(db)
+    return ObservatoryService(db, [eco, val, com, disc])
 
 def _cosine_similarity(a: List[float], b: List[float]) -> float:
     if not a or not b:
@@ -196,6 +205,26 @@ def issue_credit(cosmonaut_id: int, amount: float, reason: str, db: Session = De
 def get_provenance(node_id: int, db: Session = Depends(get_db)):
     from smos.models.ecology import ProvenanceRecord
     return db.query(ProvenanceRecord).filter(ProvenanceRecord.node_id == node_id).first()
+
+@app.get("/observatory/health")
+def get_observatory_health(db: Session = Depends(get_db)):
+    obs = _get_observatory(db)
+    return obs.get_health_report()
+
+@app.get("/observatory/report")
+def get_observatory_report(db: Session = Depends(get_db)):
+    obs = _get_observatory(db)
+    return obs.generate_quarterly_report()
+
+@app.get("/observatory/ranking")
+def get_observatory_ranking(limit: int = 10, db: Session = Depends(get_db)):
+    obs = _get_observatory(db)
+    return obs.get_impact_ranking(limit)
+
+@app.get("/observatory/recommendations")
+def get_observatory_recommendations(db: Session = Depends(get_db)):
+    obs = _get_observatory(db)
+    return obs.generate_recommendations()
 
 @app.get("/memory/search")
 def search_memory(q: str, user_id: int, limit: int = 20, db: Session = Depends(get_db)):
