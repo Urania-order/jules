@@ -26,6 +26,7 @@ from smos.services.causality_service import CausalityService
 from smos.services.value_ecology_service import ValueEcologyService, ValueEcologyService as ValueService
 from smos.services.research_service import ResearchService
 from smos.services.sovereignty_service import SovereigntyService
+from smos.services.federation_service import FederationService
 from smos.services.economy_service import EconomyService
 from smos.services.observatory_service import ObservatoryService
 from smos.services.commons_service import CommonsService
@@ -42,7 +43,8 @@ def _get_observatory(db: Session) -> ObservatoryService:
     val = ValueEcologyService(db)
     com = CommonsService(db)
     disc = DiscoverySystem(db)
-    return ObservatoryService(db, [eco, val, com, disc])
+    fed = FederationService(db)
+    return ObservatoryService(db, [eco, val, com, disc, fed])
 
 def _cosine_similarity(a: List[float], b: List[float]) -> float:
     if not a or not b:
@@ -200,6 +202,26 @@ def sponsor_research(portal_id: int, sponsor_id: int, amount: float, db: Session
 def issue_credit(cosmonaut_id: int, amount: float, reason: str, db: Session = Depends(get_db)):
     svc = EconomyService(db)
     return svc.issue_reputation_credits(cosmonaut_id, amount, reason)
+
+@app.post("/federation/node")
+def register_federated_node(name: str, endpoint_url: str, trust_score: float = 1.0, sovereignty_level: str = "HIGH", db: Session = Depends(get_db)):
+    svc = FederationService(db)
+    return svc.register_node(name, endpoint_url, trust_score, sovereignty_level)
+
+@app.get("/federation/nodes")
+def list_federated_nodes(db: Session = Depends(get_db)):
+    svc = FederationService(db)
+    return svc.list_nodes()
+
+@app.post("/federation/sync")
+def sync_federated_knowledge(source_node_id: int, payload: Dict[str, Any], target_timeline_id: int, target_owner_id: int, db: Session = Depends(get_db)):
+    svc = FederationService(db)
+    return svc.sync_knowledge_from_node(source_node_id, payload, target_timeline_id, target_owner_id)
+
+@app.get("/federation/sovereignty/{node_id}")
+def evaluate_sovereignty(node_id: int, db: Session = Depends(get_db)):
+    svc = FederationService(db)
+    return svc.evaluate_sovereignty_policy(node_id)
 
 @app.get("/provenance/{node_id}")
 def get_provenance(node_id: int, db: Session = Depends(get_db)):

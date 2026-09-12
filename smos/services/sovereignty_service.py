@@ -2,9 +2,16 @@ from sqlalchemy.orm import Session
 from smos.models.ecology import ProvenanceRecord
 from typing import List, Dict, Any
 
+from smos.services.federation_service import FederationService
+
 class SovereigntyService:
+    """
+    SovereigntyService delegates and wraps sovereignty policies and provenance tracking,
+    integrating with FederationService.
+    """
     def __init__(self, db: Session):
         self.db = db
+        self.federation = FederationService(db)
 
     def record_provenance(self, node_id: int, cosmonaut_id: int, evidence: List[str]):
         record = ProvenanceRecord(
@@ -18,9 +25,7 @@ class SovereigntyService:
         return record
 
     def check_sovereignty_principles(self):
-        # Principles: avoid single point of control, preserve plurality
-        return {
-            "avoid_single_point_of_control": True,
-            "preserve_plurality": True,
-            "preserve_dissent": True
-        }
+        return self.federation.check_sovereignty_principles()
+
+    def evaluate_sovereignty_policy(self, node_id: int):
+        return self.federation.evaluate_sovereignty_policy(node_id)
