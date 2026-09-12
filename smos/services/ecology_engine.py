@@ -54,11 +54,12 @@ class EcologyEngine(Observable):
         if not clusters:
             return {"health": 1.0, "active_clusters": 0}
 
-        avg_health = sum(c.health for c in clusters) / len(clusters)
+        avg_health = sum(getattr(c, "health", 1.0) for c in clusters) / len(clusters)
+        total_resonance = sum(getattr(c, "resonance", 0.0) for c in clusters)
         return {
             "health": avg_health,
             "active_clusters": len(clusters),
-            "total_resonance": sum(c.resonance for c in clusters)
+            "total_resonance": total_resonance
         }
 
     def get_evolution_summary(self) -> List[Dict[str, Any]]:
