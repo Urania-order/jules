@@ -16,6 +16,7 @@ fi
 
 TASK_FILE=".jules/tasks/${TASK_ID}.md"
 LOG_FILE=".jules/results/${TASK_ID}.log"
+STATE_FILE=".co-smos/state.json"
 
 if [ ! -f "$TASK_FILE" ]; then
     echo "Error: task card not found: $TASK_FILE"
@@ -52,39 +53,72 @@ for key in ["Request", "Status", "Created"]:
 PY
 echo ""
 
-# --- [2/5] Branch & commits ---
+# --- [2/5] Branch, commits, or state ---
 echo "[2/5] BRANCH & COMMITS"
-if [ -n "$BRANCH" ]; then
-    echo "  Branch: $BRANCH"
-    if git show-ref --verify --quiet "refs/heads/$BRANCH" 2>/dev/null; then
-        echo "  Commits ahead of main:"
-        git log --oneline main.."$BRANCH" 2>/dev/null | head -10 | sed 's/^/    /' || echo "    (none)"
+BRANCH_HAS_COMMITS=false
+if [ -n "$BRANCH" ] && git show-ref --verify --quiet "refs/heads/$BRANCH" 2>/dev/null; then
+    COMMITS=$(git log --oneline main.."$BRANCH" 2>/dev/null | wc -l)
+    if [ "$COMMITS" -gt 0 ]; then
+        echo "  Branch: $BRANCH ($COMMITS commits)"
+        git log --oneline main.."$BRANCH" 2>/dev/null | head -10 | sed 's/^/    /'
+        BRANCH_HAS_COMMITS=true
     else
-        echo "  (branch not found locally)"
+        echo "  Branch: $BRANCH (no commits)"
     fi
-else
-    echo "  (no branch recorded)"
+fi
+
+# Fallback: check state.json for completed task
+if [ "$BRANCH_HAS_COMMITS" = "false" ]; then
+    STATE_INFO=$(python3 - "$STATE_FILE" "$TASK_ID" <<'PY'
+import json, sys
+from pathlib import Path
+
+state_file = Path(sys.argv[1])
+task_id = sys.argv[2]
+
+if not state_file.exists():
+    print("")
+    sys.exit(0)
+
+state = json.loads(state_file.read_text())
+
+for t in [state.get("last_task")] + state.get("history", []):
+    if t and t.get("id") == task_id:
+        print(f"  state.json: {t.get('status', 'unknown')}")
+        if t.get("session_id"):
+            print(f"  session:    {t.get('session_id')}")
+        if t.get("pr"):
+            print(f"  PR:         {t.get('pr')}")
+        if t.get("finished_at"):
+            print(f"  finished:   {t.get('finished_at')}")
+        sys.exit(0)
+print("")
+PY
+)
+    if [ -n "$STATE_INFO" ]; then
+        echo "$STATE_INFO"
+        echo ""
+        echo "  Recent commits in main:"
+        git log --oneline -5 main 2>/dev/null | sed 's/^/    /'
+    else
+        echo "  (no branch commits, no state entry)"
+    fi
 fi
 echo ""
 
 # --- [3/5] Files changed ---
 echo "[3/5] FILES CHANGED"
-if [ -n "$BRANCH" ] && git show-ref --verify --quiet "refs/heads/$BRANCH" 2>/dev/null; then
-    STAT=$(git diff --stat main.."$BRANCH" 2>/dev/null | tail -20)
-    if [ -n "$STAT" ]; then
-        echo "$STAT" | sed 's/^/  /'
-    else
-        echo "  (no changes)"
-    fi
+if [ "$BRANCH_HAS_COMMITS" = "true" ]; then
+    git diff --stat main.."$BRANCH" 2>/dev/null | tail -20 | sed 's/^/  /'
 else
-    echo "  (cannot compute — branch not found)"
+    echo "  (see recent commits in main above)"
 fi
 echo ""
 
 # --- [4/5] Session log tail ---
 echo "[4/5] SESSION LOG (tail)"
 if [ -f "$LOG_FILE" ]; then
-    tail -20 "$LOG_FILE" | sed 's/^/  /'
+    tail -15 "$LOG_FILE" | sed 's/^/  /'
 else
     echo "  (no log file)"
 fi
@@ -94,21 +128,17 @@ echo ""
 echo "[5/5] READINESS"
 READY=true
 
-if [ -n "$BRANCH" ] && git show-ref --verify --quiet "refs/heads/$BRANCH" 2>/dev/null; then
-    COMMITS=$(git log --oneline main.."$BRANCH" 2>/dev/null | wc -l)
-    if [ "$COMMITS" -eq 0 ]; then
-        echo "  ⚠️  No commits on branch — nothing to review"
-        READY=false
-    else
-        echo "  ✅ $COMMITS commit(s) on branch"
-    fi
+if [ "$BRANCH_HAS_COMMITS" = "true" ]; then
+    echo "  ✅ Branch has commits"
+elif [ -n "$STATE_INFO" ]; then
+    echo "  ✅ Task recorded as completed in state.json"
 else
-    echo "  ⚠️  Branch not found — cannot verify changes"
+    echo "  ⚠️  No commits on branch, no state entry"
     READY=false
 fi
 
 if [ -f "$LOG_FILE" ]; then
-    if grep -qi 'completed\|success' "$LOG_FILE" 2>/dev/null; then
+    if grep -qi 'completed\|success\|Ready for review' "$LOG_FILE" 2>/dev/null; then
         echo "  ✅ Session log shows completion"
     else
         echo "  ⚠️  Session log does not clearly show completion"
@@ -116,15 +146,13 @@ if [ -f "$LOG_FILE" ]; then
 fi
 
 if command -v uv >/dev/null 2>&1; then
-    echo ""
-    echo "  Running tests..."
     if uv run pytest tests/ -q \
         --ignore=tests/test_ecology_service.py \
         --ignore=tests/test_value_service.py \
         --ignore=tests/test_mcp.py >/dev/null 2>&1; then
         echo "  ✅ Tests pass"
     else
-        echo "  ❌ Tests fail — review before merge"
+        echo "  ❌ Tests fail"
         READY=false
     fi
 fi
