@@ -27,12 +27,24 @@ from smos.services.value_ecology_service import ValueEcologyService as ValueServ
 from smos.services.research_service import ResearchService
 from smos.services.sovereignty_service import SovereigntyService
 from smos.services.economy_service import EconomyService
+import numpy as np
 from pydantic import BaseModel
 from typing import Optional, Dict, Any, List
 from datetime import datetime
 from pgvector.sqlalchemy import Vector
 
 app = FastAPI(title="Co-SMOS API", version="0.1")
+
+def _cosine_similarity(a: List[float], b: List[float]) -> float:
+    if not a or not b:
+        return 0.0
+    a_arr = np.array(a, dtype=float)
+    b_arr = np.array(b, dtype=float)
+    norm_a = np.linalg.norm(a_arr)
+    norm_b = np.linalg.norm(b_arr)
+    if norm_a == 0.0 or norm_b == 0.0:
+        return 0.0
+    return float(np.dot(a_arr, b_arr) / (norm_a * norm_b))
 
 class EventCreate(BaseModel):
     user_id: int
@@ -194,14 +206,22 @@ def search_memory(q: str, user_id: int, limit: int = 20, db: Session = Depends(g
         (MemoryNode.owner_id == user_id) | (MemoryNode.workspace_id.isnot(None))
     )
 
+    query_embedding = embedding_service.get_embedding(q)
+
     if is_sqlite:
-        results = base_query.filter(MemoryNode.content.ilike(f"%{q}%")).limit(limit).all()
-        if not results:
-            results = base_query.limit(limit).all()
+        nodes = base_query.all()
+        scored_nodes = []
+        for node in nodes:
+            if node.embeddings:
+                score = _cosine_similarity(query_embedding, node.embeddings)
+            else:
+                score = -1.0
+            scored_nodes.append((node, score))
+        scored_nodes.sort(key=lambda x: x[1], reverse=True)
+        results = [node for node, _ in scored_nodes[:limit]]
     else:
-        embedding = embedding_service.get_embedding(q)
         results = base_query.order_by(
-            MemoryNode.embeddings.l2_distance(embedding)
+            MemoryNode.embeddings.l2_distance(query_embedding)
         ).limit(limit).all()
 
     return [
