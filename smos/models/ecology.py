@@ -79,3 +79,24 @@ class TranslatedMessage(Base):
     source_cosmonaut_id = Column(Integer, ForeignKey("cosmonauts.id"))
     target_behavior_profile_id = Column(Integer, ForeignKey("behavior_profiles.id"))
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+class FederatedNode(Base):
+    __tablename__ = "federated_nodes"
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, index=True)
+    endpoint_url = Column(String, unique=True, index=True)
+    trust_score = Column(Float, default=1.0)
+    sovereignty_level = Column(String, default="HIGH") # HIGH, MEDIUM, LOW
+    consensus_priority = Column(String, default="VERIFIED_SCIENCE") # VERIFIED_SCIENCE, SPECULATIVE, etc.
+    status = Column(String, default="ACTIVE") # ACTIVE, PAUSED, OFFLINE
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+class FederatedSubscription(Base):
+    __tablename__ = "federated_subscriptions"
+    id = Column(Integer, primary_key=True, index=True)
+    node_id = Column(Integer, ForeignKey("federated_nodes.id"))
+    cluster_id = Column(Integer, ForeignKey("intellectual_clusters.id"), nullable=True)
+    topic = Column(String, nullable=True)
+    consensus_filter = Column(String, nullable=True) # e.g. "Verified", "Hypothesis"
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
