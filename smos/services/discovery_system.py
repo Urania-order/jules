@@ -24,7 +24,11 @@ class DiscoverySystem(Observable):
     # Observable interface
     def get_health_metrics(self) -> Dict[str, Any]:
         hypotheses_count = self.db.query(Hypothesis).count()
-        return {"active_hypotheses": hypotheses_count}
+        analogies_count = self.db.query(ClusterRelation).count()
+        return {
+            "active_hypotheses": hypotheses_count,
+            "analogies_found": analogies_count,
+        }
 
     def get_evolution_summary(self) -> List[Dict[str, Any]]:
         return []
