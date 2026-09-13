@@ -535,3 +535,45 @@ The Codespace agent processes tasks autonomously via the task queue subsystem.
 - `scripts/jules-queue-status.sh` — displays the state of pending, running, and completed queues.
 - `scripts/jules-queue-runner.sh [--once|--loop] [--dry-run]` — executes queued tasks ordered by highest priority.
 - `scripts/jules-queue-clear.sh [--completed|--all]` — clears archived or all task files from the queue.
+
+---
+
+# 24. Task proposals
+
+After completing a task, Jules SHOULD propose 3-5 next steps.
+
+## 24.1 How to propose
+
+Use:
+
+    ./scripts/jules-queue-propose.sh <task-id> "<description>" [priority]
+
+Proposals are stored in `.jules/queue/proposed/` and DO NOT run automatically.
+
+## 24.2 What to propose
+
+Good proposals:
+- Related to the completed task
+- Small, well-defined (1-2 hours of work)
+- Have clear acceptance criteria
+- Extend the system in a coherent direction
+
+Bad proposals:
+- Vague ("improve everything")
+- Huge ("rewrite the entire system")
+- Unrelated to the current work
+- Duplicate existing functionality
+
+## 24.3 Human review
+
+    ./scripts/jules-queue-review.sh list
+    ./scripts/jules-queue-review.sh accept <proposal-id>
+    ./scripts/jules-queue-review.sh reject <proposal-id>
+
+Accepted proposals move to `.jules/queue/pending/` and are processed by
+the queue runner.
+
+## 24.4 Limits
+
+- Maximum 5 proposals per task
+- Priority range: 1-5 (default: 3)
