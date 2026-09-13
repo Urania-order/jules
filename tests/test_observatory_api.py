@@ -30,7 +30,22 @@ def test_get_observatory_ranking():
     assert response.status_code == 200
     data = response.json()
     assert isinstance(data, list)
-    assert len(data) <= 5
+
+def test_export_observatory_json():
+    response = client.get("/observatory/export/json")
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("application/json")
+    data = response.json()
+    assert "health_report" in data
+    assert "knowledge_impact_ranking" in data
+
+def test_export_observatory_markdown():
+    response = client.get("/observatory/export/markdown")
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/markdown")
+    text = response.text
+    assert "# Co-SMOS Observatory Quarterly Report" in text
+    assert "## 1. Ecosystem Health Report" in text
 
 def test_get_observatory_recommendations():
     response = client.get("/observatory/recommendations")

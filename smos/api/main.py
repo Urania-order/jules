@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, HTTPException
+from fastapi import FastAPI, Depends, HTTPException, Response
 from sqlalchemy.orm import Session
 from smos.core.database import get_db
 from smos.models.models import Event as DBEvent, User, Workspace, MemoryNode
@@ -276,6 +276,18 @@ def get_observatory_ranking(limit: int = 10, db: Session = Depends(get_db)):
 def get_observatory_recommendations(db: Session = Depends(get_db)):
     obs = _get_observatory(db)
     return obs.generate_recommendations()
+
+@app.get("/observatory/export/json")
+def export_observatory_json(db: Session = Depends(get_db)):
+    obs = _get_observatory(db)
+    json_str = obs.export_report_json()
+    return Response(content=json_str, media_type="application/json")
+
+@app.get("/observatory/export/markdown")
+def export_observatory_markdown(db: Session = Depends(get_db)):
+    obs = _get_observatory(db)
+    md_str = obs.export_report_markdown()
+    return Response(content=md_str, media_type="text/markdown")
 
 @app.get("/memory/search")
 def search_memory(q: str, user_id: int, limit: int = 20, db: Session = Depends(get_db)):

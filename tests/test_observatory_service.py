@@ -106,3 +106,24 @@ def test_generate_recommendations(db):
     assert isinstance(recs_updated, list)
     assert any("AI Ethics" in r for r in recs_updated)
     assert any("lost knowledge" in r.lower() for r in recs_updated)
+
+def test_export_report_json(db):
+    eco = EcologyEngine(db)
+    obs = ObservatoryService(db, [eco])
+
+    json_output = obs.export_report_json()
+    assert isinstance(json_output, str)
+    assert '"health_report":' in json_output
+    assert '"knowledge_impact_ranking":' in json_output
+
+def test_export_report_markdown(db):
+    eco = EcologyEngine(db)
+    obs = ObservatoryService(db, [eco])
+
+    md_output = obs.export_report_markdown()
+    assert isinstance(md_output, str)
+    assert "# Co-SMOS Observatory Quarterly Report" in md_output
+    assert "## 1. Ecosystem Health Report" in md_output
+    assert "## 3. Knowledge Impact Ranking" in md_output
+    assert "## 4. Cosmo-Initiate Forecasts" in md_output
+    assert "## 5. Recommendations" in md_output
