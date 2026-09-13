@@ -28,7 +28,7 @@ from pathlib import Path
 proposal_file = Path(sys.argv[1])
 data = {
     "id": sys.argv[2],
-    "propose _by": "jules",
+    "proposed_by": "jules",
     "source_task": sys.argv[3],
     "description": sys.argv[4],
     "priority": int(sys.argv[5]),

@@ -1,0 +1,9 @@
+{
+  "id": "proposal-20260913-223340-52777",
+  "proposed_by": "jules",
+  "source_task": "task-20260914-012908",
+  "description": "Add proposal status metrics to Observatory health reports and API endpoints",
+  "priority": 4,
+  "status": "proposed",
+  "created_at": "2026-09-13T22:33:41.059378+00:00"
+}

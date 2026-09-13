@@ -1,0 +1,9 @@
+{
+  "id": "proposal-20260913-223341-53371",
+  "proposed_by": "jules",
+  "source_task": "task-20260914-012908",
+  "description": "Add proposal filter options in jules-queue-review.sh by priority and source task",
+  "priority": 2,
+  "status": "proposed",
+  "created_at": "2026-09-13T22:33:41.935419+00:00"
+}

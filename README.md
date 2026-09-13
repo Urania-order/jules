@@ -19,7 +19,7 @@ and AI.
 - `.github/workflows/` — CI (validate + pytest)
 - `.jules/` — Task artifacts
 - `.co-smos/` — Orchestrator state (local, gitignored)
-- `scripts/` — Orchestration and queue scripts (11 scripts)
+- `scripts/` — Orchestration, queue, and proposal scripts (13 scripts)
 - `smos/` — Co-SMOS application
 - `tests/` — pytest suite (58 tests)
 - `AGENTS.md` — Jules instructions (23 sections)
@@ -40,6 +40,7 @@ The task queue allows autonomous processing of tasks by the Codespace agent.
 - `.jules/queue/pending/` — pending tasks waiting for execution
 - `.jules/queue/running/` — current task and active session ID
 - `.jules/queue/completed/` — archived execution history
+- `.jules/queue/proposed/` — proposals created by Jules awaiting human review
 
 ### Queue Usage
 
@@ -55,6 +56,28 @@ The task queue allows autonomous processing of tasks by the Codespace agent.
 
 # Clear completed or all queued tasks
 ./scripts/jules-queue-clear.sh --completed
+```
+
+### Task Proposals
+
+Jules proposes 3-5 next steps after completing a task. Proposals remain in `.jules/queue/proposed/` until reviewed by a human operator.
+
+```bash
+# Propose a follow-up task
+./scripts/jules-queue-propose.sh <source-task-id> "Task description" [priority]
+
+# List proposed tasks
+./scripts/jules-queue-review.sh list
+
+# Accept proposal (moves it to pending queue)
+./scripts/jules-queue-review.sh accept <proposal-id>
+
+# Reject proposal (removes proposal)
+./scripts/jules-queue-review.sh reject <proposal-id>
+
+# Accept or reject all proposals
+./scripts/jules-queue-review.sh accept-all
+./scripts/jules-queue-review.sh reject-all
 ```
 
 ## Seeding Data
@@ -83,6 +106,8 @@ uv run python scripts/seed_data.py --reset
 | `jules-queue-status.sh` | Show queue status |
 | `jules-queue-runner.sh` | Process pending queue tasks |
 | `jules-queue-clear.sh` | Clear queue entries |
+| `jules-queue-propose.sh` | Propose a new task follow-up |
+| `jules-queue-review.sh` | Review, accept, or reject proposals |
 | `seed_data.py` | Seed Co-SMOS database with realistic data |
 | `validate.sh` | Validate project structure |
 
