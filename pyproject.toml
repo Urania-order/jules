@@ -18,6 +18,7 @@ dependencies = [
     "httpx",
     "python-multipart",
     "mcp<2",
+    "numpy>=2.4.6",
 ]
 
 [tool.poetry]
