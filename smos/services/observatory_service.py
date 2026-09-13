@@ -3,7 +3,9 @@ from smos.core.interfaces import Observable
 from smos.models.ecology import ValueAssessment
 from smos.models.epistemic import IntellectualCluster
 from smos.models.discovery import LostKnowledge
+from smos.models.consensus import Proposal
 import json
+from pathlib import Path
 from typing import List, Dict, Any, Optional
 from datetime import datetime, timezone
 
@@ -17,6 +19,33 @@ class ObservatoryService:
         for sub in self.subsystems:
             combined_metrics[sub.__class__.__name__] = sub.get_health_metrics()
         return combined_metrics
+
+    def get_proposal_metrics(self) -> Dict[str, Any]:
+        """Aggregate proposal status metrics from DB consensus proposals and task queue proposals."""
+        db_proposals = self.db.query(Proposal).all()
+        total_db = len(db_proposals)
+        status_counts = {"PENDING": 0, "APPROVED": 0, "REJECTED": 0}
+        for p in db_proposals:
+            status = (p.status or "PENDING").upper()
+            status_counts[status] = status_counts.get(status, 0) + 1
+
+        resolved_count = status_counts.get("APPROVED", 0) + status_counts.get("REJECTED", 0)
+        approval_rate = round(status_counts.get("APPROVED", 0) / resolved_count, 4) if resolved_count > 0 else 0.0
+
+        task_queue_proposed_count = 0
+        queue_proposed_dir = Path(".jules/queue/proposed")
+        if queue_proposed_dir.is_dir():
+            task_queue_proposed_count = len([f for f in queue_proposed_dir.glob("*.json") if f.name != ".gitkeep"])
+
+        return {
+            "total_proposals": total_db,
+            "status_counts": status_counts,
+            "approval_rate": approval_rate,
+            "pending_proposals": status_counts.get("PENDING", 0),
+            "approved_proposals": status_counts.get("APPROVED", 0),
+            "rejected_proposals": status_counts.get("REJECTED", 0),
+            "queue_proposed_tasks": task_queue_proposed_count
+        }
 
     def get_health_report(self) -> Dict[str, Any]:
         """Aggregate health metrics from all subsystems with timestamp and overall health score."""
@@ -37,10 +66,13 @@ class ObservatoryService:
         health_score = sum(scores) / len(scores) if scores else 1.0
         health_score = max(0.0, min(1.0, health_score))
 
+        proposal_metrics = self.get_proposal_metrics()
+
         # Include subsystem health metrics directly for backward compatibility
         report = {
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "health_score": health_score,
+            "proposal_metrics": proposal_metrics,
             "subsystems": metrics
         }
         report.update(metrics)
@@ -159,6 +191,19 @@ class ObservatoryService:
         hs = health.get("health_score", 1.0)
         lines.append(f"- **Timestamp**: {ts}")
         lines.append(f"- **Overall Health Score**: {hs:.2f}")
+        lines.append("")
+        lines.append("### Proposal Status Metrics")
+        prop_metrics = health.get("proposal_metrics", {})
+        if prop_metrics:
+            lines.append(f"- **Total Proposals**: {prop_metrics.get('total_proposals', 0)}")
+            lines.append(f"- **Pending Proposals**: {prop_metrics.get('pending_proposals', 0)}")
+            lines.append(f"- **Approved Proposals**: {prop_metrics.get('approved_proposals', 0)}")
+            lines.append(f"- **Rejected Proposals**: {prop_metrics.get('rejected_proposals', 0)}")
+            lines.append(f"- **Approval Rate**: {prop_metrics.get('approval_rate', 0.0):.2%}")
+            if "queue_proposed_tasks" in prop_metrics:
+                lines.append(f"- **Queued Task Proposals**: {prop_metrics.get('queue_proposed_tasks', 0)}")
+        else:
+            lines.append("No proposal metrics recorded.")
         lines.append("")
         lines.append("### Subsystems Metrics")
         subsystems = health.get("subsystems", {})

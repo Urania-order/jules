@@ -262,6 +262,11 @@ def get_observatory_health(db: Session = Depends(get_db)):
     obs = _get_observatory(db)
     return obs.get_health_report()
 
+@app.get("/observatory/proposals")
+def get_observatory_proposals(db: Session = Depends(get_db)):
+    obs = _get_observatory(db)
+    return obs.get_proposal_metrics()
+
 @app.get("/observatory/report")
 def get_observatory_report(db: Session = Depends(get_db)):
     obs = _get_observatory(db)

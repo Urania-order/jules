@@ -2,8 +2,9 @@
   "id": "task-20260913-230228-52777",
   "priority": 4,
   "request": "Add proposal status metrics to Observatory health reports and API endpoints",
-  "status": "pending",
+  "status": "running",
   "created_at": "2026-09-13T23:02:28.953288+00:00",
   "proposed_by": "jules",
-  "source_task": "task-20260914-012908"
+  "source_task": "task-20260914-012908",
+  "started_at": "2026-09-13T23:19:57.180417+00:00"
 }
