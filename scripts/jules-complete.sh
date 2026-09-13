@@ -47,18 +47,41 @@ echo ""
 # --- Step 1: Pull result from Jules ---
 echo "[1/8] Pulling result from Jules..."
 
-if ! jules remote pull --session "$SESSION_ID" --apply 2>&1 | tail -5; then
+set +e
+PULL_OUTPUT=$(jules remote pull --session "$SESSION_ID" --apply 2>&1)
+PULL_EXIT=$?
+set -e
+
+echo "$PULL_OUTPUT" | tail -5
+
+if [ $PULL_EXIT -ne 0 ]; then
     echo ""
-    echo "❌ Pull failed. Check:"
-    echo "  - session ID is correct"
-    echo "  - no conflicts with local changes"
-    echo "  - jules CLI is logged in"
-    echo ""
-    read -rp "Continue anyway? [y/N] " CONTINUE
-    if [ "$CONTINUE" != "y" ] && [ "$CONTINUE" != "Y" ]; then
-        echo "Aborted."
-        exit 1
+    echo "⚠️  Pull failed (exit $PULL_EXIT)."
+
+    # Check if changes are already in working directory
+    CHANGES=$(git status --short 2>/dev/null | grep -E '^( M|M |\?\?)' | wc -l | tr -d ' ')
+
+    if [ "$CHANGES" -gt 0 ]; then
+        echo "  ✅ Found $CHANGES uncommitted change(s) in working directory."
+        echo "  Assuming patch was already applied (e.g. by manual pull)."
+        echo "  Continuing..."
+    else
+        echo "  ❌ No uncommitted changes found."
+        echo "  Cannot proceed — nothing to commit."
+        echo ""
+        echo "  Possible causes:"
+        echo "    - session ID is incorrect"
+        echo "    - patch has conflicts (manual resolution needed)"
+        echo "    - jules CLI not logged in"
+        echo ""
+        read -rp "Continue anyway? [y/N] " CONTINUE </dev/tty || CONTINUE="n"
+        if [ "$CONTINUE" != "y" ] && [ "$CONTINUE" != "Y" ]; then
+            echo "Aborted."
+            exit 1
+        fi
     fi
+else
+    echo "  ✅ Patch applied successfully."
 fi
 echo ""
 
