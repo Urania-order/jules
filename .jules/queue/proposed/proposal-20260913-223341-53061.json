@@ -1,9 +1,0 @@
-{
-  "id": "proposal-20260913-223341-53061",
-  "proposed_by": "jules",
-  "source_task": "task-20260914-012908",
-  "description": "Add CLI auto-completion for jules-queue-review.sh and proposal IDs",
-  "priority": 3,
-  "status": "proposed",
-  "created_at": "2026-09-13T22:33:41.350304+00:00"
-}

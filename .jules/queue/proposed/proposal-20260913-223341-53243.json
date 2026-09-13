@@ -1,9 +1,0 @@
-{
-  "id": "proposal-20260913-223341-53243",
-  "proposed_by": "jules",
-  "source_task": "task-20260914-012908",
-  "description": "Implement proposal expiration/TTL mechanism for aged proposals",
-  "priority": 3,
-  "status": "proposed",
-  "created_at": "2026-09-13T22:33:41.644400+00:00"
-}
