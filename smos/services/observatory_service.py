@@ -3,7 +3,8 @@ from smos.core.interfaces import Observable
 from smos.models.ecology import ValueAssessment
 from smos.models.epistemic import IntellectualCluster
 from smos.models.discovery import LostKnowledge
-from typing import List, Dict, Any
+import json
+from typing import List, Dict, Any, Optional
 from datetime import datetime, timezone
 
 class ObservatoryService:
@@ -137,3 +138,84 @@ class ObservatoryService:
                 "expected_validation_period": "6 months"
             })
         return forecasts
+
+    def export_report_json(self, report: Optional[Dict[str, Any]] = None, indent: int = 2) -> str:
+        """Export Observatory report to JSON string format."""
+        if report is None:
+            report = self.generate_quarterly_report()
+        return json.dumps(report, indent=indent, default=str)
+
+    def export_report_markdown(self, report: Optional[Dict[str, Any]] = None) -> str:
+        """Export Observatory report to Markdown format."""
+        if report is None:
+            report = self.generate_quarterly_report()
+
+        lines = ["# Co-SMOS Observatory Quarterly Report", ""]
+
+        # Health Section
+        lines.append("## 1. Ecosystem Health Report")
+        health = report.get("health_report", {})
+        ts = health.get("timestamp", "N/A")
+        hs = health.get("health_score", 1.0)
+        lines.append(f"- **Timestamp**: {ts}")
+        lines.append(f"- **Overall Health Score**: {hs:.2f}")
+        lines.append("")
+        lines.append("### Subsystems Metrics")
+        subsystems = health.get("subsystems", {})
+        if isinstance(subsystems, dict) and subsystems:
+            for sub_name, sub_data in subsystems.items():
+                lines.append(f"- **{sub_name}**: {json.dumps(sub_data, default=str)}")
+        else:
+            lines.append("No subsystem metrics recorded.")
+        lines.append("")
+
+        # Evolution Section
+        lines.append("## 2. Evolution Summary")
+        evolution = report.get("evolution_summary", [])
+        if isinstance(evolution, list) and evolution:
+            for evo in evolution:
+                lines.append(f"- {json.dumps(evo, default=str)}")
+        else:
+            lines.append("No evolution history recorded.")
+        lines.append("")
+
+        # Impact Ranking Section
+        lines.append("## 3. Knowledge Impact Ranking")
+        ranking = report.get("knowledge_impact_ranking", [])
+        if isinstance(ranking, list) and ranking:
+            lines.append("| Rank | Node ID | Score | Reason |")
+            lines.append("| --- | --- | --- | --- |")
+            for item in ranking:
+                rank = item.get("rank", "-")
+                node_id = item.get("node_id", "-")
+                score = item.get("score", "-")
+                reason = item.get("reason", "")
+                lines.append(f"| {rank} | {node_id} | {score} | {reason} |")
+        else:
+            lines.append("No ranking data available.")
+        lines.append("")
+
+        # Forecasts Section
+        lines.append("## 4. Cosmo-Initiate Forecasts")
+        forecasts = report.get("forecasts", [])
+        if isinstance(forecasts, list) and forecasts:
+            for f in forecasts:
+                fid = f.get("forecast_id", "-")
+                hyp = f.get("hypothesis", "")
+                unc = f.get("uncertainty", 0.0)
+                lines.append(f"- **[Forecast {fid}]** {hyp} (Uncertainty: {unc:.2f})")
+        else:
+            lines.append("No forecasts available.")
+        lines.append("")
+
+        # Recommendations Section
+        lines.append("## 5. Recommendations")
+        recommendations = report.get("recommendations", [])
+        if isinstance(recommendations, list) and recommendations:
+            for rec in recommendations:
+                lines.append(f"- {rec}")
+        else:
+            lines.append("No recommendations generated.")
+        lines.append("")
+
+        return "\n".join(lines)
