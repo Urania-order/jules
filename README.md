@@ -57,6 +57,18 @@ The task queue allows autonomous processing of tasks by the Codespace agent.
 ./scripts/jules-queue-clear.sh --completed
 ```
 
+## Seeding Data
+
+Seed the Co-SMOS database with realistic initial data:
+
+```bash
+# Seed database
+uv run python scripts/seed_data.py
+
+# Drop and recreate tables before seeding
+uv run python scripts/seed_data.py --reset
+```
+
 ## Orchestration scripts
 
 | Script | Purpose |
@@ -71,6 +83,7 @@ The task queue allows autonomous processing of tasks by the Codespace agent.
 | `jules-queue-status.sh` | Show queue status |
 | `jules-queue-runner.sh` | Process pending queue tasks |
 | `jules-queue-clear.sh` | Clear queue entries |
+| `seed_data.py` | Seed Co-SMOS database with realistic data |
 | `validate.sh` | Validate project structure |
 
 ## Testing
