@@ -54,7 +54,7 @@ $TASK_ID
 
 ## Created
 
-$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+$(date -Iseconds)
 
 ## Repository
 
