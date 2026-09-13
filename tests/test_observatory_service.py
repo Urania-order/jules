@@ -8,6 +8,30 @@ from smos.services.discovery_system import DiscoverySystem
 from smos.models.ecology import ValueAssessment
 from smos.models.epistemic import IntellectualCluster
 from smos.models.discovery import LostKnowledge
+from smos.models.consensus import Proposal
+
+def test_proposal_metrics(db):
+    obs = ObservatoryService(db, [])
+    metrics = obs.get_proposal_metrics()
+    assert metrics["total_proposals"] == 0
+    assert metrics["pending_proposals"] == 0
+    assert metrics["approved_proposals"] == 0
+    assert metrics["rejected_proposals"] == 0
+    assert metrics["approval_rate"] == 0.0
+
+    p1 = Proposal(title="P1", status="PENDING")
+    p2 = Proposal(title="P2", status="APPROVED")
+    p3 = Proposal(title="P3", status="REJECTED")
+    p4 = Proposal(title="P4", status="APPROVED")
+    db.add_all([p1, p2, p3, p4])
+    db.commit()
+
+    metrics = obs.get_proposal_metrics()
+    assert metrics["total_proposals"] == 4
+    assert metrics["pending_proposals"] == 1
+    assert metrics["approved_proposals"] == 2
+    assert metrics["rejected_proposals"] == 1
+    assert metrics["approval_rate"] == round(2 / 3, 4)
 
 def test_get_health_report(db):
     eco = EcologyEngine(db)
@@ -124,6 +148,7 @@ def test_export_report_markdown(db):
     assert isinstance(md_output, str)
     assert "# Co-SMOS Observatory Quarterly Report" in md_output
     assert "## 1. Ecosystem Health Report" in md_output
+    assert "### Proposal Status Metrics" in md_output
     assert "## 3. Knowledge Impact Ranking" in md_output
     assert "## 4. Cosmo-Initiate Forecasts" in md_output
     assert "## 5. Recommendations" in md_output

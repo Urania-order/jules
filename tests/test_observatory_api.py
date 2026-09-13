@@ -9,11 +9,20 @@ def test_get_observatory_health():
     data = response.json()
     assert "health_score" in data
     assert "timestamp" in data
+    assert "proposal_metrics" in data
     assert "subsystems" in data
     assert "EcologyEngine" in data["subsystems"]
     assert "ValueEcologyService" in data["subsystems"]
     assert "CommonsService" in data["subsystems"]
     assert "DiscoverySystem" in data["subsystems"]
+
+def test_get_observatory_proposals():
+    response = client.get("/observatory/proposals")
+    assert response.status_code == 200
+    data = response.json()
+    assert "total_proposals" in data
+    assert "status_counts" in data
+    assert "approval_rate" in data
 
 def test_get_observatory_report():
     response = client.get("/observatory/report")
