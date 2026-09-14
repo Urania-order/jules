@@ -2,6 +2,14 @@
 
 set -euo pipefail
 
+# Ensure PATH includes node/nvm/jules (only if jules not found)
+if ! command -v jules >/dev/null 2>&1; then
+    NVM_BIN="$HOME/.nvm/versions/node/v16.20.2/bin"
+    if [ -d "$NVM_BIN" ]; then
+        export PATH="$NVM_BIN:$PATH"
+    fi
+fi
+
 PROJECT_ROOT="${JULES_PROJECT_ROOT:-$(git rev-parse --show-toplevel)}"
 
 cd "$PROJECT_ROOT"
