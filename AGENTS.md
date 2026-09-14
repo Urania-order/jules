@@ -577,3 +577,53 @@ the queue runner.
 
 - Maximum 5 proposals per task
 - Priority range: 1-5 (default: 3)
+
+---
+
+# 27. Errata system — avoid repeating mistakes
+
+Before starting any task, Jules MUST:
+
+1. Read .jules/errata/INDEX.md
+2. Read relevant errata files
+3. Check the plan against known mistakes
+4. If about to repeat a mistake — STOP and use documented fix
+
+## 27.1 When to create errata
+
+Create new errata file when:
+
+- You made a mistake that was fixed
+- The mistake is likely to repeat
+- The fix is documented
+
+DO NOT create errata for:
+
+- One-time typos
+- Environment-specific issues that won't repeat
+- Trivial errors
+
+## 27.2 After completing a task
+
+If you made a NEW mistake:
+
+1. Create .jules/errata/errata-XXXX-slug.md
+2. Update .jules/errata/INDEX.md
+3. Commit both files
+
+## 27.3 Before reporting STATUS
+
+In final report, add section:
+
+    ERRATA CHECK
+    - Read INDEX.md: yes
+    - Relevant errata: ERRATA-0001, ERRATA-0002
+    - Checked my plan against them: yes
+    - New mistakes made: none / ERRATA-0009
+
+## 27.4 Rules
+
+- Errata is APPEND-ONLY (never delete)
+- INDEX.md updated on every new errata
+- Each errata has unique ID
+- IDs are sequential (0001, 0002, ...)
