@@ -1,6 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Ensure PATH includes node/nvm/jules (for runner without shell profile)
+NVM_BIN="$HOME/.nvm/versions/node/v16.20.2/bin"
+if [ -d "$NVM_BIN" ]; then
+    export PATH="$NVM_BIN:$PATH"
+fi
+export PATH="$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
+
 PROJECT_ROOT="${JULES_PROJECT_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
 cd "$PROJECT_ROOT"
 
