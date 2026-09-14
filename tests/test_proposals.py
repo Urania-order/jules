@@ -165,6 +165,69 @@ def test_review_invalid_action(queue_dirs):
     assert "Usage:" in res.stdout or "Usage:" in res.stderr
 
 
+def test_review_list_filter_by_priority(queue_dirs):
+    run_script("jules-queue-propose.sh", "task-101", "High priority proposal", "10")
+    run_script("jules-queue-propose.sh", "task-102", "Low priority proposal", "1")
+    run_script("jules-queue-propose.sh", "task-103", "Normal priority proposal", "5")
+
+    # Filter by exact priority string "high" (or 10)
+    res_high = run_script("jules-queue-review.sh", "--priority", "high", "list")
+    assert res_high.returncode == 0
+    assert "Found 1 proposal(s)" in res_high.stdout
+    assert "High priority proposal" in res_high.stdout
+    assert "Low priority proposal" not in res_high.stdout
+
+    # Filter by priority integer "1"
+    res_low = run_script("jules-queue-review.sh", "-p", "1", "list")
+    assert res_low.returncode == 0
+    assert "Found 1 proposal(s)" in res_low.stdout
+    assert "Low priority proposal" in res_low.stdout
+
+    # Filter by min-priority 5
+    res_min = run_script("jules-queue-review.sh", "--min-priority", "5", "list")
+    assert res_min.returncode == 0
+    assert "Found 2 proposal(s)" in res_min.stdout
+    assert "High priority proposal" in res_min.stdout
+    assert "Normal priority proposal" in res_min.stdout
+    assert "Low priority proposal" not in res_min.stdout
+
+
+def test_review_list_filter_by_source_task(queue_dirs):
+    run_script("jules-queue-propose.sh", "task-alpha-100", "Alpha proposal", "3")
+    run_script("jules-queue-propose.sh", "task-beta-200", "Beta proposal", "3")
+
+    # Filter by source task substring
+    res_alpha = run_script("jules-queue-review.sh", "--source-task", "task-alpha", "list")
+    assert res_alpha.returncode == 0
+    assert "Found 1 proposal(s)" in res_alpha.stdout
+    assert "Alpha proposal" in res_alpha.stdout
+    assert "Beta proposal" not in res_alpha.stdout
+
+    # Filter by combined source task and priority
+    res_comb = run_script("jules-queue-review.sh", "-s", "beta", "-p", "3", "list")
+    assert res_comb.returncode == 0
+    assert "Found 1 proposal(s)" in res_comb.stdout
+    assert "Beta proposal" in res_comb.stdout
+
+
+def test_review_deferred_filter(queue_dirs):
+    # Propose and reject to move to deferred
+    run_script("jules-queue-propose.sh", "task-def-1", "Deferred High", "10")
+    run_script("jules-queue-propose.sh", "task-def-2", "Deferred Low", "1")
+
+    p_files = list(queue_dirs["proposed"].glob("*.json"))
+    for pf in p_files:
+        p_data = json.loads(pf.read_text())
+        run_script("jules-queue-review.sh", "reject", p_data["id"])
+
+    # Test filtering deferred list
+    res_def_high = run_script("jules-queue-review.sh", "--priority", "10", "deferred")
+    assert res_def_high.returncode == 0
+    assert "Found 1 deferred proposal(s)" in res_def_high.stdout
+    assert "Deferred High" in res_def_high.stdout
+    assert "Deferred Low" not in res_def_high.stdout
+
+
 def test_propose_with_ttl_and_expire(queue_dirs):
     # Propose task with 3 day TTL
     res_prop = run_script("jules-queue-propose.sh", "task-600", "TTL proposal", "3", "3")

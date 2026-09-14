@@ -2,7 +2,7 @@
   "id": "task-20260913-230229-53243",
   "priority": 3,
   "request": "Implement proposal expiration/TTL mechanism for aged proposals",
-  "status": "failed",
+  "status": "completed",
   "created_at": "2026-09-13T23:02:29.254896+00:00",
   "proposed_by": "jules",
   "source_task": "task-20260914-012908",
@@ -10,5 +10,6 @@
   "finished_at": "2026-09-14T01:31:53.476777+00:00",
   "session_id": "6467328823771039321",
   "jules_task_id": "task-20260914-034220",
-  "error": "Switched to a new branch 'feat/task-20260914-034220'\n./scripts/jules-complete.sh: line 260: read: read error: 0: Input/output error\n./scripts/jules-complete.sh: line 272: syntax error near unexpected token `fi'\n"
+  "error": "Switched to a new branch 'feat/task-20260914-034220'\n./scripts/jules-complete.sh: line 260: read: read error: 0: Input/output error\n./scripts/jules-complete.sh: line 272: syntax error near unexpected token `fi'\n",
+  "note": "PR #25 merged manually; status corrected"
 }

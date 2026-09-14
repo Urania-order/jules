@@ -66,8 +66,10 @@ Jules proposes 3-5 next steps after completing a task. Proposals remain in `.jul
 # Propose a follow-up task
 ./scripts/jules-queue-propose.sh <source-task-id> "Task description" [priority]
 
-# List proposed tasks
+# List proposed tasks (with optional --priority / -p or --source-task / -s filter options)
 ./scripts/jules-queue-review.sh list
+./scripts/jules-queue-review.sh --priority high list
+./scripts/jules-queue-review.sh --source-task task-101 list
 
 # Accept proposal (moves it to pending queue)
 ./scripts/jules-queue-review.sh accept <proposal-id>
