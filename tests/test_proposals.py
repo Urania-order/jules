@@ -163,3 +163,39 @@ def test_review_invalid_action(queue_dirs):
     res = run_script("jules-queue-review.sh", "invalid-action")
     assert res.returncode != 0
     assert "Usage:" in res.stdout or "Usage:" in res.stderr
+
+
+def test_propose_with_ttl_and_expire(queue_dirs):
+    # Propose task with 3 day TTL
+    res_prop = run_script("jules-queue-propose.sh", "task-600", "TTL proposal", "3", "3")
+    assert res_prop.returncode == 0
+
+    proposal_files = list(queue_dirs["proposed"].glob("*.json"))
+    assert len(proposal_files) == 1
+    p_file = proposal_files[0]
+
+    data = json.loads(p_file.read_text())
+    assert "expires_at" in data
+    assert data["ttl_days"] == 3
+
+    # Fast-forward created_at & expires_at in proposal file to past
+    from datetime import datetime, timezone, timedelta
+    past_dt = datetime.now(timezone.utc) - timedelta(days=5)
+    data["created_at"] = past_dt.isoformat()
+    data["expires_at"] = (past_dt + timedelta(days=3)).isoformat()
+    p_file.write_text(json.dumps(data, indent=2))
+
+    # Run expire command
+    res_exp = run_script("jules-queue-review.sh", "expire")
+    assert res_exp.returncode == 0
+    assert "Expired" in res_exp.stdout
+
+    # Proposed directory should now be empty
+    assert len(list(queue_dirs["proposed"].glob("*.json"))) == 0
+
+    # Deferred directory should contain expired proposal
+    deferred_files = list(queue_dirs["completed"].parent.joinpath("deferred").glob("*.json"))
+    assert len(deferred_files) == 1
+    def_data = json.loads(deferred_files[0].read_text())
+    assert def_data["status"] == "expired"
+    assert "expired_at" in def_data

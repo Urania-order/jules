@@ -11,26 +11,32 @@ from smos.models.discovery import LostKnowledge
 from smos.models.consensus import Proposal
 
 def test_proposal_metrics(db):
+    db.query(Proposal).delete()
+    db.commit()
+
     obs = ObservatoryService(db, [])
     metrics = obs.get_proposal_metrics()
     assert metrics["total_proposals"] == 0
     assert metrics["pending_proposals"] == 0
     assert metrics["approved_proposals"] == 0
     assert metrics["rejected_proposals"] == 0
+    assert metrics["expired_proposals"] == 0
     assert metrics["approval_rate"] == 0.0
 
     p1 = Proposal(title="P1", status="PENDING")
     p2 = Proposal(title="P2", status="APPROVED")
     p3 = Proposal(title="P3", status="REJECTED")
     p4 = Proposal(title="P4", status="APPROVED")
-    db.add_all([p1, p2, p3, p4])
+    p5 = Proposal(title="P5", status="EXPIRED")
+    db.add_all([p1, p2, p3, p4, p5])
     db.commit()
 
     metrics = obs.get_proposal_metrics()
-    assert metrics["total_proposals"] == 4
+    assert metrics["total_proposals"] == 5
     assert metrics["pending_proposals"] == 1
     assert metrics["approved_proposals"] == 2
     assert metrics["rejected_proposals"] == 1
+    assert metrics["expired_proposals"] == 1
     assert metrics["approval_rate"] == round(2 / 3, 4)
 
 def test_get_health_report(db):
