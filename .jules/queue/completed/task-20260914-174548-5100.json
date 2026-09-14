@@ -1,0 +1,26 @@
+{
+  "id": "task-20260914-174548-5100",
+  "request": "API Integration Test Task",
+  "title": "API Integration Test Task",
+  "description": null,
+  "status": "cancelled",
+  "priority": 4,
+  "created_at": "2026-09-14T14:45:48Z",
+  "started_at": null,
+  "finished_at": "2026-09-14T15:50:19.742468+00:00",
+  "proposed_by": null,
+  "source_task": null,
+  "session_id": null,
+  "jules_task_id": null,
+  "error": null,
+  "exit_code": null,
+  "metadata": {},
+  "history": [
+    {
+      "timestamp": "2026-09-14T15:50:19.742468+00:00",
+      "status": "CANCELLED",
+      "message": "Task cancelled via API",
+      "details": null
+    }
+  ]
+}
