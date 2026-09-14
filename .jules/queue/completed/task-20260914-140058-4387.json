@@ -1,0 +1,32 @@
+{
+  "id": "task-20260914-140058-4387",
+  "request": "Test task from unit test",
+  "title": "Test task from unit test",
+  "description": null,
+  "status": "cancelled",
+  "priority": 3,
+  "created_at": "2026-09-14T14:00:58Z",
+  "started_at": "2026-09-14T14:31:40.582975+00:00",
+  "finished_at": "2026-09-14T14:31:41.630915+00:00",
+  "proposed_by": null,
+  "source_task": null,
+  "session_id": null,
+  "jules_task_id": null,
+  "error": null,
+  "exit_code": null,
+  "metadata": {},
+  "history": [
+    {
+      "timestamp": "2026-09-14T14:31:40.582975+00:00",
+      "status": "RUNNING",
+      "message": "Task started via API",
+      "details": null
+    },
+    {
+      "timestamp": "2026-09-14T14:31:41.630915+00:00",
+      "status": "CANCELLED",
+      "message": "Task cancelled via API",
+      "details": null
+    }
+  ]
+}

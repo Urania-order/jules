@@ -279,8 +279,8 @@ proposal_file.unlink()
 print(f"✅ Accepted: {data['id']} → {task_id}")
 PY
         ;;
-    reject)
-        [ -z "$PROPOSAL_ID" ] && { echo "Usage: $0 reject <proposal-id> [note]"; exit 1; }
+    defer|reject)
+        [ -z "$PROPOSAL_ID" ] && { echo "Usage: $0 reject|defer <proposal-id> [note]"; exit 1; }
         PROPOSAL_FILE="${PROPOSED_DIR}/${PROPOSAL_ID}.json"
         [ ! -f "$PROPOSAL_FILE" ] && { echo "Not found: $PROPOSAL_ID"; exit 1; }
         python3 - "$PROPOSAL_FILE" "$DEFERRED_DIR" "$NOTE" <<'PY'
