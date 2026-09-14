@@ -24,7 +24,7 @@ class ObservatoryService:
         """Aggregate proposal status metrics from DB consensus proposals and task queue proposals."""
         db_proposals = self.db.query(Proposal).all()
         total_db = len(db_proposals)
-        status_counts = {"PENDING": 0, "APPROVED": 0, "REJECTED": 0}
+        status_counts = {"PENDING": 0, "APPROVED": 0, "REJECTED": 0, "EXPIRED": 0}
         for p in db_proposals:
             status = (p.status or "PENDING").upper()
             status_counts[status] = status_counts.get(status, 0) + 1
@@ -37,6 +37,19 @@ class ObservatoryService:
         if queue_proposed_dir.is_dir():
             task_queue_proposed_count = len([f for f in queue_proposed_dir.glob("*.json") if f.name != ".gitkeep"])
 
+        queue_deferred_expired_count = 0
+        queue_deferred_dir = Path(".jules/queue/deferred")
+        if queue_deferred_dir.is_dir():
+            for f in queue_deferred_dir.glob("*.json"):
+                if f.name == ".gitkeep":
+                    continue
+                try:
+                    data = json.loads(f.read_text())
+                    if data.get("status") == "expired":
+                        queue_deferred_expired_count += 1
+                except Exception:
+                    pass
+
         return {
             "total_proposals": total_db,
             "status_counts": status_counts,
@@ -44,7 +57,9 @@ class ObservatoryService:
             "pending_proposals": status_counts.get("PENDING", 0),
             "approved_proposals": status_counts.get("APPROVED", 0),
             "rejected_proposals": status_counts.get("REJECTED", 0),
-            "queue_proposed_tasks": task_queue_proposed_count
+            "expired_proposals": status_counts.get("EXPIRED", 0),
+            "queue_proposed_tasks": task_queue_proposed_count,
+            "queue_expired_tasks": queue_deferred_expired_count,
         }
 
     def get_health_report(self) -> Dict[str, Any]:
@@ -199,9 +214,12 @@ class ObservatoryService:
             lines.append(f"- **Pending Proposals**: {prop_metrics.get('pending_proposals', 0)}")
             lines.append(f"- **Approved Proposals**: {prop_metrics.get('approved_proposals', 0)}")
             lines.append(f"- **Rejected Proposals**: {prop_metrics.get('rejected_proposals', 0)}")
+            lines.append(f"- **Expired Proposals**: {prop_metrics.get('expired_proposals', 0)}")
             lines.append(f"- **Approval Rate**: {prop_metrics.get('approval_rate', 0.0):.2%}")
             if "queue_proposed_tasks" in prop_metrics:
                 lines.append(f"- **Queued Task Proposals**: {prop_metrics.get('queue_proposed_tasks', 0)}")
+            if "queue_expired_tasks" in prop_metrics:
+                lines.append(f"- **Queued Expired Tasks**: {prop_metrics.get('queue_expired_tasks', 0)}")
         else:
             lines.append("No proposal metrics recorded.")
         lines.append("")

@@ -9,8 +9,9 @@ class Proposal(Base):
     created_by_id = Column(Integer, ForeignKey("users.id"))
     title = Column(String)
     description = Column(String)
-    status = Column(String, default="PENDING") # PENDING, APPROVED, REJECTED
+    status = Column(String, default="PENDING") # PENDING, APPROVED, REJECTED, EXPIRED
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+    expires_at = Column(DateTime(timezone=True), nullable=True)
 
 class Vote(Base):
     __tablename__ = "votes"

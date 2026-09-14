@@ -11,6 +11,7 @@ DEFERRED_DIR=".jules/queue/deferred"
 ACTION="${1:-list}"
 PROPOSAL_ID="${2:-}"
 NOTE="${3:-}"
+TTL_DAYS="${2:-}"
 
 mkdir -p "$PROPOSED_DIR" "$PENDING_DIR" "$DEFERRED_DIR"
 
@@ -36,6 +37,8 @@ d = json.loads(Path(sys.argv[1]).read_text())
 print(f"  • [{d['id']}] Priority: {d.get('priority', 3)}")
 print(f"    Source: {d.get('source_task', 'unknown')}")
 print(f"    {d.get('description', '')[:100]}")
+if d.get("expires_at"):
+    print(f"    ⏳ Expires: {d['expires_at']}")
 if d.get("notes"):
     print(f"    📝 Notes: {len(d['notes'])} note(s)")
 print()
@@ -197,8 +200,66 @@ PY
             "$0" reject "$(basename "$p" .json)"
         done
         ;;
+    expire)
+        python3 - "$PROPOSED_DIR" "$DEFERRED_DIR" "$TTL_DAYS" <<'PY'
+import json, sys
+from pathlib import Path
+from datetime import datetime, timezone, timedelta
+
+proposed_dir = Path(sys.argv[1])
+deferred_dir = Path(sys.argv[2])
+default_ttl = int(sys.argv[3]) if sys.argv[3] and sys.argv[3].isdigit() else 7
+
+deferred_dir.mkdir(parents=True, exist_ok=True)
+
+now = datetime.now(timezone.utc)
+expired_count = 0
+
+for proposal_file in proposed_dir.glob("*.json"):
+    if proposal_file.name == ".gitkeep":
+        continue
+    try:
+        data = json.loads(proposal_file.read_text())
+    except Exception:
+        continue
+
+    is_expired = False
+    if "expires_at" in data:
+        try:
+            exp_dt = datetime.fromisoformat(data["expires_at"])
+            if exp_dt.tzinfo is None:
+                exp_dt = exp_dt.replace(tzinfo=timezone.utc)
+            if now >= exp_dt:
+                is_expired = True
+        except ValueError:
+            pass
+    elif "created_at" in data:
+        try:
+            created_dt = datetime.fromisoformat(data["created_at"])
+            if created_dt.tzinfo is None:
+                created_dt = created_dt.replace(tzinfo=timezone.utc)
+            if now >= created_dt + timedelta(days=default_ttl):
+                is_expired = True
+        except ValueError:
+            pass
+
+    if is_expired:
+        data["status"] = "expired"
+        data["expired_at"] = now.isoformat()
+        deferred_file = deferred_dir / proposal_file.name
+        deferred_file.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n")
+        proposal_file.unlink()
+        expired_count += 1
+        print(f"⏰ Expired: {data['id']} → {deferred_file.name}")
+
+if expired_count == 0:
+    print("No aged proposals to expire.")
+else:
+    print(f"Expired {expired_count} aged proposal(s).")
+PY
+        ;;
     *)
-        echo "Usage: $0 {list|deferred|accept|reject|restore|append|accept-all|reject-all} [proposal-id] [note]"
+        echo "Usage: $0 {list|deferred|accept|reject|restore|append|accept-all|reject-all|expire} [proposal-id|ttl-days] [note]"
         exit 1
         ;;
 esac
