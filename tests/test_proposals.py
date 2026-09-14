@@ -70,7 +70,7 @@ def test_propose_missing_arguments(queue_dirs):
 def test_review_list_empty(queue_dirs):
     res = run_script("jules-queue-review.sh", "list")
     assert res.returncode == 0
-    assert "No proposals." in res.stdout
+    assert "No active proposals." in res.stdout
 
 
 def test_review_list_with_proposals(queue_dirs):
@@ -127,7 +127,7 @@ def test_review_reject_proposal(queue_dirs):
 
     res_reject = run_script("jules-queue-review.sh", "reject", proposal_id)
     assert res_reject.returncode == 0
-    assert f"❌ Rejected: {proposal_id}" in res_reject.stdout
+    assert f"Deferred: {proposal_id}" in res_reject.stdout
 
     assert len(list(queue_dirs["proposed"].glob("*.json"))) == 0
     assert len(list(queue_dirs["pending"].glob("*.json"))) == 0
