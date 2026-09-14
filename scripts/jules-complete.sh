@@ -256,8 +256,20 @@ if command -v gh >/dev/null 2>&1; then
 
     echo "  ✅ CI passed."
     echo ""
-    printf "Merge PR? [y/N] "
-    read -r MERGE </dev/tty || MERGE="n"
+
+    # Auto-merge mode (for runner / CI)
+    if [ "${JULES_AUTO_MERGE:-0}" = "1" ]; then
+        echo "  JULES_AUTO_MERGE=1 — auto-merging"
+        MERGE="y"
+    else
+        if [ -t 0 ] && [ -e /dev/tty ]; then
+            printf "Merge PR? [y/N] "
+            read -r MERGE </dev/tty || MERGE="n"
+        else
+            echo "  ⚠️  No TTY available."
+            MERGE="n"
+        fi
+    fi
 
     if [ "$MERGE" = "y" ] || [ "$MERGE" = "Y" ]; then
         gh pr merge --squash --admin --delete-branch 2>&1 | tail -5
