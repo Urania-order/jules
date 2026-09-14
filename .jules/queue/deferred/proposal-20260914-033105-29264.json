@@ -4,6 +4,7 @@
   "source_task": "task-20260914-012908",
   "description": "Add CLI auto-completion for jules-queue-review.sh and proposal IDs",
   "priority": 3,
-  "status": "proposed",
-  "created_at": "2026-09-14T00:31:07.859005+00:00"
+  "status": "deferred",
+  "created_at": "2026-09-14T00:31:07.859005+00:00",
+  "deferred_at": "2026-09-14T14:01:44.332703+00:00"
 }

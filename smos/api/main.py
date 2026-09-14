@@ -1,4 +1,6 @@
-from fastapi import FastAPI, Depends, HTTPException, Response
+from fastapi import FastAPI, Depends, HTTPException, Response, Request
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 from smos.core.database import get_db
 from smos.models.models import Event as DBEvent, User, Workspace, MemoryNode
@@ -30,13 +32,28 @@ from smos.services.federation_service import FederationService
 from smos.services.economy_service import EconomyService
 from smos.services.observatory_service import ObservatoryService
 from smos.services.commons_service import CommonsService
+
+# Core & Adapters
+from smos.core.state import StateManager
+from smos.core.queue import QueueManager
+from smos.core.proposals import ProposalManager
+from smos.core.events import EventTracker
+from smos.core.task import Task, TaskStatus
+from smos.adapters.jules_cli import JulesCLIAdapter
+
 import numpy as np
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional, Dict, Any, List
 from datetime import datetime
+from pathlib import Path
+import os
 from pgvector.sqlalchemy import Vector
 
-app = FastAPI(title="Co-SMOS API", version="0.1")
+app = FastAPI(title="Co-SMOS Control Room API", version="0.9")
+
+frontend_path = Path("frontend")
+if frontend_path.exists():
+    app.mount("/static", StaticFiles(directory="frontend"), name="static")
 
 def _get_observatory(db: Session) -> ObservatoryService:
     eco = EcologyEngine(db)
@@ -57,6 +74,17 @@ def _cosine_similarity(a: List[float], b: List[float]) -> float:
         return 0.0
     return float(np.dot(a_arr, b_arr) / (norm_a * norm_b))
 
+def _error_response(code: str, message: str, status_code: int = 400, exit_code: Optional[int] = None) -> JSONResponse:
+    return JSONResponse(
+        status_code=status_code,
+        content={
+            "status": "error",
+            "code": code,
+            "message": message,
+            "exit_code": exit_code
+        }
+    )
+
 class EventCreate(BaseModel):
     user_id: int
     workspace_id: Optional[int] = None
@@ -66,9 +94,210 @@ class EventCreate(BaseModel):
     application: Optional[str] = None
     window_title: Optional[str] = None
 
+class CreateTaskRequest(BaseModel):
+    request: str
+    priority: int = 5
+
+class RunQueueRequest(BaseModel):
+    mode: str = "once"
+    dry_run: bool = False
+
+class UpdateTaskRequest(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    priority: Optional[int] = None
+    status: Optional[str] = None
+
+class ReorderQueueRequest(BaseModel):
+    task_ids: List[str]
+
+class ModifyProposalRequest(BaseModel):
+    description: Optional[str] = None
+    priority: Optional[int] = None
+
 @app.get("/")
 def read_root():
-    return {"message": "Welcome to Co-SMOS API"}
+    index_file = Path("frontend/index.html")
+    if index_file.exists():
+        return FileResponse(index_file)
+    return {"message": "Welcome to Co-SMOS Control Room API"}
+
+# --- CONTROL ROOM ENDPOINTS ---
+
+@app.get("/api/system/status")
+def get_system_status():
+    sm = StateManager()
+    return sm.get_system_status()
+
+@app.get("/api/queue")
+def get_queue_tasks():
+    qm = QueueManager()
+    tasks = qm.list_all_tasks()
+    return [t.model_dump() for t in tasks]
+
+@app.post("/api/queue")
+def add_task_to_queue(req: CreateTaskRequest):
+    adapter = JulesCLIAdapter()
+    res = adapter.add_task(description=req.request, priority=req.priority)
+    if not res["success"]:
+        return _error_response(
+            code="TASK_CREATION_FAILED",
+            message=res["error"] or "Failed to add task via CLI adapter",
+            status_code=500,
+            exit_code=res.get("exit_code")
+        )
+    qm = QueueManager()
+    tasks = qm.list_all_tasks()
+    latest_task = tasks[0] if tasks else None
+    EventTracker.emit("task_created", task_id=latest_task.id if latest_task else None, payload={"request": req.request})
+    return {"status": "success", "cli_output": res["stdout"], "task": latest_task.model_dump() if latest_task else None}
+
+@app.post("/api/queue/run")
+def run_queue(req: RunQueueRequest):
+    adapter = JulesCLIAdapter()
+    res = adapter.run_queue(mode=req.mode, dry_run=req.dry_run)
+    if not res["success"]:
+        return _error_response(
+            code="QUEUE_RUN_FAILED",
+            message=res["error"] or "Queue runner failed",
+            status_code=500,
+            exit_code=res.get("exit_code")
+        )
+    return {"status": "success", "cli_output": res["stdout"]}
+
+@app.post("/api/queue/reorder")
+def reorder_queue(req: ReorderQueueRequest):
+    qm = QueueManager()
+    reordered = qm.reorder_queue(req.task_ids)
+    EventTracker.emit("queue_reordered", payload={"task_ids": req.task_ids})
+    return {"status": "success", "reordered_tasks": [t.model_dump() for t in reordered]}
+
+@app.get("/api/tasks")
+def list_tasks():
+    qm = QueueManager()
+    tasks = qm.list_all_tasks()
+    return [t.model_dump() for t in tasks]
+
+@app.get("/api/tasks/{id}")
+def get_task_by_id(id: str):
+    qm = QueueManager()
+    task = qm.get_task(id)
+    if not task:
+        return _error_response(code="TASK_NOT_FOUND", message=f"Task with ID {id} not found", status_code=404)
+    return task.model_dump()
+
+@app.patch("/api/tasks/{id}")
+def update_task_by_id(id: str, req: UpdateTaskRequest):
+    qm = QueueManager()
+    task = qm.get_task(id)
+    if not task:
+        return _error_response(code="TASK_NOT_FOUND", message=f"Task with ID {id} not found", status_code=404)
+
+    if req.title is not None:
+        task.title = req.title
+    if req.description is not None:
+        task.description = req.description
+    if req.priority is not None:
+        task.priority = req.priority
+    if req.status is not None:
+        try:
+            new_st = TaskStatus(req.status.upper())
+            task.transition_to(new_st, message="Task status updated via API")
+        except ValueError:
+            return _error_response(code="INVALID_STATUS", message=f"Invalid task status: {req.status}")
+
+    qm.save_task(task)
+    EventTracker.emit("task_updated", task_id=id, payload=req.model_dump(exclude_unset=True))
+    return task.model_dump()
+
+@app.post("/api/tasks/{id}/start")
+def start_task(id: str):
+    qm = QueueManager()
+    task = qm.get_task(id)
+    if not task:
+        return _error_response(code="TASK_NOT_FOUND", message=f"Task with ID {id} not found", status_code=404)
+
+    task.transition_to(TaskStatus.RUNNING, message="Task started via API")
+    qm.save_task(task)
+    EventTracker.emit("task_started", task_id=id)
+
+    # Optionally trigger CLI runner dry-run or process
+    adapter = JulesCLIAdapter()
+    res = adapter.run_queue(mode="once", dry_run=True)
+    return {"status": "success", "task": task.model_dump(), "runner_output": res.get("stdout")}
+
+@app.post("/api/tasks/{id}/cancel")
+def cancel_task(id: str):
+    qm = QueueManager()
+    task = qm.get_task(id)
+    if not task:
+        return _error_response(code="TASK_NOT_FOUND", message=f"Task with ID {id} not found", status_code=404)
+
+    task.transition_to(TaskStatus.CANCELLED, message="Task cancelled via API")
+    qm.save_task(task)
+    EventTracker.emit("task_cancelled", task_id=id)
+    return {"status": "success", "task": task.model_dump()}
+
+@app.get("/api/proposals")
+def list_proposals(status: Optional[str] = None):
+    pm = ProposalManager()
+    props = pm.list_proposals(status=status)
+    return [p.model_dump() for p in props]
+
+@app.post("/api/proposals/{id}/accept")
+def accept_proposal(id: str):
+    adapter = JulesCLIAdapter()
+    res = adapter.accept_proposal(id)
+    if not res["success"]:
+        return _error_response(code="PROPOSAL_ACCEPT_FAILED", message=res["error"] or "Failed to accept proposal", exit_code=res.get("exit_code"))
+    EventTracker.emit("proposal_accepted", payload={"proposal_id": id})
+    return {"status": "success", "cli_output": res["stdout"]}
+
+@app.post("/api/proposals/{id}/defer")
+def defer_proposal(id: str):
+    adapter = JulesCLIAdapter()
+    res = adapter.defer_proposal(id)
+    if not res["success"]:
+        return _error_response(code="PROPOSAL_DEFER_FAILED", message=res["error"] or "Failed to defer proposal", exit_code=res.get("exit_code"))
+    EventTracker.emit("proposal_deferred", payload={"proposal_id": id})
+    return {"status": "success", "cli_output": res["stdout"]}
+
+@app.post("/api/proposals/{id}/reject")
+def reject_proposal(id: str):
+    adapter = JulesCLIAdapter()
+    res = adapter.reject_proposal(id)
+    if not res["success"]:
+        return _error_response(code="PROPOSAL_REJECT_FAILED", message=res["error"] or "Failed to reject proposal", exit_code=res.get("exit_code"))
+    EventTracker.emit("proposal_rejected", payload={"proposal_id": id})
+    return {"status": "success", "cli_output": res["stdout"]}
+
+@app.post("/api/proposals/{id}/modify")
+def modify_proposal(id: str, req: ModifyProposalRequest):
+    pm = ProposalManager()
+    prop = pm.modify_proposal(id, new_description=req.description, new_priority=req.priority)
+    if not prop:
+        return _error_response(code="PROPOSAL_NOT_FOUND", message=f"Proposal with ID {id} not found", status_code=404)
+    EventTracker.emit("proposal_modified", payload={"proposal_id": id})
+    return {"status": "success", "proposal": prop.model_dump()}
+
+@app.get("/api/events")
+def get_system_events(task_id: Optional[str] = None, limit: int = 50):
+    events = EventTracker.list_events(task_id=task_id, limit=limit)
+    return [e.model_dump() for e in events]
+
+@app.get("/api/tasks/{id}/history")
+def get_task_history(id: str):
+    qm = QueueManager()
+    task = qm.get_task(id)
+    if not task:
+        return _error_response(code="TASK_NOT_FOUND", message=f"Task with ID {id} not found", status_code=404)
+    return {
+        "task_id": id,
+        "history": [h.model_dump() for h in task.history],
+        "events": [e.model_dump() for e in EventTracker.list_events(task_id=id)]
+    }
+
+# --- EXISTING LEGACY ENDPOINTS ---
 
 @app.post("/event")
 def create_event(event: EventCreate, db: Session = Depends(get_db)):

@@ -1,0 +1,12 @@
+{
+  "id": "task-20260914-140144-5877",
+  "request": "Lifecycle Task",
+  "priority": 5,
+  "status": "completed",
+  "created_at": "2026-09-14T14:01:44Z",
+  "started_at": "2026-09-14T14:01:44.245969+00:00",
+  "finished_at": "2026-09-14T14:01:44.246463+00:00",
+  "session_id": "mock-session-task-20260914-140144-5877",
+  "error": null,
+  "jules_task_id": "task-20260914-140144-5877"
+}
