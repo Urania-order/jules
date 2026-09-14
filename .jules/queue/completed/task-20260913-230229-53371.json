@@ -1,0 +1,15 @@
+{
+  "id": "task-20260913-230229-53371",
+  "priority": 2,
+  "request": "Add proposal filter options in jules-queue-review.sh by priority and source task",
+  "status": "completed",
+  "created_at": "2026-09-13T23:02:29.390722+00:00",
+  "proposed_by": "jules",
+  "source_task": "task-20260914-012908",
+  "started_at": "2026-09-14T02:10:06.012573+00:00",
+  "finished_at": "2026-09-14T02:19:51.239748+00:00",
+  "session_id": "2031164403641506374",
+  "jules_task_id": "task-20260914-051006",
+  "error": null,
+  "retried_at": "2026-09-14T02:06:24.449663+00:00"
+}
