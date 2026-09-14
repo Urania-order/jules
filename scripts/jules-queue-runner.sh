@@ -241,11 +241,15 @@ else:
                     session_id = f"session-{jules_task_id}"
                 branch_name = f"feat/{jules_task_id}"
                 log(f"Calling jules-complete.sh {jules_task_id} {session_id} {branch_name}...")
+                # Auto-merge mode for runner (no TTY)
+                env = os.environ.copy()
+                env["JULES_AUTO_MERGE"] = "1"
                 complete_res = subprocess.run(
                     ["./scripts/jules-complete.sh", jules_task_id, session_id, branch_name],
                     capture_output=True,
                     text=True,
-                    check=False
+                    check=False,
+                    env=env,
                 )
                 if complete_res.returncode == 0:
                     status = "completed"
