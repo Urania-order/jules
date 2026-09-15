@@ -146,11 +146,19 @@ User request:
 
 $TASK
 
-Do NOT modify:
-- .co-smos/*
-- .jules/tasks/*
-- .jules/results/*
-- .jules/queue/*
+FORBIDDEN PATHS (READ-ONLY):
+
+You MUST NOT modify any file under:
+- .co-smos/
+- .jules/tasks/
+- .jules/results/
+- .jules/queue/
+
+If you find yourself about to modify any of these,
+STOP immediately and report the situation instead.
+
+Treat these directories as READ-ONLY.
+Any modification is a process defect.
 
 Follow AGENTS.md strictly.
 
