@@ -52,3 +52,5 @@ After completing a task:
 3. Commit
 
 - [ERRATA-0009](errata-0009-no-diff-remote-vm.md) — Jules returns "No diff found in the remote VM"
+
+- [ERRATA-0012](errata-0012-jules-ignores-queue-ban.md) — Jules still modifies .jules/queue/ despite Do NOT modify
