@@ -54,3 +54,6 @@ After completing a task:
 - [ERRATA-0009](errata-0009-no-diff-remote-vm.md) — Jules returns "No diff found in the remote VM"
 
 - [ERRATA-0012](errata-0012-jules-ignores-queue-ban.md) — Jules still modifies .jules/queue/ despite Do NOT modify
+
+- [ERRATA-0010](errata-0010-jules-modified-forbidden-paths.md) — Jules modified .jules/queue/ before §16 existed
+- [ERRATA-0011](errata-0011-orphan-jules-sessions.md) — Orphan Jules sessions (reported SUCCESS, no artifacts in repo)
