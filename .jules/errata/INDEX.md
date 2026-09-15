@@ -25,6 +25,7 @@ Known mistakes and rules to avoid them.
 
 ### Process / Orchestration
 
+- ERRATA-0013 — Jules marks deliberate no-op sessions as Failed (LOW)
 - ERRATA-0009 — Jules returns "No diff found in the remote VM" (MEDIUM)
 - ERRATA-0010 — Jules modified .jules/queue/ before §16 existed (MEDIUM)
 - ERRATA-0011 — Orphan Jules sessions: reported SUCCESS, no artifacts (HIGH)
@@ -46,6 +47,7 @@ Known mistakes and rules to avoid them.
 | 0010 | MEDIUM | Process | MITIGATED (§16 + FORBIDDEN PATHS) |
 | 0011 | HIGH | Process | MITIGATED (jules-complete.sh introduced) |
 | 0012 | MEDIUM | Process | MITIGATED (imperative wording + post-pull check) |
+| 0013 | LOW | Process | DOCUMENTED |
 
 ## Files
 
@@ -61,6 +63,7 @@ Known mistakes and rules to avoid them.
 - [ERRATA-0010](errata-0010-jules-modified-forbidden-paths.md) — Jules modified .jules/queue/ before §16 existed
 - [ERRATA-0011](errata-0011-orphan-jules-sessions.md) — Orphan Jules sessions: reported SUCCESS, no artifacts in repo
 - [ERRATA-0012](errata-0012-jules-ignores-queue-ban.md) — Jules still modifies .jules/queue/ despite Do NOT modify
+- [ERRATA-0013](errata-0013-jules-marks-noop-as-failed.md) — Jules marks deliberate no-op sessions as Failed
 
 ## Usage
 
