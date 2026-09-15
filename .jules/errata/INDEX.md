@@ -50,3 +50,5 @@ After completing a task:
 1. If you made a NEW mistake — create a new errata file
 2. Update this INDEX
 3. Commit
+
+- [ERRATA-0009](errata-0009-no-diff-remote-vm.md) — Jules returns "No diff found in the remote VM"
