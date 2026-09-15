@@ -181,6 +181,11 @@
       transition: background-color 0.2s;
     }
 
+    .btn-sm {
+      padding: 0.3rem 0.6rem;
+      font-size: 0.8rem;
+    }
+
     .btn-primary {
       background-color: var(--accent-blue);
       color: #0f172a;
@@ -267,8 +272,9 @@
 
     .empty-state {
       text-align: center;
-      padding: 3rem;
+      padding: 2rem 1rem;
       color: var(--text-secondary);
+      font-size: 0.85rem;
     }
 
     .error-banner {
@@ -279,6 +285,79 @@
       border-radius: 0.375rem;
       margin-bottom: 1.5rem;
       display: none;
+    }
+
+    .error-state {
+      color: var(--accent-red);
+      background-color: rgba(248, 113, 113, 0.1);
+      border: 1px solid var(--accent-red);
+      padding: 1rem;
+      border-radius: 0.375rem;
+      text-align: center;
+    }
+
+    .loading-state {
+      color: var(--text-secondary);
+      padding: 1rem;
+      text-align: center;
+    }
+
+    .queue-columns {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 1rem;
+      margin-top: 1rem;
+    }
+
+    .queue-column {
+      background-color: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 0.5rem;
+      padding: 1rem;
+      min-height: 250px;
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+
+    .queue-column h3 {
+      font-size: 0.95rem;
+      color: var(--accent-blue);
+      border-bottom: 1px solid var(--border-color);
+      padding-bottom: 0.5rem;
+      margin-bottom: 0.25rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background-color: rgba(15, 23, 42, 0.8);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 1000;
+    }
+
+    .modal {
+      background-color: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 0.5rem;
+      padding: 1.5rem;
+      width: 100%;
+      max-width: 500px;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+    }
+
+    .modal-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 0.75rem;
+      margin-top: 1.5rem;
     }
 
     .history-log, .events-log {
@@ -304,6 +383,7 @@
     <div class="logo-container">
       <div class="logo">Co-SMOS Control Room v0.9</div>
       <div class="system-status-badge" id="system-status">ONLINE</div>
+      <button class="btn btn-secondary btn-sm" id="btn-sync">⟳ SYNC</button>
     </div>
     <nav>
       <button class="nav-btn active" data-view="dashboard">Control Room</button>
@@ -347,8 +427,8 @@
           </div>
           <div style="display: flex; gap: 1rem; align-items: center;">
             <div class="form-group" style="width: 150px; margin-bottom: 0;">
-              <label for="task-priority">Priority (1-10)</label>
-              <input type="number" id="task-priority" min="1" max="10" value="5" required>
+              <label for="task-priority">Priority (1-5)</label>
+              <input type="number" id="task-priority" min="1" max="5" value="3" required>
             </div>
             <button type="submit" class="btn btn-primary" style="align-self: flex-end;">Enqueue Task</button>
           </div>
@@ -366,12 +446,31 @@
 
     <!-- QUEUE VIEW -->
     <section id="view-queue" class="view">
-      <h2>Queue Management (Drag & Drop Reorder)</h2>
-      <div class="card">
-        <p style="margin-bottom: 1rem; color: var(--text-secondary); font-size: 0.9rem;">
-          Drag and drop pending tasks to reorder priority.
-        </p>
-        <div id="queue-task-list" class="task-list"></div>
+      <h2>Queue Management</h2>
+      <p style="margin-bottom: 1rem; color: var(--text-secondary); font-size: 0.9rem;">
+        Drag and drop READY tasks to reorder priority.
+      </p>
+      <div class="queue-columns">
+        <div class="queue-column" id="col-ready">
+          <h3>READY</h3>
+          <div id="queue-list-ready" class="task-list"></div>
+        </div>
+        <div class="queue-column" id="col-running">
+          <h3>RUNNING</h3>
+          <div id="queue-list-running" class="task-list"></div>
+        </div>
+        <div class="queue-column" id="col-review">
+          <h3>REVIEW</h3>
+          <div id="queue-list-review" class="task-list"></div>
+        </div>
+        <div class="queue-column" id="col-blocked">
+          <h3>BLOCKED</h3>
+          <div id="queue-list-blocked" class="task-list"></div>
+        </div>
+        <div class="queue-column" id="col-completed">
+          <h3>COMPLETED</h3>
+          <div id="queue-list-completed" class="task-list"></div>
+        </div>
       </div>
     </section>
 
@@ -404,6 +503,28 @@
         <div class="history-log" id="detail-task-history" style="margin-top: 0.5rem;"></div>
       </div>
     </section>
+
+    <!-- PROPOSAL MODIFY MODAL -->
+    <div class="modal-overlay" id="modify-modal-overlay" style="display: none;">
+      <div class="modal">
+        <h3>Modify Proposal</h3>
+        <form id="modify-proposal-form" style="margin-top: 1rem;">
+          <input type="hidden" id="modify-proposal-id">
+          <div class="form-group">
+            <label for="modify-proposal-desc">Description</label>
+            <textarea id="modify-proposal-desc" rows="3" required></textarea>
+          </div>
+          <div class="form-group">
+            <label for="modify-proposal-priority">Priority (1-5)</label>
+            <input type="number" id="modify-proposal-priority" min="1" max="5" value="3" required>
+          </div>
+          <div class="modal-actions">
+            <button type="button" class="btn btn-secondary" onclick="closeModifyModal()">Cancel</button>
+            <button type="submit" class="btn btn-primary">Submit Modification</button>
+          </div>
+        </form>
+      </div>
+    </div>
 
   </main>
 
@@ -438,6 +559,26 @@
       setTimeout(() => { banner.style.display = 'none'; }, 5000);
     }
 
+    function showOffline() {
+      const banner = document.getElementById('error-banner');
+      banner.style.display = 'block';
+      banner.innerHTML = `⚠ Co-SMOS backend unavailable <button class="btn btn-secondary btn-sm" id="btn-retry" onclick="retryDataRefresh()" style="margin-left: 0.5rem;">RETRY</button>`;
+    }
+
+    async function retryDataRefresh() {
+      try {
+        await refreshData();
+        const banner = document.getElementById('error-banner');
+        if (!banner.innerHTML.includes('HTTP')) {
+          banner.style.display = 'none';
+        }
+      } catch (err) {
+        showOffline();
+      }
+    }
+
+    window.addEventListener('offline', showOffline);
+
     async function fetchJSON(url, options = {}) {
       try {
         const res = await fetch(url, options);
@@ -455,6 +596,10 @@
     async function refreshData() {
       try {
         const status = await fetchJSON(`${API_BASE}/system/status`);
+        const banner = document.getElementById('error-banner');
+        if (banner.innerHTML.includes('backend unavailable')) {
+          banner.style.display = 'none';
+        }
         document.getElementById('system-status').textContent = status.status.toUpperCase();
         document.getElementById('stat-total-tasks').textContent = status.tasks_summary.total;
         document.getElementById('stat-pending-tasks').textContent = (status.tasks_summary.by_status.PENDING || 0) + (status.tasks_summary.by_status.READY || 0);
@@ -470,7 +615,38 @@
         renderEvents();
       } catch (e) {
         console.error('Refresh error:', e);
+        showOffline();
       }
+    }
+
+    document.getElementById('btn-sync').addEventListener('click', async () => {
+      const btn = document.getElementById('btn-sync');
+      btn.textContent = '⟳ SYNCING...';
+      try {
+        await refreshData();
+        btn.textContent = '✓ SYNCED';
+        setTimeout(() => { btn.textContent = '⟳ SYNC'; }, 1500);
+      } catch (err) {
+        btn.textContent = '⟳ SYNC';
+        showOffline();
+      }
+    });
+
+    // Attach single dragover listener to READY queue container
+    const readyContainer = document.getElementById('queue-list-ready');
+    if (readyContainer) {
+      readyContainer.addEventListener('dragover', e => {
+        e.preventDefault();
+        const afterElement = getDragAfterElement(readyContainer, e.clientY);
+        const dragging = document.querySelector('.dragging');
+        if (dragging) {
+          if (afterElement == null) {
+            readyContainer.appendChild(dragging);
+          } else {
+            readyContainer.insertBefore(dragging, afterElement);
+          }
+        }
+      });
     }
 
     function renderRecentTasks() {
@@ -499,45 +675,66 @@
         </div>
         <div style="display: flex; gap: 0.5rem; align-items: center;">
           <span class="badge badge-${task.status}">${task.status}</span>
-          <button class="btn btn-secondary" onclick="viewTaskDetail('${task.id}')">View</button>
+          <button class="btn btn-secondary btn-sm" onclick="viewTaskDetail('${task.id}')">View</button>
         </div>
       `;
       return el;
     }
 
     function renderQueueTasks() {
-      const container = document.getElementById('queue-task-list');
-      container.innerHTML = '';
-      const pending = currentTasks.filter(t => t.status === 'PENDING' || t.status === 'READY');
-      if (pending.length === 0) {
-        container.innerHTML = '<div class="empty-state">No pending tasks to reorder</div>';
-        return;
-      }
+      const lists = {
+        READY: document.getElementById('queue-list-ready'),
+        RUNNING: document.getElementById('queue-list-running'),
+        REVIEW: document.getElementById('queue-list-review'),
+        BLOCKED: document.getElementById('queue-list-blocked'),
+        COMPLETED: document.getElementById('queue-list-completed')
+      };
 
-      pending.forEach(task => {
+      Object.values(lists).forEach(el => { if (el) el.innerHTML = ''; });
+
+      currentTasks.forEach(task => {
         const card = createTaskCard(task);
-        card.draggable = true;
-        card.dataset.id = task.id;
+        let targetList = lists.READY;
 
-        card.addEventListener('dragstart', () => card.classList.add('dragging'));
-        card.addEventListener('dragend', () => {
-          card.classList.remove('dragging');
-          saveQueueOrder();
-        });
+        if (task.status === 'PENDING' || task.status === 'READY') {
+          targetList = lists.READY;
+          card.draggable = true;
+          card.dataset.id = task.id;
 
-        container.appendChild(card);
+          card.addEventListener('dragstart', () => card.classList.add('dragging'));
+          card.addEventListener('dragend', () => {
+            card.classList.remove('dragging');
+            saveQueueOrder();
+          });
+        } else if (task.status === 'RUNNING') {
+          targetList = lists.RUNNING;
+          card.draggable = false;
+        } else if (task.status === 'REVIEW') {
+          targetList = lists.REVIEW;
+          card.draggable = false;
+        } else if (task.status === 'BLOCKED' || task.status === 'FAILED' || task.status === 'CANCELLED') {
+          targetList = lists.BLOCKED;
+          card.draggable = false;
+        } else if (task.status === 'COMPLETED') {
+          targetList = lists.COMPLETED;
+          card.draggable = false;
+        } else {
+          targetList = lists.BLOCKED;
+          card.draggable = false;
+        }
+
+        if (targetList) {
+          targetList.appendChild(card);
+        }
       });
 
-      container.addEventListener('dragover', e => {
-        e.preventDefault();
-        const afterElement = getDragAfterElement(container, e.clientY);
-        const dragging = document.querySelector('.dragging');
-        if (dragging) {
-          if (afterElement == null) {
-            container.appendChild(dragging);
-          } else {
-            container.insertBefore(dragging, afterElement);
-          }
+      if (lists.READY && lists.READY.children.length === 0) {
+        lists.READY.innerHTML = '<div class="empty-state">No ready tasks</div>';
+      }
+
+      Object.entries(lists).forEach(([status, el]) => {
+        if (status !== 'READY' && el && el.children.length === 0) {
+          el.innerHTML = '<div class="empty-state">No tasks</div>';
         }
       });
     }
@@ -556,7 +753,7 @@
     }
 
     async function saveQueueOrder() {
-      const ids = [...document.querySelectorAll('#queue-task-list .task-item')].map(el => el.dataset.id);
+      const ids = [...document.querySelectorAll('#queue-list-ready .task-item')].map(el => el.dataset.id).filter(Boolean);
       if (ids.length > 0) {
         await fetchJSON(`${API_BASE}/queue/reorder`, {
           method: 'POST',
@@ -587,14 +784,42 @@
             </div>
           </div>
           <div style="display: flex; gap: 0.5rem;">
-            <button class="btn btn-primary" onclick="handleProposalAction('${prop.id}', 'accept')">Accept</button>
-            <button class="btn btn-secondary" onclick="handleProposalAction('${prop.id}', 'defer')">Defer</button>
-            <button class="btn btn-danger" onclick="handleProposalAction('${prop.id}', 'reject')">Reject</button>
+            <button class="btn btn-primary btn-sm" onclick="handleProposalAction('${prop.id}', 'accept')">Accept</button>
+            <button class="btn btn-secondary btn-sm" onclick="openModifyModal('${prop.id}')">Modify</button>
+            <button class="btn btn-secondary btn-sm" onclick="handleProposalAction('${prop.id}', 'defer')">Defer</button>
+            <button class="btn btn-danger btn-sm" onclick="handleProposalAction('${prop.id}', 'reject')">Reject</button>
           </div>
         `;
         container.appendChild(el);
       });
     }
+
+    function openModifyModal(id) {
+      const prop = currentProposals.find(p => p.id === id);
+      if (!prop) return;
+      document.getElementById('modify-proposal-id').value = prop.id;
+      document.getElementById('modify-proposal-desc').value = prop.description || '';
+      document.getElementById('modify-proposal-priority').value = Math.min(Math.max(prop.priority || 3, 1), 5);
+      document.getElementById('modify-modal-overlay').style.display = 'flex';
+    }
+
+    function closeModifyModal() {
+      document.getElementById('modify-modal-overlay').style.display = 'none';
+    }
+
+    document.getElementById('modify-proposal-form').addEventListener('submit', async e => {
+      e.preventDefault();
+      const id = document.getElementById('modify-proposal-id').value;
+      const desc = document.getElementById('modify-proposal-desc').value;
+      const prio = parseInt(document.getElementById('modify-proposal-priority').value, 10);
+      await fetchJSON(`${API_BASE}/proposals/${id}/modify`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ description: desc, priority: prio })
+      });
+      closeModifyModal();
+      refreshData();
+    });
 
     async function handleProposalAction(id, action) {
       await fetchJSON(`${API_BASE}/proposals/${id}/${action}`, { method: 'POST' });
