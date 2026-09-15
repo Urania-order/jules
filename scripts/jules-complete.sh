@@ -61,6 +61,23 @@ if [ -z "$TASK_ID" ]; then
 fi
 
 TASK_FILE="$TASKS_DIR/${TASK_ID}.md"
+# Resolve SESSION_ID from log if empty
+if [ -z "$SESSION_ID" ] && [ -n "$TASK_ID" ]; then
+  LOG_FILE=".jules/results/${TASK_ID}.log"
+  if [ -f "$LOG_FILE" ]; then
+    SESSION_ID="$(grep -m1 '^ID:' "$LOG_FILE" | awk '{print $2}' || true)"
+    if [ -n "$SESSION_ID" ]; then
+      echo " Resolved SESSION_ID from log: $SESSION_ID"
+    fi
+  fi
+fi
+
+if [ -z "$SESSION_ID" ]; then
+  echo "ERROR: could not determine SESSION_ID (no --session, no active_task, no log)."
+  echo "       Hint: check .jules/results/${TASK_ID}.log for 'ID: <session>'"
+  exit 3
+fi
+
 echo " Resolved TASK_ID: $TASK_ID"
 echo ""
 
