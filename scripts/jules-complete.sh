@@ -103,6 +103,16 @@ echo "      Diff stat (HEAD):"
 git diff HEAD --stat | sed 's/^/      /' || true
 echo ""
 
+# --- post-pull forbidden paths check (ERRATA-0012) ---
+FORBIDDEN_VIOLATIONS="$(git diff --name-only HEAD 2>/dev/null | grep -E '^\.(co-smos|jules/(tasks|results|queue))/' || true)"
+if [ -n "$FORBIDDEN_VIOLATIONS" ]; then
+  echo "      WARNING: forbidden paths were modified during this task:"
+  echo "$FORBIDDEN_VIOLATIONS" | sed 's/^/        /'
+  echo "      -> See ERRATA-0012"
+  echo "      -> These files are orchestrator-owned and must be reverted if not intentional"
+fi
+echo ""
+
 echo "[5/7] Updating $STATE_FILE..."
 SESSION_ID="$SESSION_ID" TASK_ID="$TASK_ID" PULL_RESULT="$PULL_RESULT" python3 - <<'PY'
 import json, os
