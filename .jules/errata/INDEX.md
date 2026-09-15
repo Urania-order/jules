@@ -23,6 +23,13 @@ Known mistakes and rules to avoid them.
 - ERRATA-0007 — numpy 2.x incompatible (MEDIUM)
 - ERRATA-0008 — lancedb no wheel (LOW)
 
+### Process / Orchestration
+
+- ERRATA-0009 — Jules returns "No diff found in the remote VM" (MEDIUM)
+- ERRATA-0010 — Jules modified .jules/queue/ before §16 existed (MEDIUM)
+- ERRATA-0011 — Orphan Jules sessions: reported SUCCESS, no artifacts (HIGH)
+- ERRATA-0012 — Jules still modifies .jules/queue/ despite Do NOT modify (MEDIUM)
+
 ## Summary
 
 | ID | Severity | Category | Status |
@@ -35,6 +42,25 @@ Known mistakes and rules to avoid them.
 | 0006 | MEDIUM | macOS | FIXED |
 | 0007 | MEDIUM | macOS | FIXED |
 | 0008 | LOW | macOS | FIXED |
+| 0009 | MEDIUM | Process | MITIGATED (documented, jules-complete.sh handles) |
+| 0010 | MEDIUM | Process | MITIGATED (§16 + FORBIDDEN PATHS) |
+| 0011 | HIGH | Process | MITIGATED (jules-complete.sh introduced) |
+| 0012 | MEDIUM | Process | MITIGATED (imperative wording + post-pull check) |
+
+## Files
+
+- [ERRATA-0001](errata-0001-port-mismatch.md) — Frontend API_BASE mismatch
+- [ERRATA-0002](errata-0002-cors-incomplete.md) — CORS middleware missing
+- [ERRATA-0003](errata-0003-test-edge-cases.md) — Test edge cases ignored
+- [ERRATA-0004](errata-0004-macos-date.md) — date -Iseconds not supported
+- [ERRATA-0005](errata-0005-macos-git.md) — git branch --show-current not supported
+- [ERRATA-0006](errata-0006-macos-path.md) — NVM PATH not in scripts
+- [ERRATA-0007](errata-0007-macos-numpy.md) — numpy 2.x incompatible
+- [ERRATA-0008](errata-0008-macos-lancedb.md) — lancedb no wheel
+- [ERRATA-0009](errata-0009-no-diff-remote-vm.md) — Jules returns "No diff found in the remote VM"
+- [ERRATA-0010](errata-0010-jules-modified-forbidden-paths.md) — Jules modified .jules/queue/ before §16 existed
+- [ERRATA-0011](errata-0011-orphan-jules-sessions.md) — Orphan Jules sessions: reported SUCCESS, no artifacts in repo
+- [ERRATA-0012](errata-0012-jules-ignores-queue-ban.md) — Jules still modifies .jules/queue/ despite Do NOT modify
 
 ## Usage
 
@@ -48,12 +74,5 @@ Before starting a task:
 After completing a task:
 
 1. If you made a NEW mistake — create a new errata file
-2. Update this INDEX
+2. Update this INDEX (categories, summary table, files list)
 3. Commit
-
-- [ERRATA-0009](errata-0009-no-diff-remote-vm.md) — Jules returns "No diff found in the remote VM"
-
-- [ERRATA-0012](errata-0012-jules-ignores-queue-ban.md) — Jules still modifies .jules/queue/ despite Do NOT modify
-
-- [ERRATA-0010](errata-0010-jules-modified-forbidden-paths.md) — Jules modified .jules/queue/ before §16 existed
-- [ERRATA-0011](errata-0011-orphan-jules-sessions.md) — Orphan Jules sessions (reported SUCCESS, no artifacts in repo)
