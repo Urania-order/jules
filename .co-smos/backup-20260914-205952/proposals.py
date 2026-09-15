@@ -36,10 +36,7 @@ class ProposalManager:
 
     def list_proposals(self, status: Optional[str] = None) -> List[Proposal]:
         proposals = []
-        if status is None:
-            directories = [self.proposed_dir]
-        else:
-            directories = [self.proposed_dir, self.deferred_dir]
+        directories = [self.proposed_dir, self.deferred_dir]
         for folder in directories:
             for p in folder.glob("*.json"):
                 try:

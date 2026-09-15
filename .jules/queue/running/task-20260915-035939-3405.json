@@ -1,0 +1,26 @@
+{
+  "id": "task-20260915-035939-3405",
+  "request": "Lifecycle Task",
+  "title": "Lifecycle Task",
+  "description": null,
+  "status": "running",
+  "priority": 5,
+  "created_at": "2026-09-15T00:59:39Z",
+  "started_at": "2026-09-15T00:59:39.969394+00:00",
+  "finished_at": null,
+  "proposed_by": null,
+  "source_task": null,
+  "session_id": null,
+  "jules_task_id": null,
+  "error": null,
+  "exit_code": null,
+  "metadata": {},
+  "history": [
+    {
+      "timestamp": "2026-09-15T00:59:39.969394+00:00",
+      "status": "RUNNING",
+      "message": "Task started via API",
+      "details": null
+    }
+  ]
+}

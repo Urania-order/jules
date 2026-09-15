@@ -17,8 +17,7 @@ from smos.services.evolution_service import EvolutionService
 from smos.services.community_service import CommunityService
 from smos.services.reconstruction_service import ReconstructionService
 from smos.services.epistemic_service import EpistemicService
-from smos.services.discovery_system import DiscoverySystem
-from smos.services.discovery_service import DiscoveryService
+from smos.services.discovery_system import DiscoverySystem, DiscoverySystem as DiscoveryService
 from smos.services.lost_knowledge_service import LostKnowledgeService
 from smos.services.coevolution_service import CoevolutionService
 from smos.services.impact_service import ImpactService
@@ -126,15 +125,6 @@ class ModifyProposalRequest(BaseModel):
     description: Optional[str] = None
     priority: Optional[int] = None
 
-class CreateTwinRequest(BaseModel):
-    owner_id: int
-    goals: List[str]
-    preferences: Dict[str, Any]
-
-class CreateClusterRequest(BaseModel):
-    name: str
-    domains: List[str]
-
 @app.get("/")
 def read_root():
     index_file = Path("frontend/index.html")
@@ -152,7 +142,7 @@ def get_system_status():
 @app.get("/api/queue")
 def get_queue_tasks():
     qm = QueueManager()
-    tasks = qm.list_queue_tasks()
+    tasks = qm.list_all_tasks()
     return [t.model_dump() for t in tasks]
 
 @app.post("/api/queue")
@@ -167,18 +157,8 @@ def add_task_to_queue(req: CreateTaskRequest):
             exit_code=res.get("exit_code")
         )
     qm = QueueManager()
-    task_id = None
-    if res.get("stdout"):
-        for line in res["stdout"].splitlines():
-            if "Task ID:" in line:
-                task_id = line.split("Task ID:")[-1].strip()
-                break
-    latest_task = qm.get_task(task_id) if task_id else None
-    if not latest_task:
-        tasks = qm.list_all_tasks()
-        if tasks:
-            tasks.sort(key=lambda x: x.created_at, reverse=True)
-            latest_task = tasks[0]
+    tasks = qm.list_all_tasks()
+    latest_task = tasks[0] if tasks else None
     EventTracker.emit("task_created", task_id=latest_task.id if latest_task else None, payload={"request": req.request})
     return {"status": "success", "cli_output": res["stdout"], "task": latest_task.model_dump() if latest_task else None}
 
@@ -253,7 +233,7 @@ def start_task(id: str):
 
     # Optionally trigger CLI runner dry-run or process
     adapter = JulesCLIAdapter()
-    res = adapter.run_queue(mode="once", dry_run=False)
+    res = adapter.run_queue(mode="once", dry_run=True)
     return {"status": "success", "task": task.model_dump(), "runner_output": res.get("stdout")}
 
 @app.post("/api/tasks/{id}/cancel")
@@ -273,14 +253,6 @@ def list_proposals(status: Optional[str] = None):
     pm = ProposalManager()
     props = pm.list_proposals(status=status)
     return [p.model_dump() for p in props]
-
-@app.get("/api/proposals/{id}")
-def get_proposal_by_id(id: str):
-    pm = ProposalManager()
-    prop = pm.get_proposal(id)
-    if not prop:
-        return _error_response(code="PROPOSAL_NOT_FOUND", message=f"Proposal with ID {id} not found", status_code=404)
-    return prop.model_dump()
 
 @app.post("/api/proposals/{id}/accept")
 def accept_proposal(id: str):
@@ -323,13 +295,6 @@ def get_system_events(task_id: Optional[str] = None, limit: int = 50):
     events = EventTracker.list_events(task_id=task_id, limit=limit)
     return [e.model_dump() for e in events]
 
-@app.get("/api/events/{id}")
-def get_event_by_id(id: str):
-    evt = EventTracker.get_event(id)
-    if not evt:
-        return _error_response(code="EVENT_NOT_FOUND", message=f"Event with ID {id} not found", status_code=404)
-    return evt.model_dump()
-
 @app.get("/api/tasks/{id}/history")
 def get_task_history(id: str):
     qm = QueueManager()
@@ -340,163 +305,6 @@ def get_task_history(id: str):
         "task_id": id,
         "history": [h.model_dump() for h in task.history],
         "events": [e.model_dump() for e in EventTracker.list_events(task_id=id)]
-    }
-
-@app.get("/api/tasks/{id}/dependencies")
-def get_task_dependencies(id: str):
-    qm = QueueManager()
-    task = qm.get_task(id)
-    if not task:
-        return _error_response(code="TASK_NOT_FOUND", message=f"Task with ID {id} not found", status_code=404)
-    return {
-        "task_id": id,
-        "depends_on": [],
-        "blocks": []
-    }
-
-@app.get("/api/tasks/{id}/replay")
-def get_task_replay(id: str):
-    qm = QueueManager()
-    task = qm.get_task(id)
-    if not task:
-        return _error_response(code="TASK_NOT_FOUND", message=f"Task with ID {id} not found", status_code=404)
-
-    timeline = []
-    for h in task.history:
-        st_val = h.status.value if isinstance(h.status, TaskStatus) else str(h.status)
-        msg_val = h.message or f"Task state transitioned to {st_val}"
-        timeline.append({
-            "timestamp": h.timestamp,
-            "status": st_val,
-            "message": msg_val
-        })
-
-    events = EventTracker.list_events(task_id=id, limit=1000)
-    for e in events:
-        msg = e.payload.get("message") or e.payload.get("request") or f"Event: {e.type}"
-        timeline.append({
-            "timestamp": e.timestamp,
-            "status": e.type.upper(),
-            "message": msg
-        })
-
-    timeline.sort(key=lambda x: x["timestamp"])
-
-    return {
-        "task_id": id,
-        "timeline": timeline
-    }
-
-@app.post("/api/tasks/{id}/retry")
-def retry_task(id: str):
-    qm = QueueManager()
-    task = qm.get_task(id)
-    if not task:
-        return _error_response(code="TASK_NOT_FOUND", message=f"Task with ID {id} not found", status_code=404)
-
-    task_status_str = task.status.value if isinstance(task.status, TaskStatus) else str(task.status)
-    if task_status_str.upper() not in ("FAILED", "CANCELLED", "BLOCKED"):
-        return _error_response(
-            code="RETRY_NOT_ALLOWED",
-            message=f"Task status '{task_status_str}' does not allow retry. Retry is only allowed for FAILED, CANCELLED, or BLOCKED tasks.",
-            status_code=400
-        )
-
-    req_text = task.request or task.description or ""
-    adapter = JulesCLIAdapter()
-    res = adapter.add_task(description=req_text, priority=task.priority)
-    if not res["success"]:
-        return _error_response(
-            code="TASK_CREATION_FAILED",
-            message=res["error"] or "Failed to retry task via CLI adapter",
-            status_code=500,
-            exit_code=res.get("exit_code")
-        )
-
-    qm = QueueManager()
-    new_task_id = None
-    if res.get("stdout"):
-        for line in res["stdout"].splitlines():
-            if "Task ID:" in line:
-                new_task_id = line.split("Task ID:")[-1].strip()
-                break
-
-    new_task = qm.get_task(new_task_id) if new_task_id else None
-    if not new_task:
-        pending_tasks = [t for t in qm.list_all_tasks() if t.status in (TaskStatus.PENDING, TaskStatus.READY)]
-        if pending_tasks:
-            pending_tasks.sort(key=lambda t: t.created_at, reverse=True)
-            new_task = pending_tasks[0]
-
-    if not new_task:
-        return _error_response(
-            code="TASK_CREATION_FAILED",
-            message="Retry task was created but could not be retrieved from queue",
-            status_code=500
-        )
-
-    if task.title:
-        new_task.title = task.title
-    if task.description:
-        new_task.description = task.description
-    new_task.source_task = task.id
-    qm.save_task(new_task)
-
-    EventTracker.emit("task_retried", task_id=new_task.id, payload={"original_task_id": id})
-    return new_task.model_dump()
-
-@app.get("/api/graph")
-def get_task_graph():
-    qm = QueueManager()
-    tasks = qm.list_all_tasks()
-    nodes = []
-    for t in tasks:
-        st_val = t.status.value if isinstance(t.status, TaskStatus) else str(t.status)
-        nodes.append({
-            "id": t.id,
-            "status": st_val,
-            "priority": t.priority,
-            "title": t.title or t.request or t.id
-        })
-    return {
-        "nodes": nodes,
-        "edges": []
-    }
-
-@app.get("/api/search")
-def search_control_room(q: str = "", limit: int = 50):
-    if not q or not q.strip():
-        return {"tasks": [], "proposals": [], "events": []}
-
-    query_str = q.strip().lower()
-
-    qm = QueueManager()
-    all_tasks = qm.list_all_tasks()
-    matched_tasks = []
-    for t in all_tasks:
-        text = f"{t.id} {t.request or ''} {t.title or ''} {t.description or ''}".lower()
-        if query_str in text:
-            matched_tasks.append(t.model_dump())
-
-    pm = ProposalManager()
-    all_props = pm.list_proposals()
-    matched_props = []
-    for p in all_props:
-        text = f"{p.id} {p.description or ''} {p.proposed_by or ''}".lower()
-        if query_str in text:
-            matched_props.append(p.model_dump())
-
-    all_events = EventTracker.list_events(limit=1000)
-    matched_events = []
-    for e in all_events:
-        text = f"{e.id} {e.type or ''} {e.task_id or ''} {e.source or ''} {str(e.payload or '')}".lower()
-        if query_str in text:
-            matched_events.append(e.model_dump())
-
-    return {
-        "tasks": matched_tasks[:limit],
-        "proposals": matched_props[:limit],
-        "events": matched_events[:limit]
     }
 
 # --- EXISTING LEGACY ENDPOINTS ---
@@ -535,7 +343,7 @@ def fork_timeline(parent_id: int, description: str, db: Session = Depends(get_db
     return svc.fork_timeline(parent_id, description)
 
 @app.post("/cognitive/session")
-def start_session(topic: str, timeline_id: int, participants: List[int], workspace_id: Optional[int] = None, db: Session = Depends(get_db)):
+def start_session(workspace_id: Optional[int], topic: str, timeline_id: int, participants: List[int], db: Session = Depends(get_db)):
     svc = CognitiveService(db)
     return svc.create_session(workspace_id, topic, timeline_id, participants)
 
@@ -545,9 +353,9 @@ def create_recipe(title: str, author_id: int, steps: List[str], problem_type: st
     return svc.create_recipe(title, author_id, steps, problem_type)
 
 @app.post("/twin")
-def create_twin(req: CreateTwinRequest, db: Session = Depends(get_db)):
+def create_twin(owner_id: int, goals: List[str], preferences: Dict[str, Any], db: Session = Depends(get_db)):
     svc = TwinService(db)
-    return svc.create_twin(req.owner_id, req.goals, req.preferences)
+    return svc.create_twin(owner_id, goals, preferences)
 
 @app.post("/recipe/execute")
 def execute_recipe(recipe_id: int, participants: List[int], result: str, db: Session = Depends(get_db)):
@@ -575,9 +383,9 @@ def create_epistemic_layer(name: str, confidence: float, evidence_type: str, db:
     return svc.create_layer(name, confidence, evidence_type)
 
 @app.post("/cluster")
-def create_intellectual_cluster(req: CreateClusterRequest, db: Session = Depends(get_db)):
+def create_intellectual_cluster(name: str, domains: List[str], db: Session = Depends(get_db)):
     svc = DiscoveryService(db)
-    return svc.create_cluster(req.name, req.domains)
+    return svc.create_cluster(name, domains)
 
 @app.post("/validate-understanding")
 def validate_understanding(agent_id: int, human_id: int, original: str, feedback: str, db: Session = Depends(get_db)):
