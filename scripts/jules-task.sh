@@ -146,6 +146,12 @@ User request:
 
 $TASK
 
+Do NOT modify:
+- .co-smos/*
+- .jules/tasks/*
+- .jules/results/*
+- .jules/queue/*
+
 Follow AGENTS.md strictly.
 
 Required workflow:
