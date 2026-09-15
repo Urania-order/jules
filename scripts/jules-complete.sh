@@ -120,13 +120,25 @@ echo "      Diff stat (HEAD):"
 git diff HEAD --stat | sed 's/^/      /' || true
 echo ""
 
-# --- post-pull forbidden paths check (ERRATA-0012) ---
-FORBIDDEN_VIOLATIONS="$(git diff --name-only HEAD 2>/dev/null | grep -E '^\.(co-smos|jules/(tasks|results|queue))/' || true)"
+# --- post-pull forbidden paths check (ERRATA-0012, refined) ---
+# Orchestrator-owned files that are EXPECTED to change during completion:
+#   .co-smos/state.json          (updated by this script)
+#   .jules/tasks/<task_id>.md    (updated by this script)
+#   .jules/results/<task_id>.log (created by jules-task.sh)
+# Only flag changes OUTSIDE these expected paths.
+FORBIDDEN_VIOLATIONS="$(git diff --name-only HEAD 2>/dev/null \
+  | grep -E '^\.(co-smos|jules/(tasks|results|queue))/' \
+  | grep -v '^\.co-smos/state\.json$' \
+  | grep -v "^\.jules/tasks/${TASK_ID}\.md$" \
+  | grep -v "^\.jules/results/${TASK_ID}\.log$" \
+  || true)"
 if [ -n "$FORBIDDEN_VIOLATIONS" ]; then
-  echo "      WARNING: forbidden paths were modified during this task:"
+  echo "      WARNING: unexpected changes in forbidden paths:"
   echo "$FORBIDDEN_VIOLATIONS" | sed 's/^/        /'
   echo "      -> See ERRATA-0012"
-  echo "      -> These files are orchestrator-owned and must be reverted if not intentional"
+  echo "      -> Jules should not modify these; review and revert if needed"
+else
+  echo "      post-pull check: no unexpected forbidden path changes"
 fi
 echo ""
 
