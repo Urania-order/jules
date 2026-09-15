@@ -1,0 +1,11 @@
+{
+  "id": "task-20260915-041228-4595",
+  "request": "Dependency Test Task",
+  "priority": 5,
+  "status": "pending",
+  "created_at": "2026-09-15T01:12:28Z",
+  "started_at": null,
+  "finished_at": null,
+  "session_id": null,
+  "error": null
+}

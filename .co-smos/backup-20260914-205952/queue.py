@@ -77,17 +77,6 @@ class QueueManager:
                     continue
         return tasks
 
-    def list_queue_tasks(self) -> List[Task]:
-        """Return only tasks in the active queue (not completed/cancelled/deferred)."""
-        queue_statuses = {
-            TaskStatus.PENDING,
-            TaskStatus.READY,
-            TaskStatus.RUNNING,
-            TaskStatus.REVIEW,
-            TaskStatus.BLOCKED,
-        }
-        return [t for t in self.list_all_tasks() if t.status in queue_statuses]
-
     def get_task(self, task_id: str) -> Optional[Task]:
         all_tasks = self.list_all_tasks()
         for t in all_tasks:

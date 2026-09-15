@@ -56,5 +56,19 @@ class ValueEcologyService(Observable):
             "total_social_impact": sum(a.social_impact or 0.0 for a in assessments)
         }
 
+    def assess_knowledge_value(self, node_id: int, human_benefit: float, social_impact: float) -> ValueAssessment:
+        assessment = self.db.query(ValueAssessment).filter(ValueAssessment.node_id == node_id).first()
+        if not assessment:
+            assessment = ValueAssessment(node_id=node_id)
+            self.db.add(assessment)
+
+        assessment.human_benefit = human_benefit
+        assessment.social_impact = social_impact
+        assessment.knowledge_value = human_benefit * social_impact
+
+        self.db.commit()
+        self.db.refresh(assessment)
+        return assessment
+
     def get_evolution_summary(self) -> List[Dict[str, Any]]:
         return []

@@ -24,9 +24,7 @@ class StateManager:
                 pass
 
         tasks = self.queue_mgr.list_all_tasks()
-        active_proposals = self.proposal_mgr.list_proposals()
-        deferred_proposals = self.proposal_mgr.list_proposals(status="deferred")
-        all_proposals = active_proposals + deferred_proposals
+        proposals = self.proposal_mgr.list_proposals()
 
         task_counts = {}
         for t in tasks:
@@ -34,9 +32,9 @@ class StateManager:
             task_counts[status_str] = task_counts.get(status_str, 0) + 1
 
         proposal_counts = {
-            "proposed": len(active_proposals),
-            "deferred": len(deferred_proposals),
-            "total": len(all_proposals),
+            "proposed": len([p for p in proposals if p.status == "proposed"]),
+            "deferred": len([p for p in proposals if p.status == "deferred"]),
+            "total": len(proposals),
         }
 
         return {
