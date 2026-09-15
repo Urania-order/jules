@@ -627,3 +627,47 @@ In final report, add section:
 - INDEX.md updated on every new errata
 - Each errata has unique ID
 - IDs are sequential (0001, 0002, ...)
+
+## 28. Co-SMOS Operating Constitution
+
+The normative document is:
+
+docs/COSMOS-JULES-WORKFLOW.md
+
+It defines:
+- the canonical task lifecycle
+- Jules rules
+- branch rules
+- forbidden paths
+- git rules
+- state.json rules
+- task records, logs, review, acceptance
+- ADR and errata policies
+- replay/reconstruction
+- what is a completed task
+- what must never be automated
+- next-step hints per stage
+
+Jules MUST read this document before every task, in addition to AGENTS.md and .jules/errata/INDEX.md.
+
+## 28. Co-SMOS Operating Constitution
+
+The normative document is:
+
+docs/COSMOS-JULES-WORKFLOW.md
+
+It defines:
+- the canonical task lifecycle
+- Jules rules
+- branch rules
+- forbidden paths
+- git rules
+- state.json rules
+- task records, logs, review, acceptance
+- ADR and errata policies
+- replay/reconstruction
+- what is a completed task
+- what must never be automated
+- next-step hints per stage
+
+Jules MUST read this document before every task, in addition to AGENTS.md and .jules/errata/INDEX.md.
