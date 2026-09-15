@@ -7,12 +7,13 @@
   "last_task": {
     "id": "task-20260915-205427",
     "status": "completed",
-    "session_id": null,
+    "session_id": "4836481793525787595",
     "branch": null,
     "request": null,
     "started_at": null,
     "finished_at": "2026-09-15T20:25:48.392258+00:00",
-    "result": "error"
+    "result": "no-op",
+    "note": "Test task: verify Do NOT modify block propagates. Jules reported SUCCESS with no file changes."
   },
   "history": [
     {
@@ -82,12 +83,13 @@
     {
       "id": "task-20260915-205427",
       "status": "completed",
-      "session_id": null,
+      "session_id": "4836481793525787595",
       "branch": null,
       "request": null,
       "started_at": null,
       "finished_at": "2026-09-15T20:25:48.392258+00:00",
-      "result": "error"
+      "result": "no-op",
+      "note": "Test task: verify Do NOT modify block propagates. Jules reported SUCCESS with no file changes."
     }
   ]
 }
