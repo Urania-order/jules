@@ -13,7 +13,7 @@ echo "=========================================="
 echo ""
 
 echo "[Git]"
-echo "  Branch:         $(git branch --show-current)"
+echo "  Branch:         $(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown)"
 echo "  Last commit:    $(git log --oneline -1 2>/dev/null || echo 'none')"
 echo "  Uncommitted:    $(git status --porcelain | wc -l) file(s)"
 echo ""
