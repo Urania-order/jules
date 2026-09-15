@@ -82,3 +82,34 @@ def test_frontend_contract_css_classes():
 
     for cls in required_classes:
         assert cls in content, f"Required CSS class {cls} not found in frontend/index.html"
+
+
+def test_frontend_contract_patch_b_elements():
+    """Verify Patch B contract elements: history view, autonomy selector, why section, replay button."""
+    content = INDEX_PATH.read_text()
+
+    # History view checks
+    assert 'data-view="history"' in content
+    assert 'id="view-history"' in content
+    assert '`${API_BASE}/events`' in content or '/events' in content
+    assert 'renderHistory' in content
+
+    # Autonomy selector checks
+    assert 'id="autonomy-select"' in content
+    assert 'value="MANUAL"' in content
+    assert 'value="ASSISTED"' in content
+    assert 'value="AUTO"' in content
+    assert "localStorage.getItem('cosmos_autonomy')" in content or "localStorage.setItem('cosmos_autonomy'" in content
+
+    # WHY section checks
+    assert 'id="why-section"' in content
+    assert 'WHY?' in content
+    assert 'source_task' in content
+    assert 'proposed_by' in content
+
+    # Task detail replay checks
+    assert 'id="btn-replay-task"' in content
+    assert '▶ REPLAY' in content
+    assert '`${API_BASE}/tasks/' in content or '/tasks/' in content
+    assert '/replay' in content
+    assert 'openReplayModal' in content

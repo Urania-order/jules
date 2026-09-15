@@ -383,6 +383,11 @@
     <div class="logo-container">
       <div class="logo">Co-SMOS Control Room v0.9</div>
       <div class="system-status-badge" id="system-status">ONLINE</div>
+      <select id="autonomy-select" class="btn btn-secondary btn-sm" style="background-color: var(--bg-card); color: var(--text-primary); border: 1px solid var(--border-color); padding: 0.25rem 0.5rem; border-radius: 0.375rem;">
+        <option value="MANUAL">MANUAL</option>
+        <option value="ASSISTED">ASSISTED</option>
+        <option value="AUTO">AUTO</option>
+      </select>
       <button class="btn btn-secondary btn-sm" id="btn-sync">⟳ SYNC</button>
     </div>
     <nav>
@@ -390,6 +395,7 @@
       <button class="nav-btn" data-view="queue">Queue</button>
       <button class="nav-btn" data-view="proposals">Proposals</button>
       <button class="nav-btn" data-view="events">Events</button>
+      <button class="nav-btn" data-view="history">History</button>
     </nav>
   </header>
 
@@ -486,6 +492,12 @@
       <div class="events-log" id="events-log"></div>
     </section>
 
+    <!-- HISTORY VIEW -->
+    <section id="view-history" class="view">
+      <h2>System History</h2>
+      <div class="history-log" id="history-log"></div>
+    </section>
+
     <!-- TASK DETAIL VIEW -->
     <section id="view-task-detail" class="view">
       <button class="btn btn-secondary" id="btn-back-dashboard" style="margin-bottom: 1rem;">&larr; Back</button>
@@ -497,7 +509,13 @@
         <div style="display: flex; gap: 1rem; margin-bottom: 1.5rem;">
           <button class="btn btn-primary" id="btn-start-task">Start Task</button>
           <button class="btn btn-danger" id="btn-cancel-task">Cancel Task</button>
+          <button class="btn btn-secondary" id="btn-replay-task">▶ REPLAY</button>
         </div>
+
+        <section id="why-section" class="card" style="margin-bottom: 1.5rem; background-color: var(--bg-primary);">
+          <h4>WHY?</h4>
+          <div id="why-content" style="margin-top: 0.5rem; font-size: 0.9rem; color: var(--text-secondary); line-height: 1.6;"></div>
+        </section>
 
         <h4>State History</h4>
         <div class="history-log" id="detail-task-history" style="margin-top: 0.5rem;"></div>
@@ -523,6 +541,17 @@
             <button type="submit" class="btn btn-primary">Submit Modification</button>
           </div>
         </form>
+      </div>
+    </div>
+
+    <!-- REPLAY MODAL -->
+    <div class="modal-overlay" id="replay-modal-overlay" style="display: none;">
+      <div class="modal" style="max-width: 650px;">
+        <h3>Task Replay Flow</h3>
+        <div class="history-log" id="replay-log" style="margin-top: 1rem; max-height: 350px;"></div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-secondary" onclick="closeReplayModal()">Close</button>
+        </div>
       </div>
     </div>
 
@@ -613,6 +642,7 @@
         renderQueueTasks();
         renderProposals();
         renderEvents();
+        renderHistory();
       } catch (e) {
         console.error('Refresh error:', e);
         showOffline();
@@ -829,11 +859,49 @@
     async function renderEvents() {
       const events = await fetchJSON(`${API_BASE}/events`);
       const container = document.getElementById('events-log');
+      if (!container) return;
       container.innerHTML = '';
       events.forEach(evt => {
         const item = document.createElement('div');
         item.className = 'log-item';
         item.textContent = `[${new Date(evt.timestamp).toLocaleTimeString()}] [${evt.type.toUpperCase()}] ${JSON.stringify(evt.payload)}`;
+        container.appendChild(item);
+      });
+    }
+
+    async function renderHistory() {
+      const container = document.getElementById('history-log');
+      if (!container) return;
+      const events = await fetchJSON(`${API_BASE}/events?limit=50`);
+      container.innerHTML = '';
+      events.forEach(evt => {
+        const item = document.createElement('div');
+        item.className = 'log-item';
+        item.style.display = 'flex';
+        item.style.justifyContent = 'space-between';
+        item.style.alignItems = 'center';
+
+        const timeStr = new Date(evt.timestamp).toLocaleTimeString();
+        const typeStr = evt.type ? evt.type.toUpperCase() : 'UNKNOWN';
+        const taskIdStr = evt.task_id || 'N/A';
+        const payloadStr = evt.payload ? JSON.stringify(evt.payload) : '';
+
+        const textSpan = document.createElement('span');
+        textSpan.textContent = `[${timeStr}] [${typeStr}] [${taskIdStr}] ${payloadStr}`;
+        item.appendChild(textSpan);
+
+        if (evt.task_id) {
+          const replayBtn = document.createElement('button');
+          replayBtn.className = 'btn btn-secondary btn-sm';
+          replayBtn.textContent = '▶ REPLAY';
+          replayBtn.onclick = () => {
+            viewTaskDetail(evt.task_id).then(() => {
+              openReplayModal(evt.task_id);
+            });
+          };
+          item.appendChild(replayBtn);
+        }
+
         container.appendChild(item);
       });
     }
@@ -859,6 +927,58 @@
         item.className = 'log-item';
         item.textContent = `[${new Date(h.timestamp).toLocaleTimeString()}] ${h.status}: ${h.message}`;
         histLog.appendChild(item);
+      });
+
+      // WHY Block Rendering
+      const whyContent = document.getElementById('why-content');
+      if (whyContent) {
+        const sourceTask = task.source_task ? escapeHTML(task.source_task) : 'N/A';
+        const proposalOrigin = (task.metadata && task.metadata.proposal_id)
+          ? escapeHTML(task.metadata.proposal_id)
+          : ((task.metadata && task.metadata.proposed_by) ? escapeHTML(task.metadata.proposed_by) : 'None');
+        const proposedBy = task.proposed_by ? escapeHTML(task.proposed_by) : 'N/A';
+        
+        const historyTransitions = (historyData.history && historyData.history.length > 0)
+          ? historyData.history.map(h => `${h.status}: ${escapeHTML(h.message || '')}`).join(' &rarr; ')
+          : 'None';
+
+        whyContent.innerHTML = `
+          <div><strong>Source Task:</strong> ${sourceTask}</div>
+          <div><strong>Proposal Origin:</strong> ${proposalOrigin}</div>
+          <div><strong>Proposed By:</strong> ${proposedBy}</div>
+          <div><strong>History Transitions:</strong> ${historyTransitions}</div>
+        `;
+      }
+    }
+
+    async function openReplayModal(taskId) {
+      const idToReplay = taskId || selectedTaskId;
+      if (!idToReplay) return;
+      try {
+        const replayData = await fetchJSON(`${API_BASE}/tasks/${idToReplay}/replay`);
+        const replayLog = document.getElementById('replay-log');
+        replayLog.innerHTML = '';
+        (replayData.timeline || []).forEach(item => {
+          const el = document.createElement('div');
+          el.className = 'log-item';
+          const timeStr = new Date(item.timestamp).toLocaleTimeString();
+          el.textContent = `[${timeStr}] [${item.status}] ${item.message}`;
+          replayLog.appendChild(el);
+        });
+        document.getElementById('replay-modal-overlay').style.display = 'flex';
+      } catch (e) {
+        showError('Failed to fetch task replay timeline');
+      }
+    }
+
+    function closeReplayModal() {
+      document.getElementById('replay-modal-overlay').style.display = 'none';
+    }
+
+    const btnReplayTask = document.getElementById('btn-replay-task');
+    if (btnReplayTask) {
+      btnReplayTask.addEventListener('click', () => {
+        if (selectedTaskId) openReplayModal(selectedTaskId);
       });
     }
 
@@ -902,6 +1022,16 @@
       return str ? str.replace(/[&<>'"]/g, 
         tag => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[tag] || tag)
       ) : '';
+    }
+
+    // Autonomy selector handling (localStorage persistence only)
+    const autonomySelect = document.getElementById('autonomy-select');
+    if (autonomySelect) {
+      const savedAutonomy = localStorage.getItem('cosmos_autonomy') || 'MANUAL';
+      autonomySelect.value = savedAutonomy;
+      autonomySelect.addEventListener('change', (e) => {
+        localStorage.setItem('cosmos_autonomy', e.target.value);
+      });
     }
 
     // Auto-refresh every 5 seconds
