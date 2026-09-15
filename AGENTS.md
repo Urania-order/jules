@@ -589,6 +589,24 @@ Before starting any task, Jules MUST:
 3. Check the plan against known mistakes
 4. If about to repeat a mistake — STOP and use documented fix
 
+## 16. Forbidden paths
+
+Jules MUST NOT modify the following directories:
+
+- `.co-smos/` — local orchestrator state
+- `.jules/tasks/` — task records created by the orchestrator
+- `.jules/results/` — session logs created by the orchestrator
+- `.jules/queue/` — runtime queue state
+
+These are orchestrator artifacts, not project code.
+
+Jules MAY:
+- read anything under these paths
+- create new ADRs in `.jules/history/`
+- create new errata in `.jules/errata/`
+
+Any attempt to modify the forbidden paths is a process defect and MUST be recorded as errata.
+
 ## 27.1 When to create errata
 
 Create new errata file when:
