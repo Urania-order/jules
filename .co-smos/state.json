@@ -5,14 +5,14 @@
   "status": "ready",
   "active_task": null,
   "last_task": {
-    "id": "task-20260915-200211",
+    "id": "task-20260915-205427",
     "status": "completed",
-    "session_id": "11407053237495613608",
+    "session_id": null,
     "branch": null,
-    "request": "./scripts/jules-task.sh Co-SMOS v0.9 Backend Patch B — AUDIT AND COMPLETE ONLY MISSING ENDPOINTS\n\nCONTEXT:\n- Repo: Urania-order/jules\n- Current baseline: commit b52cc154d5b6065b74a126d2c954fd6081fe8467\n- Backend: smos/api/main.py\n- Core: smos/core/{task,queue,proposals,events,state}.py\n- Adapter: smos/adapters/jules_cli.py\n- Spec: Co-SMOS v0.9 §21-22\n\nCRITICAL:\nThis is NOT a greenfield implementation.\n\nThe current baseline ALREADY contains several endpoints from this task, including:\n- GET /api/proposals/{id}\n- GET /api/events/{id}\n- GET /api/tasks/{id}/dependencies\n- GET /api/tasks/{id}/replay\n- POST /api/tasks/{id}/retry\n\nDO NOT rewrite these endpoints if they already satisfy the contract.\n\nFIRST perform an endpoint-by-endpoint audit.\n\nAUDIT THESE 7 ENDPOINTS:\n\n1. GET /api/proposals/{id}\n2. GET /api/events/{id}\n3. GET /api/tasks/{id}/dependencies\n4. GET /api/tasks/{id}/replay\n5. POST /api/tasks/{id}/retry\n6. GET /api/graph\n7. GET /api/search?q=...&limit=50\n\nFor each endpoint determine:\n- exists?\n- route correct?\n- HTTP status correct?\n- response schema correct?\n- error schema correct?\n- existing tests?\n- implementation already compatible with v0.9?\n\nONLY IMPLEMENT OR MODIFY an endpoint if it is genuinely missing or contract-incomplete.\n\nCONTRACT:\n\n1. GET /api/proposals/{id}\n- existing implementation should be preserved if correct\n- 404:\n  {status:error, code:PROPOSAL_NOT_FOUND, message, exit_code:null}\n\n2. GET /api/events/{id}\n- preserve existing implementation if correct\n- 404 with canonical error format\n\n3. GET /api/tasks/{id}/dependencies\n- response:\n  {task_id, depends_on: [], blocks: []}\n- empty arrays are acceptable in v0.9 because dependency model is not yet implemented\n- do not invent graph logic\n\n4. GET /api/tasks/{id}/replay\n- response:\n  {task_id, timeline:[{timestamp,status,message}]}\n- use existing task history and EventTracker where appropriate\n- preserve existing correct implementation\n\n5. POST /api/tasks/{id}/retry\n- allowed only:\n  FAILED\n  CANCELLED\n  BLOCKED\n- otherwise HTTP 400\n- new task preserves request, priority, description\n- preserve existing implementation if contract-correct\n- do not duplicate task creation logic unnecessarily\n\n6. GET /api/graph\n- response:\n  {\n    nodes:[{id,status,priority,title}],\n    edges:[]\n  }\n- nodes from all tasks\n- edges empty in v0.9\n- add only if genuinely missing\n\n7. GET /api/search?q=...&limit=50\n- case-insensitive substring search\n- tasks at minimum\n- search:\n  id\n  request\n  title\n  description\n- response:\n  {tasks:[], proposals:[], events:[]}\n- add only if genuinely missing\n\nERROR CONTRACT:\nAll errors must use:\n{\n  status: \"error\",\n  code: \"...\",\n  message: \"...\",\n  exit_code: null\n}\n\nHTTP status must match the error.\n\nCONSTRAINTS:\n- Do not use shell=True.\n- Do not touch .co-smos/.\n- Do not touch .jules/tasks/.\n- Do not rewrite existing working endpoints.\n- Do not alter unrelated historical debt.\n- Do not weaken existing tests.\n- Do not change the JulesCLIAdapter contract.\n- Do not introduce graph dependencies prematurely.\n\nTESTS:\n\nFirst inspect existing tests.\n\nAdd or extend tests ONLY for behavior that is not already covered.\n\nRequired coverage:\n- all 7 endpoints\n- success cases\n- 404 cases where applicable\n- retry 400 for non-retryable status\n- search matching\n- graph response shape\n\nRun:\n- targeted API tests\n- existing relevant service tests\n- full regression suite excluding only the repository's already documented historical-debt tests if they are still known failures\n- git diff --check\n\nIMPORTANT:\nIf an endpoint already exists and tests prove it is correct, report:\n\"ALREADY IMPLEMENTED — PRESERVED\"\nand do not modify it.\n\nREPORT FORMAT:\nAGENTS.md §14.\n\nFINAL REPORT:\n1. endpoint audit table\n2. already implemented endpoints\n3. newly implemented/fixed endpoints\n4. tests and results\n5. remaining v0.9 gaps\n\nAFTER COMPLETION:\nSuggest 3-5 next steps.",
+    "request": null,
     "started_at": null,
-    "finished_at": "2026-09-15T17:38:54.466360+00:00",
-    "result": "audit — no code changes (No diff found in the remote VM)"
+    "finished_at": "2026-09-15T20:25:48.392258+00:00",
+    "result": "error"
   },
   "history": [
     {
@@ -78,6 +78,16 @@
       "started_at": null,
       "finished_at": "2026-09-15T17:38:54.466360+00:00",
       "result": "audit — no code changes (No diff found in the remote VM)"
+    },
+    {
+      "id": "task-20260915-205427",
+      "status": "completed",
+      "session_id": null,
+      "branch": null,
+      "request": null,
+      "started_at": null,
+      "finished_at": "2026-09-15T20:25:48.392258+00:00",
+      "result": "error"
     }
   ]
 }
