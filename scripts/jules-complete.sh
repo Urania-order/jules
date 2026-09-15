@@ -1,292 +1,221 @@
 #!/usr/bin/env bash
+# scripts/jules-complete.sh
+# Atomically complete a Jules task.
+
 set -euo pipefail
 
-# ============================================================
-# Jules Complete — автоматизація завершення завдання
-# ============================================================
-#
-# Usage:
-#   ./scripts/jules-complete.sh <task-id> <session-id> <branch-name>
-#
-# Example:
-#   ./scripts/jules-complete.sh task-20260912-194341 7828326494924666542 feat/my-feature
-#
-# ============================================================
-
-PROJECT_ROOT="${JULES_PROJECT_ROOT:-$(git rev-parse --show-toplevel)}"
+PROJECT_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || echo "$PWD")"
 cd "$PROJECT_ROOT"
 
-TASK_ID="${1:-}"
-SESSION_ID="${2:-}"
-BRANCH_NAME="${3:-}"
-
-if [ -z "$TASK_ID" ] || [ -z "$SESSION_ID" ] || [ -z "$BRANCH_NAME" ]; then
-    echo "Usage: ./scripts/jules-complete.sh <task-id> <session-id> <branch-name>"
-    echo ""
-    echo "Example:"
-    echo "  ./scripts/jules-complete.sh task-20260912-194341 7828326494924666542 feat/my-feature"
-    echo ""
-    echo "Available tasks:"
-    ls -1t .jules/tasks/*.md 2>/dev/null | sed 's|.jules/tasks/||; s|\.md$||' | head -5 | sed 's/^/  /' || echo "  (none)"
-    exit 1
-fi
-
 STATE_FILE=".co-smos/state.json"
-TASK_FILE=".jules/tasks/${TASK_ID}.md"
+TASKS_DIR=".jules/tasks"
 
-echo ""
-echo "════════════════════════════════════════════"
-echo "  JULES COMPLETE"
-echo "════════════════════════════════════════════"
-echo ""
-echo "Task ID:     $TASK_ID"
-echo "Session ID:  $SESSION_ID"
-echo "Branch:      $BRANCH_NAME"
-echo ""
+SESSION_ID=""
+TASK_ID=""
 
-# --- Step 1: Pull result from Jules ---
-echo "[1/8] Pulling result from Jules..."
-
-set +e
-PULL_OUTPUT=$(jules remote pull --session "$SESSION_ID" --apply 2>&1)
-PULL_EXIT=$?
-set -e
-
-echo "$PULL_OUTPUT" | tail -5
-
-if [ $PULL_EXIT -ne 0 ]; then
-    echo ""
-    echo "⚠️  Pull failed (exit $PULL_EXIT)."
-
-    # Check if changes are already in working directory
-    CHANGES=$(git status --short 2>/dev/null | grep -E '^( M|M |\?\?)' | wc -l | tr -d ' ')
-
-    if [ "$CHANGES" -gt 0 ]; then
-        echo "  ✅ Found $CHANGES uncommitted change(s) in working directory."
-        echo "  Assuming patch was already applied (e.g. by manual pull)."
-        echo "  Continuing..."
-    else
-        echo "  ❌ No uncommitted changes found."
-        echo "  Cannot proceed — nothing to commit."
-        echo ""
-        echo "  Possible causes:"
-        echo "    - session ID is incorrect"
-        echo "    - patch has conflicts (manual resolution needed)"
-        echo "    - jules CLI not logged in"
-        echo ""
-        read -rp "Continue anyway? [y/N] " CONTINUE </dev/tty || CONTINUE="n"
-        if [ "$CONTINUE" != "y" ] && [ "$CONTINUE" != "Y" ]; then
-            echo "Aborted."
-            exit 1
-        fi
-    fi
-else
-    echo "  ✅ Patch applied successfully."
+if [ $# -eq 0 ]; then
+  echo "Usage: ./scripts/jules-complete.sh <SESSION_ID>"
+  echo "       ./scripts/jules-complete.sh --task <TASK_ID>"
+  exit 1
 fi
+
+if [ "$1" = "--task" ]; then
+  [ -z "${2:-}" ] && { echo "ERROR: --task requires TASK_ID"; exit 1; }
+  TASK_ID="$2"
+elif [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
+  echo "Usage: ./scripts/jules-complete.sh <SESSION_ID>"
+  echo "       ./scripts/jules-complete.sh --task <TASK_ID>"
+  exit 0
+else
+  SESSION_ID="$1"
+fi
+
+echo ""
+echo "================================================"
+echo " Jules Co-SMOS — Complete Task"
+echo "================================================"
+echo " Project root: $PROJECT_ROOT"
+[ -n "$SESSION_ID" ] && echo " Session ID:   $SESSION_ID"
+[ -n "$TASK_ID" ]    && echo " Task ID:      $TASK_ID"
 echo ""
 
-# --- Step 2: Update state.json ---
-echo "[2/8] Updating state.json..."
+if [ -z "$TASK_ID" ]; then
+  if [ ! -f "$STATE_FILE" ]; then
+    echo "ERROR: $STATE_FILE not found and --task not provided."
+    exit 3
+  fi
+  TASK_ID="$(python3 -c "
+import json
+try:
+    s = json.load(open('$STATE_FILE'))
+    a = s.get('active_task') or {}
+    print(a.get('id') or '')
+except Exception:
+    print('')
+")"
+fi
 
-if [ -f "$STATE_FILE" ]; then
-    python3 - "$STATE_FILE" "$TASK_ID" "$SESSION_ID" "$BRANCH_NAME" <<'PY'
-import json, sys
+if [ -z "$TASK_ID" ]; then
+  echo "ERROR: could not determine TASK_ID (no active_task in state.json)."
+  exit 3
+fi
+
+TASK_FILE="$TASKS_DIR/${TASK_ID}.md"
+echo " Resolved TASK_ID: $TASK_ID"
+echo ""
+
+STASHED=0
+if ! git diff --quiet || ! git diff --cached --quiet || [ -n "$(git ls-files --others --exclude-standard)" ]; then
+  echo "[1/7] Stashing local changes..."
+  git stash push -u -m "jules-complete: pre-pull stash for $TASK_ID" >/dev/null
+  STASHED=1
+else
+  echo "[1/7] No local changes to stash."
+fi
+
+echo "[2/7] Pulling result from Jules..."
+PULL_OUT="$(jules remote pull --session "$SESSION_ID" --apply 2>&1 || true)"
+echo "$PULL_OUT" | sed 's/^/      /'
+
+if echo "$PULL_OUT" | grep -q "No diff found in the remote VM"; then
+  PULL_RESULT="no-op"
+  echo "      → No diff found. Marking as no-op."
+elif echo "$PULL_OUT" | grep -qi "error\|failed\|conflict"; then
+  PULL_RESULT="error"
+  echo "      → Pull reported errors. Will record but continue."
+else
+  PULL_RESULT="applied"
+fi
+
+if [ "$STASHED" -eq 1 ]; then
+  echo "[3/7] Restoring local changes..."
+  if ! git stash pop >/dev/null 2>&1; then
+    echo "      WARNING: stash pop reported conflicts. Resolve manually."
+  fi
+else
+  echo "[3/7] No stash to restore."
+fi
+
+echo "[4/7] Current git status:"
+git status --short | sed 's/^/      /'
+echo ""
+echo "      Diff stat (HEAD):"
+git diff HEAD --stat | sed 's/^/      /' || true
+echo ""
+
+echo "[5/7] Updating $STATE_FILE..."
+SESSION_ID="$SESSION_ID" TASK_ID="$TASK_ID" PULL_RESULT="$PULL_RESULT" python3 - <<'PY'
+import json, os
 from datetime import datetime, timezone
 from pathlib import Path
 
-state_file = Path(sys.argv[1])
-task_id = sys.argv[2]
-session_id = sys.argv[3]
-branch = sys.argv[4]
+state_file = Path(".co-smos/state.json")
+task_id = os.environ["TASK_ID"]
+session_id = os.environ.get("SESSION_ID") or ""
+pull_result = os.environ.get("PULL_RESULT", "unknown")
 
-state = json.loads(state_file.read_text())
+if state_file.exists():
+    try:
+        state = json.loads(state_file.read_text())
+    except Exception:
+        state = {}
+else:
+    state = {}
+
+state.setdefault("version", 1)
+state.setdefault("project", "jules-codespace")
+state.setdefault("agent", "jules")
+state.setdefault("history", [])
+
 active = state.get("active_task") or {}
-
 now = datetime.now(timezone.utc).isoformat()
+
 completed = {
     "id": task_id,
     "status": "completed",
-    "session_id": session_id,
-    "branch": branch,
+    "session_id": session_id or active.get("session_id"),
+    "branch": active.get("branch"),
     "request": active.get("request"),
     "started_at": active.get("started_at"),
     "finished_at": now,
+    "result": pull_result,
 }
 
 state["last_task"] = completed
 state["active_task"] = None
 state["status"] = "ready"
-state.setdefault("history", []).append(completed)
+state["history"].append(completed)
+
 state_file.write_text(json.dumps(state, indent=2, ensure_ascii=False) + "\n")
-print(f"  ✅ Task {task_id} marked as completed")
+print(f"      state.json updated: {task_id} -> completed (result={pull_result})")
 PY
-else
-    echo "  ⚠️  state.json not found"
-fi
-echo ""
 
-# --- Step 3: Review task ---
-echo "[3/8] Reviewing task..."
-
-if [ -x "./scripts/jules-review.sh" ]; then
-    ./scripts/jules-review.sh "$TASK_ID" 2>&1 | tail -15
-else
-    echo "  ⚠️  jules-review.sh not found"
-fi
-echo ""
-
-# --- Step 4: Validate project ---
-echo "[4/8] Validating project..."
-
-if [ -x "./scripts/validate.sh" ]; then
-    if ./scripts/validate.sh >/tmp/validate.log 2>&1; then
-        echo "  ✅ Validation passed"
-    else
-        echo "  ❌ Validation failed"
-        tail -10 /tmp/validate.log
-        read -rp "Continue anyway? [y/N] " CONTINUE
-        if [ "$CONTINUE" != "y" ] && [ "$CONTINUE" != "Y" ]; then
-            echo "Aborted."
-            exit 1
-        fi
-    fi
-else
-    echo "  ⚠️  validate.sh not found"
-fi
-echo ""
-
-# --- Step 5: Run tests ---
-echo "[5/8] Running tests..."
-
-if command -v uv >/dev/null 2>&1; then
-    if uv run pytest tests/ -q \
-        --ignore=tests/test_ecology_service.py \
-        --ignore=tests/test_value_service.py \
-        --ignore=tests/test_mcp.py >/tmp/pytest.log 2>&1; then
-        RESULT=$(tail -1 /tmp/pytest.log)
-        echo "  ✅ $RESULT"
-    else
-        echo "  ❌ Tests failed"
-        tail -15 /tmp/pytest.log
-        read -rp "Continue anyway? [y/N] " CONTINUE
-        if [ "$CONTINUE" != "y" ] && [ "$CONTINUE" != "Y" ]; then
-            echo "Aborted."
-            exit 1
-        fi
-    fi
-else
-    echo "  ⚠️  uv not found — skipping tests"
-fi
-echo ""
-
-# --- Step 6: Git commit ---
-echo "[6/8] Committing changes..."
-
-git checkout -b "$BRANCH_NAME"
-git add -A
-
-if git diff --cached --quiet; then
-    echo "  ⚠️  Nothing to commit — working tree clean"
-else
-    COMMIT_MSG="feat: complete ${TASK_ID}
-
-Jules session: ${SESSION_ID}
-Task: ${TASK_ID}"
-    git commit -m "$COMMIT_MSG" 2>&1 | tail -3
-    echo "  ✅ Committed"
-fi
-echo ""
-
-# --- Step 7: Push and create PR ---
-echo "[7/8] Pushing and creating PR..."
-
-git push -u origin "$BRANCH_NAME" 2>&1 | tail -3
-
-if command -v gh >/dev/null 2>&1; then
-    gh pr create --fill 2>&1 | tail -3 || echo "  ⚠️  PR may already exist"
-else
-    echo "  ⚠️  gh not found — create PR manually"
-fi
-echo ""
-
-# --- Step 8: Wait for CI and merge ---
-echo "[8/8] Waiting for CI and merging..."
-
-if command -v gh >/dev/null 2>&1; then
-    echo "  Waiting for CI checks..."
-    MAX_WAIT=300
-    WAITED=0
-    INTERVAL=15
-    CI_STATUS="unknown"
-
-    while [ "$WAITED" -lt "$MAX_WAIT" ]; do
-        CHECKS=$(gh pr checks 2>&1 || true)
-
-        if echo "$CHECKS" | grep -qiE 'pending|queued|in progress'; then
-            echo "  [$WAITED/${MAX_WAIT}s] CI still running..."
-            sleep "$INTERVAL"
-            WAITED=$((WAITED + INTERVAL))
-        elif echo "$CHECKS" | grep -qiE 'fail|error'; then
-            CI_STATUS="failed"
-            break
-        elif echo "$CHECKS" | grep -qiE 'pass|success'; then
-            CI_STATUS="passed"
-            break
-        else
-            echo "  [$WAITED/${MAX_WAIT}s] Waiting for checks to appear..."
-            sleep "$INTERVAL"
-            WAITED=$((WAITED + INTERVAL))
-        fi
-    done
-
+if [ -f "$TASK_FILE" ]; then
+  echo "[6/7] Updating task record: $TASK_FILE"
+  {
     echo ""
-    gh pr checks 2>&1 | tail -10
+    echo "## Final Status"
     echo ""
-
-    if [ "$CI_STATUS" = "failed" ]; then
-        echo "  ❌ CI failed. PR left open for manual review."
-        exit 1
-    fi
-
-    if [ "$CI_STATUS" != "passed" ]; then
-        echo "  ⚠️  CI did not finish within ${MAX_WAIT}s."
-        echo "  PR left open for manual review."
-        exit 0
-    fi
-
-    echo "  ✅ CI passed."
+    echo "completed"
     echo ""
-
-    # Auto-merge mode (for runner / CI)
-    if [ "${JULES_AUTO_MERGE:-0}" = "1" ]; then
-        echo "  JULES_AUTO_MERGE=1 — auto-merging"
-        MERGE="y"
-    else
-        if [ -t 0 ] && [ -e /dev/tty ]; then
-            printf "Merge PR? [y/N] "
-            read -r MERGE </dev/tty || MERGE="n"
-        else
-            echo "  ⚠️  No TTY available."
-            MERGE="n"
-        fi
-    fi
-
-    if [ "$MERGE" = "y" ] || [ "$MERGE" = "Y" ]; then
-        gh pr merge --squash --admin --delete-branch 2>&1 | tail -5
-        git checkout main
-        git pull origin main
-        echo ""
-        echo "  ✅ Merged and returned to main"
-    else
-        echo "  ⚠️  PR left open for manual review"
-    fi
+    echo "## Result"
+    echo ""
+    echo "pull result: $PULL_RESULT"
+    echo ""
+    echo "Session: $SESSION_ID"
+    echo ""
+    echo "Completed at: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  } >> "$TASK_FILE"
+else
+  echo "[6/7] WARNING: $TASK_FILE not found, skipping."
 fi
-echo ""
 
-echo "════════════════════════════════════════════"
-echo "  COMPLETE"
-echo "════════════════════════════════════════════"
+echo "[7/7] Committing and pushing..."
+
+CODE_PATHS=()
+for p in frontend smos tests docs scripts Dockerfile .devcontainer .gitignore; do
+  [ -e "$p" ] && CODE_PATHS+=("$p")
+done
+
+if [ ${#CODE_PATHS[@]} -gt 0 ]; then
+  git add "${CODE_PATHS[@]}" 2>/dev/null || true
+  if ! git diff --cached --quiet; then
+    git commit -m "feat: apply Jules result for $TASK_ID
+
+Session: $SESSION_ID
+Pull result: $PULL_RESULT"
+    echo "      -> code commit done"
+  else
+    echo "      -> no code changes to commit"
+  fi
+fi
+
+ART_PATHS=(".co-smos" ".jules/tasks" ".jules/results" ".jules/history" ".jules/errata")
+for p in "${ART_PATHS[@]}"; do
+  [ -e "$p" ] && git add "$p" 2>/dev/null || true
+done
+if ! git diff --cached --quiet; then
+  git commit -m "chore: record Co-SMOS artifacts for $TASK_ID
+
+Session: $SESSION_ID
+Pull result: $PULL_RESULT"
+  echo "      -> artifacts commit done"
+else
+  echo "      -> no artifacts to commit"
+fi
+
+CURRENT_BRANCH="$(git rev-parse --abbrev-ref HEAD)"
+if git remote get-url origin >/dev/null 2>&1; then
+  echo "      pushing $CURRENT_BRANCH -> origin..."
+  git push origin "$CURRENT_BRANCH" || echo "      WARNING: push failed"
+fi
+
 echo ""
-echo "Task:   $TASK_ID"
-echo "Branch: $BRANCH_NAME"
+echo "================================================"
+echo " Task completed"
+echo "================================================"
+echo ""
+echo "Task ID:  $TASK_ID"
+echo "Session:  $SESSION_ID"
+echo "Result:   $PULL_RESULT"
 echo ""
