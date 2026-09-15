@@ -1,0 +1,26 @@
+{
+  "id": "task-20260915-041959-1763",
+  "request": "Task Not Retryable",
+  "title": "Task Not Retryable",
+  "description": null,
+  "status": "cancelled",
+  "priority": 5,
+  "created_at": "2026-09-15T01:19:59Z",
+  "started_at": null,
+  "finished_at": "2026-09-15T01:20:00.236989+00:00",
+  "proposed_by": null,
+  "source_task": null,
+  "session_id": null,
+  "jules_task_id": null,
+  "error": null,
+  "exit_code": null,
+  "metadata": {},
+  "history": [
+    {
+      "timestamp": "2026-09-15T01:20:00.236989+00:00",
+      "status": "CANCELLED",
+      "message": "Task cancelled via API",
+      "details": null
+    }
+  ]
+}

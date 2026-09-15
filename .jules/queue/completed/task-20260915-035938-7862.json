@@ -2,10 +2,11 @@
   "id": "task-20260915-035938-7862",
   "request": "API Integration Test Task",
   "priority": 4,
-  "status": "running",
+  "status": "completed",
   "created_at": "2026-09-15T00:59:38Z",
   "started_at": "2026-09-15T00:59:40.526064+00:00",
-  "finished_at": null,
-  "session_id": null,
-  "error": null
+  "finished_at": "2026-09-15T01:15:39.202088+00:00",
+  "session_id": "2900943215824081256",
+  "error": null,
+  "jules_task_id": "task-20260915-035940"
 }
