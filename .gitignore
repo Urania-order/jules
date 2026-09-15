@@ -24,3 +24,4 @@ __pycache__/
 .pytest_cache/
 .co-smos/state.json
 .jules/events/
+!.co-smos/state.json
