@@ -11,9 +11,8 @@
     "branch": null,
     "request": null,
     "started_at": null,
-    "finished_at": "2026-09-15T20:25:48.392258+00:00",
-    "result": "no-op",
-    "note": "Test task: verify Do NOT modify block propagates. Jules reported SUCCESS with no file changes."
+    "finished_at": "2026-09-15T20:30:49.152103+00:00",
+    "result": "no-op"
   },
   "history": [
     {
@@ -90,6 +89,16 @@
       "finished_at": "2026-09-15T20:25:48.392258+00:00",
       "result": "no-op",
       "note": "Test task: verify Do NOT modify block propagates. Jules reported SUCCESS with no file changes."
+    },
+    {
+      "id": "task-20260915-205427",
+      "status": "completed",
+      "session_id": "4836481793525787595",
+      "branch": null,
+      "request": null,
+      "started_at": null,
+      "finished_at": "2026-09-15T20:30:49.152103+00:00",
+      "result": "no-op"
     }
   ]
 }
