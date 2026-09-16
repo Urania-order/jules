@@ -1,0 +1,11 @@
+{
+  "id": "task-20260916-165949-1024",
+  "request": "Replay Test Task",
+  "priority": 5,
+  "status": "pending",
+  "created_at": "2026-09-16T13:59:50Z",
+  "started_at": null,
+  "finished_at": null,
+  "session_id": null,
+  "error": null
+}

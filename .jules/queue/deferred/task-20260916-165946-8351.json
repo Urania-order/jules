@@ -1,0 +1,11 @@
+{
+  "id": "task-20260916-165946-8351",
+  "request": "Test task from unit test",
+  "priority": 3,
+  "status": "pending",
+  "created_at": "2026-09-16T13:59:46Z",
+  "started_at": null,
+  "finished_at": null,
+  "session_id": null,
+  "error": null
+}
