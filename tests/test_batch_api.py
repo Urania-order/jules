@@ -86,7 +86,7 @@ def test_batch_run_night(setup_tasks):
     assert len(data["queued"]) == 3
     assert data["queued"] == task_ids
 
-def test_batch_run_window_without_scheduler(setup_tasks):
+def test_batch_run_window_with_scheduler(setup_tasks):
     qm, tasks = setup_tasks
     task_ids = [t.id for t in tasks[:2]]
     
@@ -97,10 +97,11 @@ def test_batch_run_window_without_scheduler(setup_tasks):
         "autonomy": "AUTO"
     })
     
-    assert resp.status_code == 400
+    assert resp.status_code == 200
     data = resp.json()
-    assert data["status"] == "error"
-    assert data["code"] == "SCHEDULER_NOT_IMPLEMENTED"
+    assert data["status"] == "queued"
+    assert data["schedule"] == "window"
+    assert len(data["queued"]) == 2
 
 def test_batch_run_manual_requires_confirm(setup_tasks):
     qm, tasks = setup_tasks

@@ -447,3 +447,36 @@ vim docs/COSMOS-JULES-WORKFLOW.md
 Він має силу для Jules, для оркестратора, для людини-оператора і для будь-якого майбутнього агента.
 
 Порушення будь-якого правила = дефект процесу, який фіксується як errata.
+
+§19. Background Batch Scheduler (Co-SMOS v0.9)
+
+Co-SMOS v0.9 provides an asynchronous background scheduler for running queued task batches within designated execution time windows.
+
+### Default Schedules
+The system pre-registers two default schedules:
+- **`night`**: `02:00` - `06:00` UTC, all days (`mon` through `sun`).
+- **`window`**: `09:00` - `18:00` UTC, workdays (`mon` through `fri`).
+
+### Environment Variable Overrides
+Default schedule boundaries can be overridden via environment variables without code modification:
+- `JULES_SCHEDULE_NIGHT_START` (default: `"02:00"`)
+- `JULES_SCHEDULE_NIGHT_END` (default: `"06:00"`)
+- `JULES_SCHEDULE_WINDOW_START` (default: `"09:00"`)
+- `JULES_SCHEDULE_WINDOW_END` (default: `"18:00"`)
+
+### Background Execution Loop
+- The scheduler runs as an asynchronous background loop within FastAPI using the `lifespan` context manager.
+- Every 60 seconds, `bm.run_due_batches()` checks for batches in state `"queued"` whose schedule is currently due according to `is_due()`.
+- When a batch is due, its status updates to `"running"`, and its queued tasks transition to `"RUNNING"` up to the specified `concurrency` limit.
+- Once tasks are launched, the batch status is updated to `"completed"`.
+- Batches with schedule `"now"` or `"now-sequential"` are handled immediately upon creation and are **never** modified or executed by the background loop.
+- The background loop task is gracefully cancelled upon FastAPI application shutdown.
+
+### Testing and Manual Trigger Endpoint
+To prevent accidental background runs during test suites or manual operation, automated tests or operators can use the trigger endpoint:
+- `POST /api/scheduler/trigger`: Forces an immediate check for due batches without waiting for the background loop interval.
+- Schedules can also be checked directly using `is_due(name, now=...)` by passing a custom datetime object.
+
+### Timezone Policy
+- All schedule comparisons use **UTC** (`datetime.now(timezone.utc)`) by default.
+- If necessary, local system timezone overrides can be provided via standard system `TZ` environment variables.

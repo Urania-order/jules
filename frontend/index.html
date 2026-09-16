@@ -753,7 +753,15 @@
     <section id="view-batch" class="view">
       <h2>Parallel Batch Execution</h2>
       <div class="card">
-        <h3>Select Tasks for Batch Execution</h3>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+          <h3>Select Tasks for Batch Execution</h3>
+          <div style="display: flex; align-items: center; gap: 1rem;">
+            <div id="scheduler-status-badge" style="display: flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; color: var(--text-secondary);">
+              <div id="scheduler-led" class="led led-green"></div> Scheduler: Active
+            </div>
+            <button id="btn-trigger-scheduler" class="btn btn-secondary btn-sm">⚡ Trigger now</button>
+          </div>
+        </div>
         <p style="margin: 0.5rem 0 1rem 0; color: var(--text-secondary); font-size: 0.9rem;">
           Select READY tasks to schedule or run in batch.
         </p>
@@ -781,6 +789,13 @@
         </div>
 
         <div id="batch-status" class="batch-status" style="display: none;"></div>
+      </div>
+
+      <div class="card">
+        <h3>Queued Batches</h3>
+        <div id="queued-batches-list" class="task-list" style="margin-top: 1rem;">
+          <div class="empty-state">No queued batches</div>
+        </div>
       </div>
     </section>
 
@@ -1017,6 +1032,8 @@
         renderStages();
         renderSequence();
         renderBatchTasks();
+        renderQueuedBatches();
+        renderSchedulerStatus();
         renderProposals();
         renderEvents();
         renderHistory();
@@ -1382,6 +1399,76 @@
       });
     }
 
+    async function renderQueuedBatches() {
+      const container = document.getElementById('queued-batches-list');
+      if (!container) return;
+      try {
+        const queuedBatches = await fetchJSON(`${API_BASE}/batch/queue`);
+        container.innerHTML = '';
+        if (queuedBatches.length === 0) {
+          container.innerHTML = '<div class="empty-state">No queued batches</div>';
+          return;
+        }
+
+        queuedBatches.forEach(b => {
+          const item = document.createElement('div');
+          item.className = 'task-item';
+          const scheduledFor = b.schedule || 'N/A';
+          item.innerHTML = `
+            <div class="task-info">
+              <div class="task-title">Batch: ${b.id}</div>
+              <div class="task-meta">
+                <span>Scheduled for: <strong style="color: var(--accent-blue);">${escapeHTML(scheduledFor)}</strong></span>
+                <span>Tasks: ${b.task_ids ? b.task_ids.length : 0}</span>
+                <span>Concurrency: ${b.concurrency}</span>
+              </div>
+            </div>
+            <span class="badge badge-PENDING">${b.status.toUpperCase()}</span>
+          `;
+          container.appendChild(item);
+        });
+      } catch (e) {
+        container.innerHTML = '<div class="empty-state">Failed to load queued batches</div>';
+      }
+    }
+
+    async function renderSchedulerStatus() {
+      const statusBadge = document.getElementById('scheduler-status-badge');
+      const led = document.getElementById('scheduler-led');
+      if (!statusBadge || !led) return;
+
+      try {
+        const statusData = await fetchJSON(`${API_BASE}/scheduler/status`);
+        if (statusData && statusData.status === 'active') {
+          led.className = 'led led-green';
+          statusBadge.innerHTML = `<div id="scheduler-led" class="led led-green"></div> Scheduler: Active`;
+        } else {
+          led.className = 'led led-yellow';
+          statusBadge.innerHTML = `<div id="scheduler-led" class="led led-yellow"></div> Scheduler: Waiting`;
+        }
+      } catch (e) {
+        led.className = 'led led-yellow';
+        statusBadge.innerHTML = `<div id="scheduler-led" class="led led-yellow"></div> Scheduler: Waiting`;
+      }
+    }
+
+    // Trigger Scheduler handler
+    const btnTriggerScheduler = document.getElementById('btn-trigger-scheduler');
+    if (btnTriggerScheduler) {
+      btnTriggerScheduler.addEventListener('click', async () => {
+        try {
+          const res = await fetchJSON(`${API_BASE}/scheduler/trigger`, { method: 'POST' });
+          const statusDiv = document.getElementById('batch-status');
+          statusDiv.style.display = 'block';
+          const startedCount = res.started_batches ? res.started_batches.length : 0;
+          statusDiv.innerHTML = `<span style="color: var(--accent-green);">Scheduler triggered manually. Started ${startedCount} batch(es).</span>`;
+          refreshData();
+        } catch (e) {
+          showError("Failed to trigger scheduler: " + e.message);
+        }
+      });
+    }
+
     // Batch execution handler
     const batchRunBtn = document.getElementById('batch-run');
     if (batchRunBtn) {
@@ -1400,17 +1487,9 @@
         const limit = parseInt(document.getElementById('batch-concurrency').value, 10) || 3;
         const autonomy = document.getElementById('autonomy-select').value;
 
-        if (schedule === 'night') {
-          statusDiv.innerHTML = `<span style="color: var(--accent-amber);">Queued ${taskIds.length} tasks for Night Window execution (scheduled).</span>`;
-          return;
-        } else if (schedule === 'window') {
-          statusDiv.innerHTML = `<span style="color: var(--accent-amber);">Custom window scheduler backend not present. Tasks remain in queue.</span>`;
-          return;
-        }
-
         // Check Autonomy policy
         if (autonomy === 'MANUAL') {
-          const confirmed = confirm(`[MANUAL AUTONOMY] Confirm batch execution of ${taskIds.length} tasks with concurrency limit ${limit}?`);
+          const confirmed = confirm(`[MANUAL AUTONOMY] Confirm batch execution of ${taskIds.length} tasks with schedule '${schedule}' and concurrency limit ${limit}?`);
           if (!confirmed) {
             statusDiv.innerHTML = '<span style="color: var(--accent-amber);">Batch execution cancelled by user.</span>';
             return;
@@ -1423,22 +1502,28 @@
           }
         }
 
-        // Execute batch tasks respecting concurrency limit
-        const toRun = taskIds.slice(0, limit);
-        statusDiv.innerHTML = `Launching batch of ${toRun.length} tasks (limit: ${limit})...`;
+        try {
+          const batchRes = await fetchJSON(`${API_BASE}/batch/run`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              task_ids: taskIds,
+              schedule: schedule,
+              concurrency: limit,
+              autonomy: autonomy,
+              confirm: true
+            })
+          });
 
-        let successCount = 0;
-        for (const tid of toRun) {
-          try {
-            await fetchJSON(`${API_BASE}/tasks/${tid}/start`, { method: 'POST' });
-            successCount++;
-          } catch (e) {
-            console.error(`Failed to start task ${tid}:`, e);
+          if (schedule === 'night' || schedule === 'window') {
+            statusDiv.innerHTML = `<span style="color: var(--accent-amber);">Queued ${taskIds.length} tasks for scheduled '${schedule}' window execution. Batch ID: ${batchRes.batch_id}</span>`;
+          } else {
+            statusDiv.innerHTML = `<span style="color: var(--accent-green);">Batch executed (${batchRes.status}): ${batchRes.started ? batchRes.started.length : 0} tasks started immediately. Batch ID: ${batchRes.batch_id}</span>`;
           }
+          refreshData();
+        } catch (e) {
+          statusDiv.innerHTML = `<span style="color: var(--accent-red);">Failed to run batch: ${escapeHTML(e.message)}</span>`;
         }
-
-        statusDiv.innerHTML = `<span style="color: var(--accent-green);">Batch executed: ${successCount}/${toRun.length} tasks started simultaneously.</span>`;
-        refreshData();
       });
     }
 

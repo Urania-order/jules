@@ -42,8 +42,11 @@ from smos.core.proposals import ProposalManager, Proposal
 from smos.core.events import EventTracker
 from smos.core.task import Task, TaskStatus
 from smos.core.batch import BatchManager, Batch
+from smos.core.scheduler import Scheduler
 from smos.adapters.jules_cli import JulesCLIAdapter
 
+import asyncio
+import contextlib
 import hmac
 import json
 import logging
@@ -57,7 +60,29 @@ from pgvector.sqlalchemy import Vector
 
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="Co-SMOS Control Room API", version="0.9")
+scheduler_instance = Scheduler()
+
+async def background_scheduler_loop():
+    logger.info("Starting background scheduler loop")
+    while True:
+        try:
+            scheduler_instance.check_due_batches()
+        except Exception as e:
+            logger.error("Error in background scheduler loop: %s", e)
+        await asyncio.sleep(60)
+
+@contextlib.asynccontextmanager
+async def lifespan(app: FastAPI):
+    log_default_token_warning_once()
+    scheduler_task = asyncio.create_task(background_scheduler_loop())
+    yield
+    scheduler_task.cancel()
+    try:
+        await scheduler_task
+    except asyncio.CancelledError:
+        pass
+
+app = FastAPI(title="Co-SMOS Control Room API", version="0.9", lifespan=lifespan)
 
 CONSULTANT_TOKEN_ENV = "JULES_CONSULTANT_TOKEN"
 OPERATOR_TOKEN_ENV = "JULES_OPERATOR_TOKEN"
@@ -83,9 +108,6 @@ def log_default_token_warning_once():
         logger.warning("All Co-SMOS tokens are set to default development values.")
         _warning_logged = True
 
-@app.on_event("startup")
-def startup_event():
-    log_default_token_warning_once()
 
 class AuthException(Exception):
     def __init__(self, code: str, message: str, status_code: int):
@@ -260,6 +282,10 @@ class BatchRunRequest(BaseModel):
     concurrency: int = Field(default=3, ge=1, le=10)
     autonomy: str = "MANUAL"
     confirm: bool = False
+
+class ScheduleRegisterRequest(BaseModel):
+    name: str
+    config: Dict[str, Any]
 
 @app.get("/")
 def read_root():
@@ -471,14 +497,7 @@ def run_batch(req: BatchRunRequest):
     schedule = req.schedule.lower()
     autonomy = req.autonomy.upper()
 
-    if schedule == "window":
-        return _error_response(
-            code="SCHEDULER_NOT_IMPLEMENTED",
-            message="Custom window scheduler backend not implemented",
-            status_code=400
-        )
-
-    if schedule not in ("now", "now-sequential", "night"):
+    if schedule not in ("now", "now-sequential", "night", "window"):
         return _error_response(
             code="INVALID_SCHEDULE",
             message=f"Unsupported schedule: {req.schedule}",
@@ -495,7 +514,7 @@ def run_batch(req: BatchRunRequest):
     bm = BatchManager()
     qm = QueueManager()
 
-    if schedule == "night":
+    if schedule in ("night", "window"):
         status = "queued"
         started_ids = []
         queued_ids = req.task_ids
@@ -558,6 +577,30 @@ def get_batch_by_id(id: str):
     if not batch:
         return _error_response(code="BATCH_NOT_FOUND", message=f"Batch with ID {id} not found", status_code=404)
     return batch.model_dump()
+
+# --- SCHEDULER ENDPOINTS ---
+
+@app.get("/api/scheduler/schedules")
+def list_schedules():
+    return scheduler_instance.get_schedules()
+
+@app.post("/api/scheduler/schedules", dependencies=[Depends(require_operator)])
+def register_schedule_endpoint(req: ScheduleRegisterRequest):
+    try:
+        scheduler_instance.register_schedule(req.name, req.config)
+        return {"status": "success", "schedule": req.name, "config": scheduler_instance.schedules.get(req.name.lower())}
+    except ValueError as e:
+        return _error_response(code="INVALID_SCHEDULE_CONFIG", message=str(e), status_code=400)
+
+@app.get("/api/scheduler/status")
+def get_scheduler_status():
+    return scheduler_instance.get_status()
+
+@app.post("/api/scheduler/trigger", dependencies=[Depends(require_operator)])
+def trigger_scheduler():
+    bm = BatchManager()
+    started_batch_ids = scheduler_instance.check_due_batches()
+    return {"status": "success", "started_batches": started_batch_ids}
 
 @app.get("/api/events")
 def get_system_events(task_id: Optional[str] = None, limit: int = 50):
