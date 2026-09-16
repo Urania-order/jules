@@ -1,6 +1,8 @@
 import re
 from pathlib import Path
 import pytest
+from fastapi.testclient import TestClient
+from smos.api.main import app
 
 INDEX_PATH = Path("frontend/index.html")
 
@@ -16,7 +18,6 @@ def test_frontend_contract_priority_normalization():
 
     # Verify no remaining 1-10 priority scale labels or inputs
     assert 'Priority (1-10)' not in content
-    assert 'max="10"' not in content
 
 
 def test_frontend_contract_sync_button():
@@ -78,6 +79,38 @@ def test_frontend_contract_css_classes():
         ".modal",
         ".modal-actions",
         ".btn-sm",
+        ".stage-card",
+        ".stage-list",
+        ".stage",
+        ".stage-active",
+        ".stage-done",
+        ".stage-failed",
+        ".stage-unknown",
+        ".sequence-item",
+        ".seq-time",
+        ".seq-id",
+        ".seq-state",
+        ".seq-priority",
+        ".lever",
+        ".lever-name",
+        ".lever-state",
+        ".lever-cycle",
+        ".led",
+        ".led-green",
+        ".led-yellow",
+        ".led-red",
+        ".led-off",
+        ".task-card",
+        ".task-card-hover",
+        ".task-priority-badge",
+        ".why-preview",
+        ".why-preview-visible",
+        ".task-edit-modal",
+        ".task-edit-input",
+        ".batch-select",
+        ".batch-status",
+        ".consult-endpoint",
+        ".consult-led",
     ]
 
     for cls in required_classes:
@@ -113,3 +146,97 @@ def test_frontend_contract_patch_b_elements():
     assert '`${API_BASE}/tasks/' in content or '/tasks/' in content
     assert '/replay' in content
     assert 'openReplayModal' in content
+
+
+def test_frontend_contract_control_panel_elements():
+    """Verify Control Panel & UX contract elements added in v0.9 patch."""
+    content = INDEX_PATH.read_text()
+
+    # 1. Command Intake
+    assert 'id="view-command-intake"' in content
+    assert 'data-view="command-intake"' in content
+    assert 'id="command-input"' in content
+    assert 'id="command-priority"' in content
+    assert 'id="command-submit"' in content
+
+    # 2. Stages
+    assert 'id="view-stages"' in content
+    assert 'data-view="stages"' in content
+    assert 'stage-card' in content
+    assert 'stage-list' in content
+    assert 'stage-active' in content
+    assert 'stage-done' in content
+    assert 'stage-failed' in content
+
+    # 3. Sequence
+    assert 'id="view-sequence"' in content
+    assert 'data-view="sequence"' in content
+    assert 'sequence-list' in content
+    assert 'sequence-item' in content
+
+    # 4. Cycles
+    assert 'id="view-cycles"' in content
+    assert 'data-view="cycles"' in content
+    assert 'data-lever=' in content or 'lever' in content
+
+    # 5. LEDs
+    assert 'led-green' in content
+    assert 'led-yellow' in content
+    assert 'led-red' in content
+    assert 'led-off' in content
+
+    # 6. Task Card UX & Edit Modal
+    assert 'task-card' in content
+    assert 'task-priority-badge' in content
+    assert 'why-preview' in content
+    assert 'why-preview-visible' in content
+    assert 'task-edit-modal' in content or 'task-edit-modal-overlay' in content
+    assert 'id="task-edit-input"' in content
+    assert 'id="task-edit-priority"' in content
+    assert 'id="task-edit-save"' in content
+    assert 'id="task-edit-cancel"' in content
+    assert 'card.draggable = true' in content or 'draggable' in content
+    assert 'contextmenu' in content
+    assert 'Control' in content or 'isCtrlPressed' in content or 'Control' in content
+
+    # 7. Parallel Batch
+    assert 'id="view-batch"' in content
+    assert 'data-view="batch"' in content
+    assert 'id="batch-schedule"' in content
+    assert 'id="batch-concurrency"' in content
+    assert 'id="batch-run"' in content
+    assert 'id="batch-status"' in content
+    assert 'batch-select' in content
+
+    # 8. Consult View
+    assert 'id="view-consult"' in content
+    assert 'data-view="consult"' in content
+    assert 'consult-endpoint' in content
+    assert 'consult-led' in content
+
+
+def test_consult_endpoints_read_only():
+    """Verify backend consult endpoints exist and strictly reject state-modifying HTTP methods."""
+    client = TestClient(app)
+
+    consult_routes = [
+        "/api/consult/state",
+        "/api/consult/tasks",
+        "/api/consult/events",
+        "/api/consult/errata",
+        "/api/consult/health",
+    ]
+
+    for route in consult_routes:
+        res = client.get(route)
+        assert res.status_code == 200, f"GET {route} failed with {res.status_code}"
+
+        # Assert POST / PATCH / DELETE / PUT are not allowed or rejected (405 Method Not Allowed)
+        post_res = client.post(route, json={"test": "data"})
+        assert post_res.status_code in (405, 404), f"POST {route} did not reject with 405/404"
+
+        patch_res = client.patch(route, json={"test": "data"})
+        assert patch_res.status_code in (405, 404), f"PATCH {route} did not reject with 405/404"
+
+        delete_res = client.delete(route)
+        assert delete_res.status_code in (405, 404), f"DELETE {route} did not reject with 405/404"

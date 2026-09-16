@@ -499,6 +499,76 @@ def search_control_room(q: str = "", limit: int = 50):
         "events": matched_events[:limit]
     }
 
+# --- CONSULT ACCESS ENDPOINTS (READ-ONLY) ---
+
+_consult_request_count = 0
+
+def _track_consult_request():
+    global _consult_request_count
+    _consult_request_count += 1
+
+@app.get("/api/consult/state")
+def get_consult_state():
+    _track_consult_request()
+    sm = StateManager()
+    return {
+        "read_only": True,
+        "request_count": _consult_request_count,
+        "system_status": sm.get_system_status()
+    }
+
+@app.get("/api/consult/tasks")
+def get_consult_tasks():
+    _track_consult_request()
+    qm = QueueManager()
+    tasks = qm.list_all_tasks()
+    return [t.model_dump() for t in tasks]
+
+@app.get("/api/consult/task/{id}")
+def get_consult_task_by_id(id: str):
+    _track_consult_request()
+    qm = QueueManager()
+    task = qm.get_task(id)
+    if not task:
+        return _error_response(code="TASK_NOT_FOUND", message=f"Task with ID {id} not found", status_code=404)
+    return task.model_dump()
+
+@app.get("/api/consult/events")
+def get_consult_events(limit: int = 100):
+    _track_consult_request()
+    events = EventTracker.list_events(limit=limit)
+    return [e.model_dump() for e in events]
+
+@app.get("/api/consult/errata")
+def get_consult_errata():
+    _track_consult_request()
+    project_root = Path(os.environ.get("JULES_PROJECT_ROOT", "."))
+    errata_dir = project_root / ".jules" / "errata"
+    errata_files = {}
+    index = []
+    if errata_dir.exists() and errata_dir.is_dir():
+        for path in sorted(errata_dir.glob("*.md")):
+            try:
+                content = path.read_text(encoding="utf-8")
+                errata_files[path.name] = content
+                index.append(path.name)
+            except Exception:
+                pass
+    return {
+        "index": index,
+        "files": errata_files
+    }
+
+@app.get("/api/consult/health")
+def get_consult_health():
+    _track_consult_request()
+    return {
+        "status": "ok",
+        "read_only": True,
+        "service": "consult_access",
+        "request_count": _consult_request_count
+    }
+
 # --- EXISTING LEGACY ENDPOINTS ---
 
 @app.post("/event")

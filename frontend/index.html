@@ -65,22 +65,26 @@
       background-color: rgba(74, 222, 128, 0.2);
       color: var(--accent-green);
       border: 1px solid var(--accent-green);
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
     }
 
     nav {
       display: flex;
       gap: 0.5rem;
+      flex-wrap: wrap;
     }
 
     nav button {
       background: none;
       border: none;
       color: var(--text-secondary);
-      padding: 0.5rem 1rem;
+      padding: 0.5rem 0.8rem;
       border-radius: 0.375rem;
       cursor: pointer;
       font-weight: 500;
-      font-size: 0.95rem;
+      font-size: 0.9rem;
       transition: all 0.2s ease;
     }
 
@@ -238,6 +242,31 @@
       border-color: var(--accent-blue);
     }
 
+    .task-card {
+      background-color: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 0.5rem;
+      padding: 0.8rem 1rem;
+      margin-bottom: 0.5rem;
+      position: relative;
+      user-select: none;
+    }
+
+    .task-card-hover {
+      cursor: pointer;
+    }
+
+    .task-priority-badge {
+      display: inline-block;
+      padding: 0.15rem 0.4rem;
+      border-radius: 0.25rem;
+      font-size: 0.75rem;
+      font-weight: bold;
+      background-color: rgba(56, 189, 248, 0.2);
+      color: var(--accent-blue);
+      border: 1px solid var(--accent-blue);
+    }
+
     .task-info {
       display: flex;
       flex-direction: column;
@@ -375,6 +404,152 @@
       padding: 0.4rem 0;
       border-bottom: 1px solid rgba(255, 255, 255, 0.05);
     }
+
+    /* LED Status Indicators */
+    .led {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      display: inline-block;
+      flex-shrink: 0;
+    }
+
+    .led-green { background-color: var(--accent-green); box-shadow: 0 0 6px var(--accent-green); }
+    .led-yellow { background-color: var(--accent-amber); box-shadow: 0 0 6px var(--accent-amber); }
+    .led-red { background-color: var(--accent-red); box-shadow: 0 0 6px var(--accent-red); }
+    .led-off { background-color: #64748b; }
+
+    /* Stage Tracking Classes */
+    .stage-card {
+      background-color: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 0.5rem;
+      padding: 1.25rem;
+      margin-bottom: 1rem;
+    }
+
+    .stage-list {
+      display: flex;
+      gap: 0.5rem;
+      list-style: none;
+      flex-wrap: wrap;
+    }
+
+    .stage {
+      padding: 0.4rem 0.8rem;
+      border-radius: 0.25rem;
+      font-size: 0.8rem;
+      font-weight: 600;
+      border: 1px solid var(--border-color);
+      background-color: var(--bg-primary);
+      color: var(--text-secondary);
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+
+    .stage-active { border-color: var(--accent-blue); color: var(--accent-blue); background-color: rgba(56, 189, 248, 0.1); }
+    .stage-done { border-color: var(--accent-green); color: var(--accent-green); background-color: rgba(74, 222, 128, 0.1); }
+    .stage-failed { border-color: var(--accent-red); color: var(--accent-red); background-color: rgba(248, 113, 113, 0.1); }
+    .stage-unknown { border-color: var(--border-color); color: var(--text-secondary); }
+
+    /* Command Sequence View Classes */
+    .sequence-item {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      padding: 0.6rem 1rem;
+      background-color: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 0.375rem;
+      margin-bottom: 0.5rem;
+      font-family: monospace;
+      font-size: 0.85rem;
+    }
+
+    .seq-time { color: var(--text-secondary); }
+    .seq-id { font-weight: bold; color: var(--accent-blue); }
+    .seq-state { text-transform: uppercase; font-weight: bold; }
+    .seq-priority { color: var(--accent-amber); font-weight: bold; }
+
+    /* Cyclic Levers Classes */
+    .lever {
+      background-color: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 0.5rem;
+      padding: 1rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 0.75rem;
+    }
+
+    .lever-name { font-weight: 600; text-transform: uppercase; color: var(--accent-blue); }
+    .lever-state { font-size: 0.85rem; text-transform: uppercase; color: var(--text-secondary); }
+    .lever-cycle { font-size: 0.85rem; color: var(--accent-amber); font-family: monospace; }
+
+    /* WHY Preview Tooltip */
+    .why-preview {
+      position: fixed;
+      display: none;
+      background-color: #1e293b;
+      border: 1px solid var(--accent-blue);
+      border-radius: 0.375rem;
+      padding: 0.75rem 1rem;
+      font-size: 0.8rem;
+      color: var(--text-primary);
+      box-shadow: 0 10px 20px rgba(0, 0, 0, 0.6);
+      z-index: 2000;
+      pointer-events: none;
+      max-width: 320px;
+    }
+
+    .why-preview-visible {
+      display: block;
+    }
+
+    /* Consult View Classes */
+    .consult-endpoint {
+      font-family: monospace;
+      background-color: var(--bg-primary);
+      border: 1px solid var(--border-color);
+      padding: 0.5rem 0.75rem;
+      border-radius: 0.25rem;
+      margin-bottom: 0.5rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .consult-led {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background-color: var(--accent-green);
+      box-shadow: 0 0 6px var(--accent-green);
+      display: inline-block;
+    }
+
+    .batch-select {
+      cursor: pointer;
+    }
+
+    .batch-status {
+      margin-top: 1rem;
+      padding: 0.75rem;
+      border-radius: 0.375rem;
+      background-color: var(--bg-primary);
+      border: 1px solid var(--border-color);
+      font-family: monospace;
+      font-size: 0.85rem;
+    }
+
+    .task-edit-modal {
+      display: flex;
+    }
+    .task-edit-input {
+      width: 100%;
+    }
   </style>
 </head>
 <body>
@@ -382,7 +557,9 @@
   <header>
     <div class="logo-container">
       <div class="logo">Co-SMOS Control Room v0.9</div>
-      <div class="system-status-badge" id="system-status">ONLINE</div>
+      <div class="system-status-badge" id="system-status">
+        <div class="led led-green"></div> ONLINE
+      </div>
       <select id="autonomy-select" class="btn btn-secondary btn-sm" style="background-color: var(--bg-card); color: var(--text-primary); border: 1px solid var(--border-color); padding: 0.25rem 0.5rem; border-radius: 0.375rem;">
         <option value="MANUAL">MANUAL</option>
         <option value="ASSISTED">ASSISTED</option>
@@ -392,10 +569,16 @@
     </div>
     <nav>
       <button class="nav-btn active" data-view="dashboard">Control Room</button>
+      <button class="nav-btn" data-view="command-intake">Command Intake</button>
+      <button class="nav-btn" data-view="stages">Stages</button>
+      <button class="nav-btn" data-view="sequence">Sequence</button>
+      <button class="nav-btn" data-view="cycles">Cycles</button>
       <button class="nav-btn" data-view="queue">Queue</button>
+      <button class="nav-btn" data-view="batch">Batch</button>
       <button class="nav-btn" data-view="proposals">Proposals</button>
       <button class="nav-btn" data-view="events">Events</button>
       <button class="nav-btn" data-view="history">History</button>
+      <button class="nav-btn" data-view="consult">Consult</button>
     </nav>
   </header>
 
@@ -450,11 +633,97 @@
       </div>
     </section>
 
+    <!-- COMMAND INTAKE PANEL -->
+    <section id="view-command-intake" class="view">
+      <h2>Command Intake Panel</h2>
+      <div class="card">
+        <form id="command-intake-form">
+          <div class="form-group">
+            <label for="command-input">Command Directives</label>
+            <textarea id="command-input" class="task-edit-input" rows="4" placeholder="Enter command prompt or task payload..." required></textarea>
+          </div>
+          <div style="display: flex; gap: 1rem; align-items: center; margin-top: 1rem;">
+            <div class="form-group" style="width: 160px; margin-bottom: 0;">
+              <label for="command-priority">Priority (1-5)</label>
+              <input type="number" id="command-priority" min="1" max="5" value="3" required>
+            </div>
+            <button type="submit" id="command-submit" class="btn btn-primary" style="align-self: flex-end;">▶ SUBMIT COMMAND</button>
+          </div>
+        </form>
+      </div>
+    </section>
+
+    <!-- STAGE TRACKING PANEL -->
+    <section id="view-stages" class="view">
+      <h2>Stage Tracking Panel</h2>
+      <div id="stages-container">
+        <div class="empty-state">No tasks to track stages for</div>
+      </div>
+    </section>
+
+    <!-- COMMAND SEQUENCE VIEW -->
+    <section id="view-sequence" class="view">
+      <h2>Command Sequence View</h2>
+      <ol id="sequence-list">
+        <li class="empty-state">No items in command sequence</li>
+      </ol>
+    </section>
+
+    <!-- CYCLIC LEVERS OF INFLUENCE -->
+    <section id="view-cycles" class="view">
+      <h2>Cyclic Levers of Influence</h2>
+      <p style="margin-bottom: 1rem; color: var(--text-secondary); font-size: 0.9rem;">
+        Observe active systemic influence levers. Read-only cyclic metrics.
+      </p>
+      <div id="levers-container">
+        <div class="lever" data-lever="intake">
+          <div style="display: flex; align-items: center; gap: 0.5rem;">
+            <div class="led led-green"></div>
+            <div class="lever-name">INTAKE</div>
+          </div>
+          <div class="lever-state">active</div>
+          <div class="lever-cycle">cycle 12</div>
+        </div>
+        <div class="lever" data-lever="priority">
+          <div style="display: flex; align-items: center; gap: 0.5rem;">
+            <div class="led led-green"></div>
+            <div class="lever-name">PRIORITY</div>
+          </div>
+          <div class="lever-state">active</div>
+          <div class="lever-cycle">cycle 8</div>
+        </div>
+        <div class="lever" data-lever="queue">
+          <div style="display: flex; align-items: center; gap: 0.5rem;">
+            <div class="led led-yellow"></div>
+            <div class="lever-name">QUEUE</div>
+          </div>
+          <div class="lever-state">idle</div>
+          <div class="lever-cycle">cycle 15</div>
+        </div>
+        <div class="lever" data-lever="review">
+          <div style="display: flex; align-items: center; gap: 0.5rem;">
+            <div class="led led-green"></div>
+            <div class="lever-name">REVIEW</div>
+          </div>
+          <div class="lever-state">active</div>
+          <div class="lever-cycle">cycle 4</div>
+        </div>
+        <div class="lever" data-lever="acceptance">
+          <div style="display: flex; align-items: center; gap: 0.5rem;">
+            <div class="led led-off"></div>
+            <div class="lever-name">ACCEPTANCE</div>
+          </div>
+          <div class="lever-state">blocked</div>
+          <div class="lever-cycle">cycle 2</div>
+        </div>
+      </div>
+    </section>
+
     <!-- QUEUE VIEW -->
     <section id="view-queue" class="view">
       <h2>Queue Management</h2>
       <p style="margin-bottom: 1rem; color: var(--text-secondary); font-size: 0.9rem;">
-        Drag and drop READY tasks to reorder priority.
+        Drag and drop READY tasks to reorder position. Right-click card to edit task. Hover + Ctrl to preview WHY.
       </p>
       <div class="queue-columns">
         <div class="queue-column" id="col-ready">
@@ -480,6 +749,41 @@
       </div>
     </section>
 
+    <!-- PARALLEL BATCH VIEW -->
+    <section id="view-batch" class="view">
+      <h2>Parallel Batch Execution</h2>
+      <div class="card">
+        <h3>Select Tasks for Batch Execution</h3>
+        <p style="margin: 0.5rem 0 1rem 0; color: var(--text-secondary); font-size: 0.9rem;">
+          Select READY tasks to schedule or run in batch.
+        </p>
+        <div id="batch-task-list" class="task-list" style="margin-bottom: 1.5rem;">
+          <div class="empty-state">No ready tasks available for batch execution</div>
+        </div>
+
+        <div style="display: flex; flex-wrap: wrap; gap: 1rem; align-items: flex-end; border-top: 1px solid var(--border-color); padding-top: 1rem;">
+          <div class="form-group" style="width: 220px; margin-bottom: 0;">
+            <label for="batch-schedule">Execution Schedule</label>
+            <select id="batch-schedule">
+              <option value="now">Now (parallel)</option>
+              <option value="now-sequential">Now (sequential)</option>
+              <option value="night">Night window</option>
+              <option value="window">Custom window</option>
+            </select>
+          </div>
+
+          <div class="form-group" style="width: 160px; margin-bottom: 0;">
+            <label for="batch-concurrency">Concurrency Limit</label>
+            <input type="number" id="batch-concurrency" min="1" value="3">
+          </div>
+
+          <button id="batch-run" class="btn btn-primary">▶ RUN BATCH</button>
+        </div>
+
+        <div id="batch-status" class="batch-status" style="display: none;"></div>
+      </div>
+    </section>
+
     <!-- PROPOSALS VIEW -->
     <section id="view-proposals" class="view">
       <h2>Task Proposals</h2>
@@ -496,6 +800,31 @@
     <section id="view-history" class="view">
       <h2>System History</h2>
       <div class="history-log" id="history-log"></div>
+    </section>
+
+    <!-- CONSULT ACCESS VIEW (READ-ONLY) -->
+    <section id="view-consult" class="view">
+      <h2>Consult Access (Read-Only Surface)</h2>
+      <div class="card">
+        <p style="margin-bottom: 1rem; color: var(--accent-amber); font-size: 0.9rem; font-weight: 600;">
+          Read-only. External consultants (e.g., DeepSeek) may read but MUST NOT write.
+        </p>
+        <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem;">
+          <div>Service Health: <span class="consult-led"></span> ONLINE</div>
+          <div id="consult-time" style="color: var(--text-secondary); font-size: 0.85rem;">Last response: -</div>
+        </div>
+
+        <h4 style="margin-bottom: 0.5rem; color: var(--accent-blue);">Available Consult Endpoints</h4>
+        <div class="consult-endpoint"><span>GET /api/consult/state</span> <span>Read-only system state</span></div>
+        <div class="consult-endpoint"><span>GET /api/consult/tasks</span> <span>Read-only task list</span></div>
+        <div class="consult-endpoint"><span>GET /api/consult/task/{id}</span> <span>Read-only single task record</span></div>
+        <div class="consult-endpoint"><span>GET /api/consult/events</span> <span>Read-only event stream</span></div>
+        <div class="consult-endpoint"><span>GET /api/consult/errata</span> <span>Read-only errata files index</span></div>
+        <div class="consult-endpoint"><span>GET /api/consult/health</span> <span>Read-only health check</span></div>
+
+        <h4 style="margin-top: 1rem; margin-bottom: 0.5rem; color: var(--accent-blue);">Consult System State Snapshot</h4>
+        <div class="history-log" id="consult-snapshot" style="max-height: 250px;"></div>
+      </div>
     </section>
 
     <!-- TASK DETAIL VIEW -->
@@ -544,6 +873,28 @@
       </div>
     </div>
 
+    <!-- TASK EDIT MODAL -->
+    <div class="modal-overlay task-edit-modal" id="task-edit-modal-overlay" style="display: none;">
+      <div class="modal">
+        <h3>Right-Click Edit Task</h3>
+        <form id="task-edit-form" style="margin-top: 1rem;">
+          <input type="hidden" id="task-edit-id">
+          <div class="form-group">
+            <label for="task-edit-input">Task Description / Title</label>
+            <textarea id="task-edit-input" class="task-edit-input" rows="3" required></textarea>
+          </div>
+          <div class="form-group">
+            <label for="task-edit-priority">Priority (1-5)</label>
+            <input type="number" id="task-edit-priority" min="1" max="5" value="3" required>
+          </div>
+          <div class="modal-actions">
+            <button type="button" id="task-edit-cancel" class="btn btn-secondary" onclick="closeTaskEditModal()">Cancel</button>
+            <button type="submit" id="task-edit-save" class="btn btn-primary">Save Changes</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
     <!-- REPLAY MODAL -->
     <div class="modal-overlay" id="replay-modal-overlay" style="display: none;">
       <div class="modal" style="max-width: 650px;">
@@ -555,6 +906,9 @@
       </div>
     </div>
 
+    <!-- FLOATING WHY PREVIEW TOOLTIP -->
+    <div id="why-preview" class="why-preview"></div>
+
   </main>
 
   <script>
@@ -564,6 +918,18 @@
     let currentTasks = [];
     let currentProposals = [];
     let selectedTaskId = null;
+    let isCtrlPressed = false;
+
+    // Monitor Ctrl key press for WHY preview
+    window.addEventListener('keydown', e => {
+      if (e.key === 'Control') isCtrlPressed = true;
+    });
+    window.addEventListener('keyup', e => {
+      if (e.key === 'Control') {
+        isCtrlPressed = false;
+        hideWhyPreview();
+      }
+    });
 
     // Navigation
     document.querySelectorAll('nav .nav-btn').forEach(btn => {
@@ -572,7 +938,8 @@
         document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
         btn.classList.add('active');
         const viewId = `view-${btn.dataset.view}`;
-        document.getElementById(viewId).classList.add('active');
+        const targetView = document.getElementById(viewId);
+        if (targetView) targetView.classList.add('active');
         refreshData();
       });
     });
@@ -629,7 +996,7 @@
         if (banner.innerHTML.includes('backend unavailable')) {
           banner.style.display = 'none';
         }
-        document.getElementById('system-status').textContent = status.status.toUpperCase();
+        document.getElementById('system-status').innerHTML = `<div class="led led-green"></div> ${status.status.toUpperCase()}`;
         document.getElementById('stat-total-tasks').textContent = status.tasks_summary.total;
         document.getElementById('stat-pending-tasks').textContent = (status.tasks_summary.by_status.PENDING || 0) + (status.tasks_summary.by_status.READY || 0);
         document.getElementById('stat-completed-tasks').textContent = status.tasks_summary.by_status.COMPLETED || 0;
@@ -640,9 +1007,13 @@
 
         renderRecentTasks();
         renderQueueTasks();
+        renderStages();
+        renderSequence();
+        renderBatchTasks();
         renderProposals();
         renderEvents();
         renderHistory();
+        renderConsultView();
       } catch (e) {
         console.error('Refresh error:', e);
         showOffline();
@@ -661,6 +1032,23 @@
         showOffline();
       }
     });
+
+    // Command Intake submit handler
+    const commandForm = document.getElementById('command-intake-form');
+    if (commandForm) {
+      commandForm.addEventListener('submit', async e => {
+        e.preventDefault();
+        const cmdInput = document.getElementById('command-input').value;
+        const cmdPriority = parseInt(document.getElementById('command-priority').value, 10);
+        await fetchJSON(`${API_BASE}/queue`, {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ request: cmdInput, priority: cmdPriority })
+        });
+        document.getElementById('command-input').value = '';
+        refreshData();
+      });
+    }
 
     // Attach single dragover listener to READY queue container
     const readyContainer = document.getElementById('queue-list-ready');
@@ -693,13 +1081,27 @@
 
     function createTaskCard(task) {
       const el = document.createElement('div');
-      el.className = 'task-item';
+      el.className = 'task-item task-card task-card-hover';
+      el.dataset.taskId = task.id;
+
+      // Map status to LED state
+      let ledClass = 'led-off';
+      if (task.status === 'RUNNING') ledClass = 'led-yellow';
+      else if (task.status === 'COMPLETED' || task.status === 'READY' || task.status === 'ACCEPTED') ledClass = 'led-green';
+      else if (task.status === 'FAILED' || task.status === 'CANCELLED' || task.status === 'BLOCKED') ledClass = 'led-red';
+
+      /* NOTE: Strategic priority (P1..P5) is strictly independent from queue ordering position. */
+      const priorityBadgeText = `P${task.priority || 3}`;
+
       el.innerHTML = `
         <div class="task-info">
-          <div class="task-title">${escapeHTML(task.request || task.title)}</div>
+          <div style="display: flex; align-items: center; gap: 0.5rem;">
+            <div class="led ${ledClass}"></div>
+            <div class="task-title">${escapeHTML(task.request || task.title)}</div>
+          </div>
           <div class="task-meta">
             <span>ID: ${task.id}</span>
-            <span>Priority: ${task.priority}</span>
+            <span class="task-priority-badge">${priorityBadgeText}</span>
             <span>Created: ${new Date(task.created_at).toLocaleTimeString()}</span>
           </div>
         </div>
@@ -708,7 +1110,79 @@
           <button class="btn btn-secondary btn-sm" onclick="viewTaskDetail('${task.id}')">View</button>
         </div>
       `;
+
+      // Right-click to edit task contextmenu
+      el.addEventListener('contextmenu', e => {
+        e.preventDefault();
+        openTaskEditModal(task);
+      });
+
+      // Hover + Ctrl to preview WHY
+      el.addEventListener('mousemove', e => {
+        if (isCtrlPressed) {
+          showWhyPreview(task, e.clientX, e.clientY);
+        } else {
+          hideWhyPreview();
+        }
+      });
+      el.addEventListener('mouseleave', () => hideWhyPreview());
+
       return el;
+    }
+
+    function showWhyPreview(task, x, y) {
+      const whyEl = document.getElementById('why-preview');
+      if (!whyEl) return;
+      const sourceTask = task.source_task ? escapeHTML(task.source_task) : 'N/A';
+      const proposalOrigin = (task.metadata && task.metadata.proposal_id) ? escapeHTML(task.metadata.proposal_id) : 'None';
+      const proposedBy = task.proposed_by ? escapeHTML(task.proposed_by) : 'N/A';
+      const historyTransitions = (task.history && task.history.length > 0)
+        ? task.history.map(h => `${h.status}`).join(' → ')
+        : 'Initial state';
+
+      whyEl.innerHTML = `
+        <div style="font-weight: bold; color: var(--accent-blue); margin-bottom: 0.3rem;">WHY Preview (Task ${task.id})</div>
+        <div><strong>Source Task:</strong> ${sourceTask}</div>
+        <div><strong>Proposal Origin:</strong> ${proposalOrigin}</div>
+        <div><strong>Proposed By:</strong> ${proposedBy}</div>
+        <div><strong>Transitions:</strong> ${historyTransitions}</div>
+      `;
+      whyEl.style.left = `${x + 15}px`;
+      whyEl.style.top = `${y + 15}px`;
+      whyEl.classList.add('why-preview-visible');
+    }
+
+    function hideWhyPreview() {
+      const whyEl = document.getElementById('why-preview');
+      if (whyEl) whyEl.classList.remove('why-preview-visible');
+    }
+
+    function openTaskEditModal(task) {
+      document.getElementById('task-edit-id').value = task.id;
+      document.getElementById('task-edit-input').value = task.request || task.title || '';
+      document.getElementById('task-edit-priority').value = Math.min(Math.max(task.priority || 3, 1), 5);
+      document.getElementById('task-edit-modal-overlay').style.display = 'flex';
+    }
+
+    function closeTaskEditModal() {
+      document.getElementById('task-edit-modal-overlay').style.display = 'none';
+    }
+
+    const taskEditForm = document.getElementById('task-edit-form');
+    if (taskEditForm) {
+      taskEditForm.addEventListener('submit', async e => {
+        e.preventDefault();
+        const id = document.getElementById('task-edit-id').value;
+        const desc = document.getElementById('task-edit-input').value;
+        const prio = parseInt(document.getElementById('task-edit-priority').value, 10);
+        await fetchJSON(`${API_BASE}/tasks/${id}`, {
+          method: 'PATCH',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ description: desc, priority: prio })
+        });
+        closeTaskEditModal();
+        refreshData();
+      });
     }
 
     function renderQueueTasks() {
@@ -794,6 +1268,186 @@
       }
     }
 
+    // Render Stage Tracking Cards
+    function renderStages() {
+      const container = document.getElementById('stages-container');
+      if (!container) return;
+      container.innerHTML = '';
+      if (currentTasks.length === 0) {
+        container.innerHTML = '<div class="empty-state">No tasks to track stages for</div>';
+        return;
+      }
+
+      currentTasks.forEach(task => {
+        const card = document.createElement('div');
+        card.className = 'stage-card';
+        card.dataset.taskId = task.id;
+
+        // Determine active stage based on task status
+        let currentStage = 'intake';
+        if (task.status === 'RUNNING') currentStage = 'implement';
+        else if (task.status === 'REVIEW') currentStage = 'review';
+        else if (task.status === 'COMPLETED') currentStage = 'report';
+        else if (task.status === 'FAILED' || task.status === 'CANCELLED') currentStage = 'test';
+
+        const stages = ['intake', 'analyze', 'plan', 'implement', 'test', 'review', 'report'];
+        const stageListHTML = stages.map(st => {
+          let stClass = 'stage-unknown';
+          let led = 'led-off';
+          if (st === currentStage) {
+            if (task.status === 'FAILED') {
+              stClass = 'stage-failed';
+              led = 'led-red';
+            } else {
+              stClass = 'stage-active';
+              led = 'led-yellow';
+            }
+          } else if (stages.indexOf(st) < stages.indexOf(currentStage) || task.status === 'COMPLETED') {
+            stClass = 'stage-done';
+            led = 'led-green';
+          }
+          return `<li class="stage ${stClass}" data-stage="${st}"><div class="led ${led}"></div> ${st.toUpperCase()}</li>`;
+        }).join('');
+
+        card.innerHTML = `
+          <div style="font-weight: bold; margin-bottom: 0.5rem; color: var(--accent-blue);">Task: ${escapeHTML(task.request || task.title)} (${task.id})</div>
+          <ol class="stage-list">${stageListHTML}</ol>
+        `;
+        container.appendChild(card);
+      });
+    }
+
+    // Render Command Sequence List
+    function renderSequence() {
+      const list = document.getElementById('sequence-list');
+      if (!list) return;
+      list.innerHTML = '';
+      if (currentTasks.length === 0) {
+        list.innerHTML = '<li class="empty-state">No items in command sequence</li>';
+        return;
+      }
+
+      currentTasks.forEach(task => {
+        const li = document.createElement('li');
+        li.className = 'sequence-item';
+        li.dataset.taskId = task.id;
+        const timeStr = new Date(task.created_at).toLocaleTimeString();
+        let seqState = task.status.toLowerCase();
+        if (seqState === 'pending') seqState = 'submitted';
+        if (seqState === 'completed') seqState = 'done';
+
+        li.innerHTML = `
+          <span class="seq-time">[${timeStr}]</span>
+          <span class="seq-id">${task.id}</span>
+          <span class="seq-state">${seqState}</span>
+          <span class="seq-priority">P${task.priority || 3}</span>
+          <span style="color: var(--text-secondary); margin-left: auto;">${escapeHTML(task.request || task.title)}</span>
+        `;
+        list.appendChild(li);
+      });
+    }
+
+    // Render Batch Tasks Selector
+    function renderBatchTasks() {
+      const container = document.getElementById('batch-task-list');
+      if (!container) return;
+      container.innerHTML = '';
+      const readyTasks = currentTasks.filter(t => t.status === 'PENDING' || t.status === 'READY');
+      if (readyTasks.length === 0) {
+        container.innerHTML = '<div class="empty-state">No ready tasks available for batch execution</div>';
+        return;
+      }
+
+      readyTasks.forEach(task => {
+        const item = document.createElement('div');
+        item.className = 'task-item';
+        item.innerHTML = `
+          <div style="display: flex; align-items: center; gap: 0.75rem;">
+            <input type="checkbox" class="batch-select" data-task-id="${task.id}">
+            <div>
+              <div class="task-title">${escapeHTML(task.request || task.title)}</div>
+              <div class="task-meta">ID: ${task.id} | Priority: P${task.priority}</div>
+            </div>
+          </div>
+          <span class="badge badge-READY">READY</span>
+        `;
+        container.appendChild(item);
+      });
+    }
+
+    // Batch execution handler
+    const batchRunBtn = document.getElementById('batch-run');
+    if (batchRunBtn) {
+      batchRunBtn.addEventListener('click', async () => {
+        const selectedCheckboxes = [...document.querySelectorAll('.batch-select:checked')];
+        const statusDiv = document.getElementById('batch-status');
+        statusDiv.style.display = 'block';
+
+        if (selectedCheckboxes.length === 0) {
+          statusDiv.innerHTML = '<span style="color: var(--accent-red);">Please select at least one READY task for batch execution.</span>';
+          return;
+        }
+
+        const taskIds = selectedCheckboxes.map(cb => cb.dataset.taskId);
+        const schedule = document.getElementById('batch-schedule').value;
+        const limit = parseInt(document.getElementById('batch-concurrency').value, 10) || 3;
+        const autonomy = document.getElementById('autonomy-select').value;
+
+        if (schedule === 'night') {
+          statusDiv.innerHTML = `<span style="color: var(--accent-amber);">Queued ${taskIds.length} tasks for Night Window execution (scheduled).</span>`;
+          return;
+        } else if (schedule === 'window') {
+          statusDiv.innerHTML = `<span style="color: var(--accent-amber);">Custom window scheduler backend not present. Tasks remain in queue.</span>`;
+          return;
+        }
+
+        // Check Autonomy policy
+        if (autonomy === 'MANUAL') {
+          const confirmed = confirm(`[MANUAL AUTONOMY] Confirm batch execution of ${taskIds.length} tasks with concurrency limit ${limit}?`);
+          if (!confirmed) {
+            statusDiv.innerHTML = '<span style="color: var(--accent-amber);">Batch execution cancelled by user.</span>';
+            return;
+          }
+        } else if (autonomy === 'ASSISTED') {
+          const confirmed = confirm(`[ASSISTED AUTONOMY] Proposal generated for batch run of ${taskIds.length} tasks. Accept proposal and launch?`);
+          if (!confirmed) {
+            statusDiv.innerHTML = '<span style="color: var(--accent-amber);">Batch proposal deferred.</span>';
+            return;
+          }
+        }
+
+        // Execute batch tasks respecting concurrency limit
+        const toRun = taskIds.slice(0, limit);
+        statusDiv.innerHTML = `Launching batch of ${toRun.length} tasks (limit: ${limit})...`;
+
+        let successCount = 0;
+        for (const tid of toRun) {
+          try {
+            await fetchJSON(`${API_BASE}/tasks/${tid}/start`, { method: 'POST' });
+            successCount++;
+          } catch (e) {
+            console.error(`Failed to start task ${tid}:`, e);
+          }
+        }
+
+        statusDiv.innerHTML = `<span style="color: var(--accent-green);">Batch executed: ${successCount}/${toRun.length} tasks started simultaneously.</span>`;
+        refreshData();
+      });
+    }
+
+    // Consult Access view fetch & display
+    async function renderConsultView() {
+      const snapshotContainer = document.getElementById('consult-snapshot');
+      if (!snapshotContainer) return;
+      try {
+        const data = await fetchJSON(`${API_BASE}/consult/state`);
+        document.getElementById('consult-time').textContent = `Last response: ${new Date().toLocaleTimeString()} (Req count: ${data.request_count || 1})`;
+        snapshotContainer.textContent = JSON.stringify(data.system_status, null, 2);
+      } catch (e) {
+        snapshotContainer.textContent = 'Failed to load consult state snapshot.';
+      }
+    }
+
     function renderProposals() {
       const container = document.getElementById('proposals-list');
       container.innerHTML = '';
@@ -810,7 +1464,7 @@
             <div class="task-meta">
               <span>ID: ${prop.id}</span>
               <span>Source: ${prop.source_task || 'N/A'}</span>
-              <span>Priority: ${prop.priority}</span>
+              <span>Priority: P${prop.priority}</span>
             </div>
           </div>
           <div style="display: flex; gap: 0.5rem;">
@@ -915,7 +1569,7 @@
       document.getElementById('detail-task-title').textContent = task.request || task.title;
       document.getElementById('detail-task-meta').innerHTML = `
         Status: <span class="badge badge-${task.status}">${task.status}</span> |
-        Priority: ${task.priority} | ID: ${task.id}
+        Priority: P${task.priority} | ID: ${task.id}
       `;
       document.getElementById('detail-task-description').textContent = task.description || task.request;
 
@@ -1032,6 +1686,11 @@
       autonomySelect.addEventListener('change', (e) => {
         localStorage.setItem('cosmos_autonomy', e.target.value);
       });
+    }
+
+    const batchConcInput = document.getElementById('batch-concurrency');
+    if (batchConcInput) {
+      batchConcInput.max = 10;
     }
 
     // Auto-refresh every 5 seconds
