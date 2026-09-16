@@ -5,13 +5,13 @@
   "status": "ready",
   "active_task": null,
   "last_task": {
-    "id": "task-20260916-235323",
+    "id": "task-20260916-235307",
     "status": "completed",
-    "session_id": "14558761576273844570",
+    "session_id": "7302604120827959167",
     "branch": null,
-    "request": "Co-SMOS v1.1 — Frontend: Reset Button, Extended Edit, Templates UI\n\nCONTEXT:\n- Repo: Urania-order/jules\n- Frontend: frontend/index.html (vanilla JS)\n- Spec: Co-SMOS v0.9 §14, §16, §25\n\nIMPORTANT — SCOPE:\nThis task touches FRONTEND ONLY. Do NOT modify smos/api/main.py.\nAnother task (in parallel) modifies the backend.\n\nFILES TO MODIFY:\n- frontend/index.html\n- tests/test_frontend_contract.py\n\nDO NOT TOUCH:\n- smos/api/main.py\n- smos/core/*.py\n\nBACKEND ENDPOINTS (being added in parallel):\n- POST /api/queue/reset\n- PATCH /api/tasks/{id} (extended)\n- POST /api/tasks/{id}/remember\n- GET /api/templates\n- DELETE /api/templates/{id}\n- POST /api/templates/{id}/use\n\nREQUIREMENTS:\n\n1. RESET ALL QUEUES\n- Button in header: id=\"btn-reset-queues\"\n- Confirm dialog: type \"RESET\" to confirm\n- On confirm: POST /api/queue/reset {confirm: \"RESET\", scope: \"all\"}\n\n2. CORRECT TASK (extended edit)\n- Extend existing task-edit-modal:\n  - id=\"task-edit-request\" (textarea, rename from task-edit-input)\n  - id=\"task-edit-priority\" (number, 1-5)\n  - id=\"task-edit-status\" (select: PENDING/READY/RUNNING/REVIEW/BLOCKED/COMPLETED/CANCELLED)\n  - id=\"task-edit-notes\" (textarea)\n  - id=\"task-edit-tags\" (text input, comma-separated)\n- Save: PATCH /api/tasks/{id} with all fields\n\n3. REMEMBER TASK\n- Right-click → \"Remember Task\" option\n- Modal: id=\"task-remember-modal\", id=\"task-remember-name\"\n- Save: POST /api/tasks/{id}/remember {name}\n\n4. TEMPLATES PANEL\n- Section: id=\"view-templates\"\n- Navigation: <button data-view=\"templates\">Templates</button>\n- List: .template-card with Use/Edit/Delete\n- Load: GET /api/templates\n\n5. STYLES\n- .reset-confirm, .template-card, .template-list\n- Extend .task-edit-modal with new fields\n\nTESTS (extend tests/test_frontend_contract.py):\n- id=\"btn-reset-queues\"\n- view-templates, data-view=\"templates\"\n- task-edit-status, task-edit-notes, task-edit-tags\n- task-remember-modal, task-remember-name\n- template-card, template-list\n\nCONSTRAINTS:\n- Do not touch .co-smos/, .jules/tasks/, .jules/results/, .jules/queue/.\n- Do not touch backend.\n- Do not weaken existing tests.\n\nTESTS: pytest tests/test_frontend_contract.py + git diff --check\nREPORT FORMAT: AGENTS.md §14.",
+    "request": null,
     "started_at": null,
-    "finished_at": "2026-09-16T21:45:51.775788+00:00",
+    "finished_at": "2026-09-16T21:56:14.284552+00:00",
     "result": "applied"
   },
   "history": [
@@ -190,6 +190,16 @@
       "request": "Co-SMOS v1.1 — Frontend: Reset Button, Extended Edit, Templates UI\n\nCONTEXT:\n- Repo: Urania-order/jules\n- Frontend: frontend/index.html (vanilla JS)\n- Spec: Co-SMOS v0.9 §14, §16, §25\n\nIMPORTANT — SCOPE:\nThis task touches FRONTEND ONLY. Do NOT modify smos/api/main.py.\nAnother task (in parallel) modifies the backend.\n\nFILES TO MODIFY:\n- frontend/index.html\n- tests/test_frontend_contract.py\n\nDO NOT TOUCH:\n- smos/api/main.py\n- smos/core/*.py\n\nBACKEND ENDPOINTS (being added in parallel):\n- POST /api/queue/reset\n- PATCH /api/tasks/{id} (extended)\n- POST /api/tasks/{id}/remember\n- GET /api/templates\n- DELETE /api/templates/{id}\n- POST /api/templates/{id}/use\n\nREQUIREMENTS:\n\n1. RESET ALL QUEUES\n- Button in header: id=\"btn-reset-queues\"\n- Confirm dialog: type \"RESET\" to confirm\n- On confirm: POST /api/queue/reset {confirm: \"RESET\", scope: \"all\"}\n\n2. CORRECT TASK (extended edit)\n- Extend existing task-edit-modal:\n  - id=\"task-edit-request\" (textarea, rename from task-edit-input)\n  - id=\"task-edit-priority\" (number, 1-5)\n  - id=\"task-edit-status\" (select: PENDING/READY/RUNNING/REVIEW/BLOCKED/COMPLETED/CANCELLED)\n  - id=\"task-edit-notes\" (textarea)\n  - id=\"task-edit-tags\" (text input, comma-separated)\n- Save: PATCH /api/tasks/{id} with all fields\n\n3. REMEMBER TASK\n- Right-click → \"Remember Task\" option\n- Modal: id=\"task-remember-modal\", id=\"task-remember-name\"\n- Save: POST /api/tasks/{id}/remember {name}\n\n4. TEMPLATES PANEL\n- Section: id=\"view-templates\"\n- Navigation: <button data-view=\"templates\">Templates</button>\n- List: .template-card with Use/Edit/Delete\n- Load: GET /api/templates\n\n5. STYLES\n- .reset-confirm, .template-card, .template-list\n- Extend .task-edit-modal with new fields\n\nTESTS (extend tests/test_frontend_contract.py):\n- id=\"btn-reset-queues\"\n- view-templates, data-view=\"templates\"\n- task-edit-status, task-edit-notes, task-edit-tags\n- task-remember-modal, task-remember-name\n- template-card, template-list\n\nCONSTRAINTS:\n- Do not touch .co-smos/, .jules/tasks/, .jules/results/, .jules/queue/.\n- Do not touch backend.\n- Do not weaken existing tests.\n\nTESTS: pytest tests/test_frontend_contract.py + git diff --check\nREPORT FORMAT: AGENTS.md §14.",
       "started_at": null,
       "finished_at": "2026-09-16T21:45:51.775788+00:00",
+      "result": "applied"
+    },
+    {
+      "id": "task-20260916-235307",
+      "status": "completed",
+      "session_id": "7302604120827959167",
+      "branch": null,
+      "request": null,
+      "started_at": null,
+      "finished_at": "2026-09-16T21:56:14.284552+00:00",
       "result": "applied"
     }
   ]
