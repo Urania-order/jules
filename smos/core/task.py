@@ -42,6 +42,8 @@ class Task(BaseModel):
     jules_task_id: Optional[str] = None
     error: Optional[str] = None
     exit_code: Optional[int] = None
+    notes: Optional[str] = None
+    tags: List[str] = Field(default_factory=list)
     metadata: Dict[str, Any] = Field(default_factory=dict)
     history: List[TaskHistoryItem] = Field(default_factory=list)
 

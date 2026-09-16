@@ -43,6 +43,8 @@ from smos.core.events import EventTracker
 from smos.core.task import Task, TaskStatus
 from smos.core.batch import BatchManager, Batch
 from smos.core.scheduler import Scheduler
+from smos.core.queue_reset import QueueResetManager
+from smos.core.templates import TemplateManager
 from smos.adapters.jules_cli import JulesCLIAdapter
 
 import asyncio
@@ -254,11 +256,21 @@ class RunQueueRequest(BaseModel):
     mode: str = "once"
     dry_run: bool = False
 
+class QueueResetRequest(BaseModel):
+    confirm: str
+    scope: str = "all"
+
+class RememberTaskRequest(BaseModel):
+    name: str
+
 class UpdateTaskRequest(BaseModel):
     title: Optional[str] = None
     description: Optional[str] = None
+    request: Optional[str] = None
     priority: Optional[int] = None
     status: Optional[str] = None
+    notes: Optional[str] = None
+    tags: Optional[List[str]] = None
 
 class ReorderQueueRequest(BaseModel):
     task_ids: List[str]
@@ -358,6 +370,22 @@ def reorder_queue(req: ReorderQueueRequest):
     EventTracker.emit("queue_reordered", payload={"task_ids": req.task_ids})
     return {"status": "success", "reordered_tasks": [t.model_dump() for t in reordered]}
 
+@app.post("/api/queue/reset", dependencies=[Depends(require_operator)])
+def reset_queue_endpoint(req: QueueResetRequest):
+    if req.confirm != "RESET":
+        return _error_response(
+            code="INVALID_CONFIRMATION",
+            message="Queue reset requires confirmation string 'RESET'",
+            status_code=400
+        )
+    qrm = QueueResetManager()
+    try:
+        res = qrm.reset_queue(scope=req.scope)
+        EventTracker.emit("queue_reset", payload={"scope": req.scope, "cleared": res["cleared"]})
+        return res
+    except ValueError as e:
+        return _error_response(code="INVALID_SCOPE", message=str(e), status_code=400)
+
 @app.get("/api/tasks")
 def list_tasks():
     qm = QueueManager()
@@ -383,8 +411,14 @@ def update_task_by_id(id: str, req: UpdateTaskRequest):
         task.title = req.title
     if req.description is not None:
         task.description = req.description
+    if req.request is not None:
+        task.request = req.request
     if req.priority is not None:
         task.priority = req.priority
+    if req.notes is not None:
+        task.notes = req.notes
+    if req.tags is not None:
+        task.tags = req.tags
     if req.status is not None:
         try:
             new_st = TaskStatus(req.status.upper())
@@ -394,6 +428,43 @@ def update_task_by_id(id: str, req: UpdateTaskRequest):
 
     qm.save_task(task)
     EventTracker.emit("task_updated", task_id=id, payload=req.model_dump(exclude_unset=True))
+    return task.model_dump()
+
+@app.post("/api/tasks/{id}/remember", dependencies=[Depends(require_operator)])
+def remember_task_as_template(id: str, req: RememberTaskRequest):
+    qm = QueueManager()
+    task = qm.get_task(id)
+    if not task:
+        return _error_response(code="TASK_NOT_FOUND", message=f"Task with ID {id} not found", status_code=404)
+
+    tm = TemplateManager()
+    tpl = tm.create_template_from_task(name=req.name, task=task)
+    EventTracker.emit("template_created", payload={"template_id": tpl.id, "source_task_id": id, "name": req.name})
+    return {"template_id": tpl.id, "template": tpl.model_dump()}
+
+@app.get("/api/templates")
+def list_templates():
+    tm = TemplateManager()
+    templates = tm.list_templates()
+    return [t.model_dump() for t in templates]
+
+@app.delete("/api/templates/{id}", dependencies=[Depends(require_operator)])
+def delete_template(id: str):
+    tm = TemplateManager()
+    deleted = tm.delete_template(id)
+    if not deleted:
+        return _error_response(code="TEMPLATE_NOT_FOUND", message=f"Template with ID {id} not found", status_code=404)
+    EventTracker.emit("template_deleted", payload={"template_id": id})
+    return {"status": "success", "message": f"Template {id} deleted"}
+
+@app.post("/api/templates/{id}/use", dependencies=[Depends(require_operator)])
+def use_template(id: str):
+    tm = TemplateManager()
+    qm = QueueManager()
+    task = tm.use_template(id, queue_manager=qm)
+    if not task:
+        return _error_response(code="TEMPLATE_NOT_FOUND", message=f"Template with ID {id} not found", status_code=404)
+    EventTracker.emit("task_created_from_template", task_id=task.id, payload={"template_id": id})
     return task.model_dump()
 
 @app.post("/api/tasks/{id}/start", dependencies=[Depends(require_operator)])

@@ -51,6 +51,8 @@ class QueueManager:
             jules_task_id=data.get("jules_task_id"),
             error=data.get("error"),
             exit_code=data.get("exit_code"),
+            notes=data.get("notes"),
+            tags=data.get("tags", []),
             metadata=data.get("metadata", {}),
             history=data.get("history", [])
         )
