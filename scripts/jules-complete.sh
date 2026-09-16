@@ -142,6 +142,43 @@ else
 fi
 echo ""
 
+# --- clean untracked files in forbidden paths (ERRATA-0015) ---
+# Jules may create new untracked files under .jules/queue/ during its run.
+# These files are not part of the patch and must not pollute the working tree.
+# We move them to .jules/queue/deferred/ (preserve for diagnostics).
+FORBIDDEN_UNTRACKED="$(git ls-files --others --exclude-standard 2>/dev/null \
+  | grep -E '^\.(co-smos|jules/(tasks|results|queue))/' \
+  | grep -v "^\.jules/tasks/${TASK_ID}\.md$" \
+  | grep -v "^\.jules/results/${TASK_ID}\.log$" \
+  || true)"
+
+if [ -n "$FORBIDDEN_UNTRACKED" ]; then
+  echo "      WARNING: untracked files in forbidden paths detected:"
+  echo "$FORBIDDEN_UNTRACKED" | sed 's/^/        /'
+  echo ""
+  echo "      Moving them to .jules/queue/deferred/ ..."
+  mkdir -p .jules/queue/deferred
+  COUNT=0
+  while IFS= read -r f; do
+    [ -z "$f" ] && continue
+    if [ -f "$f" ]; then
+      base="$(basename "$f")"
+      # avoid name collisions
+      target=".jules/queue/deferred/${base}"
+      if [ -e "$target" ]; then
+        target=".jules/queue/deferred/${base}.$$"
+      fi
+      mv "$f" "$target" && COUNT=$((COUNT + 1))
+    fi
+  done <<< "$FORBIDDEN_UNTRACKED"
+  echo "      Moved $COUNT file(s) to .jules/queue/deferred/"
+  echo "      See ERRATA-0015 for details."
+  echo ""
+else
+  echo "      no untracked files in forbidden paths"
+fi
+echo ""
+
 echo "[5/7] Updating $STATE_FILE..."
 SESSION_ID="$SESSION_ID" TASK_ID="$TASK_ID" PULL_RESULT="$PULL_RESULT" python3 - <<'PY'
 import json, os
