@@ -5,15 +5,14 @@
   "status": "ready",
   "active_task": null,
   "last_task": {
-    "id": "task-20260916-182513",
+    "id": "task-20260916-203324",
     "status": "completed",
-    "session_id": "8171516816474149820",
+    "session_id": "9245175213625721668",
     "branch": null,
-    "request": null,
+    "request": "Co-SMOS v1.0 — Fix test_cli_adapter.py to isolate queue writes\n\nCONTEXT:\n- Repo: Urania-order/jules\n- Problem: tests/test_cli_adapter.py calls adapter.add_task()\n  which writes task-*.json into the REAL .jules/queue/pending/.\n- Evidence:\n    tests/test_cli_adapter.py:\n        def test_cli_adapter_add_task(tmp_path, monkeypatch):\n            scripts_dir = Path(\"scripts\")\n            adapter = JulesCLIAdapter(scripts_dir=scripts_dir)\n            res = adapter.add_task(\"Test task from unit test\", priority=3)\n  The test accepts tmp_path and monkeypatch but does NOT use them.\n- smos/adapters/jules_cli.py:16 reads JULES_PROJECT_ROOT env,\n  defaulting to \".\", so jules-queue-add.sh writes into the\n  real repo.\n- Observed untracked files: .jules/queue/pending/task-20260916-*.json\n\nGOAL:\nMake tests/test_cli_adapter.py fully isolated.\n\nREQUIREMENTS:\n\n1. In tests/test_cli_adapter.py:\n   - add module-level PROJECT_ROOT = Path(__file__).parent.parent\n   - in test_cli_adapter_add_task:\n     * monkeypatch.chdir(tmp_path)\n     * monkeypatch.setenv(\"JULES_PROJECT_ROOT\", str(tmp_path))\n     * create tmp_path/.jules/queue/{pending,running,completed}\n     * use scripts_dir = PROJECT_ROOT / \"scripts\" (absolute)\n     * after add_task, assert the JSON file was created\n       in tmp_path/.jules/queue/pending/, NOT in the real repo\n   - keep test_cli_adapter_nonexistent_script as-is\n     (it uses tmp_path as scripts_dir, no queue write)\n\n2. Do NOT change smos/adapters/jules_cli.py production code.\n   (If a minimal change is strictly required, propose it\n   in the report but do not apply it.)\n\n3. Add a new test test_cli_adapter_does_not_touch_real_queue:\n   - capture git status before\n   - run adapter.add_task in isolated env\n   - capture git status after\n   - assert no new untracked task-*.json in the real\n     .jules/queue/pending/\n\nCONSTRAINTS:\n- Do not touch .co-smos/, .jules/tasks/, .jules/results/, .jules/queue/.\n- Do not change API_BASE.\n- Do not weaken existing tests.\n\nTESTS:\n- pytest tests/test_cli_adapter.py -v\n- pytest tests/test_queue_scripts.py -v\n- pytest tests/ -v --ignore=tests/test_ecology_service.py    --ignore=tests/test_value_service.py --ignore=tests/test_mcp.py\n- git diff --check\n\nREPORT FORMAT: AGENTS.md §14.\n\nFINAL REPORT:\n1. what was inspected\n2. what was changed\n3. what was deliberately not changed\n4. tests/results\n5. remaining gaps\n\nAFTER COMPLETION:\nSuggest 3-5 next steps.",
     "started_at": null,
-    "finished_at": "2026-09-16T16:12:30.907813+00:00",
-    "result": "applied",
-    "note": "patch applied successfully on first run; second run was a duplicate"
+    "finished_at": "2026-09-16T17:40:50.803698+00:00",
+    "result": "applied"
   },
   "history": [
     {
@@ -172,6 +171,16 @@
       "finished_at": "2026-09-16T16:12:30.907813+00:00",
       "result": "applied",
       "note": "patch applied successfully on first run; second run was a duplicate"
+    },
+    {
+      "id": "task-20260916-203324",
+      "status": "completed",
+      "session_id": "9245175213625721668",
+      "branch": null,
+      "request": "Co-SMOS v1.0 — Fix test_cli_adapter.py to isolate queue writes\n\nCONTEXT:\n- Repo: Urania-order/jules\n- Problem: tests/test_cli_adapter.py calls adapter.add_task()\n  which writes task-*.json into the REAL .jules/queue/pending/.\n- Evidence:\n    tests/test_cli_adapter.py:\n        def test_cli_adapter_add_task(tmp_path, monkeypatch):\n            scripts_dir = Path(\"scripts\")\n            adapter = JulesCLIAdapter(scripts_dir=scripts_dir)\n            res = adapter.add_task(\"Test task from unit test\", priority=3)\n  The test accepts tmp_path and monkeypatch but does NOT use them.\n- smos/adapters/jules_cli.py:16 reads JULES_PROJECT_ROOT env,\n  defaulting to \".\", so jules-queue-add.sh writes into the\n  real repo.\n- Observed untracked files: .jules/queue/pending/task-20260916-*.json\n\nGOAL:\nMake tests/test_cli_adapter.py fully isolated.\n\nREQUIREMENTS:\n\n1. In tests/test_cli_adapter.py:\n   - add module-level PROJECT_ROOT = Path(__file__).parent.parent\n   - in test_cli_adapter_add_task:\n     * monkeypatch.chdir(tmp_path)\n     * monkeypatch.setenv(\"JULES_PROJECT_ROOT\", str(tmp_path))\n     * create tmp_path/.jules/queue/{pending,running,completed}\n     * use scripts_dir = PROJECT_ROOT / \"scripts\" (absolute)\n     * after add_task, assert the JSON file was created\n       in tmp_path/.jules/queue/pending/, NOT in the real repo\n   - keep test_cli_adapter_nonexistent_script as-is\n     (it uses tmp_path as scripts_dir, no queue write)\n\n2. Do NOT change smos/adapters/jules_cli.py production code.\n   (If a minimal change is strictly required, propose it\n   in the report but do not apply it.)\n\n3. Add a new test test_cli_adapter_does_not_touch_real_queue:\n   - capture git status before\n   - run adapter.add_task in isolated env\n   - capture git status after\n   - assert no new untracked task-*.json in the real\n     .jules/queue/pending/\n\nCONSTRAINTS:\n- Do not touch .co-smos/, .jules/tasks/, .jules/results/, .jules/queue/.\n- Do not change API_BASE.\n- Do not weaken existing tests.\n\nTESTS:\n- pytest tests/test_cli_adapter.py -v\n- pytest tests/test_queue_scripts.py -v\n- pytest tests/ -v --ignore=tests/test_ecology_service.py    --ignore=tests/test_value_service.py --ignore=tests/test_mcp.py\n- git diff --check\n\nREPORT FORMAT: AGENTS.md §14.\n\nFINAL REPORT:\n1. what was inspected\n2. what was changed\n3. what was deliberately not changed\n4. tests/results\n5. remaining gaps\n\nAFTER COMPLETION:\nSuggest 3-5 next steps.",
+      "started_at": null,
+      "finished_at": "2026-09-16T17:40:50.803698+00:00",
+      "result": "applied"
     }
   ]
 }
