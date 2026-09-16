@@ -79,6 +79,30 @@ if [ -z "$SESSION_ID" ]; then
 fi
 
 echo " Resolved TASK_ID: $TASK_ID"
+
+# --- idempotency check (ERRATA-0016) ---
+if python3 -c "
+import json, sys
+try:
+    s = json.load(open('$STATE_FILE'))
+    for h in s.get('history', []):
+        if h.get('id') == '$TASK_ID' and h.get('result') in ('applied', 'no-op'):
+            sys.exit(0)
+    lt = s.get('last_task') or {}
+    if lt.get('id') == '$TASK_ID' and lt.get('result') in ('applied', 'no-op'):
+        sys.exit(0)
+    sys.exit(1)
+except Exception:
+    sys.exit(1)
+"; then
+  echo ""
+  echo "Task $TASK_ID is already completed and applied."
+  echo "Skipping to avoid a duplicate pull."
+  echo ""
+  exit 0
+fi
+# --- end idempotency check ---
+
 echo ""
 
 STASHED=0
