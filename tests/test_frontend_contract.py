@@ -111,6 +111,9 @@ def test_frontend_contract_css_classes():
         ".batch-status",
         ".consult-endpoint",
         ".consult-led",
+        ".reset-confirm",
+        ".template-card",
+        ".template-list",
     ]
 
     for cls in required_classes:
@@ -191,7 +194,7 @@ def test_frontend_contract_control_panel_elements():
     assert 'why-preview' in content
     assert 'why-preview-visible' in content
     assert 'task-edit-modal' in content or 'task-edit-modal-overlay' in content
-    assert 'id="task-edit-input"' in content
+    assert 'id="task-edit-request"' in content
     assert 'id="task-edit-priority"' in content
     assert 'id="task-edit-save"' in content
     assert 'id="task-edit-cancel"' in content
@@ -213,6 +216,33 @@ def test_frontend_contract_control_panel_elements():
     assert 'data-view="consult"' in content
     assert 'consult-endpoint' in content
     assert 'consult-led' in content
+
+
+def test_frontend_contract_v1_1_elements():
+    """Verify v1.1 Frontend Contract elements: Reset Queues button, Extended Task Edit modal, Remember Task modal, and Templates UI."""
+    content = INDEX_PATH.read_text()
+
+    # 1. Reset Queues Button & Modal
+    assert 'id="btn-reset-queues"' in content
+    assert 'id="reset-confirm-input"' in content or 'RESET' in content
+
+    # 2. Extended Task Edit Modal Fields
+    assert 'id="task-edit-request"' in content
+    assert 'id="task-edit-priority"' in content
+    assert 'id="task-edit-status"' in content
+    assert 'id="task-edit-notes"' in content
+    assert 'id="task-edit-tags"' in content
+
+    # 3. Remember Task Modal & Inputs
+    assert 'id="task-remember-modal"' in content
+    assert 'id="task-remember-name"' in content
+
+    # 4. Templates View & Cards
+    assert 'id="view-templates"' in content
+    assert 'data-view="templates"' in content
+    assert 'template-card' in content
+    assert 'template-list' in content
+    assert 'id="template-list"' in content
 
 
 def test_consult_endpoints_read_only():

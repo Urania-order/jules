@@ -550,6 +550,63 @@
     .task-edit-input {
       width: 100%;
     }
+
+    /* Reset Confirm & Template Styling */
+    .reset-confirm {
+      color: var(--accent-red);
+      background-color: rgba(248, 113, 113, 0.1);
+      border: 1px solid var(--accent-red);
+      padding: 0.75rem;
+      border-radius: 0.375rem;
+      margin-bottom: 1rem;
+      font-size: 0.85rem;
+    }
+
+    .template-list {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 1rem;
+      margin-top: 1rem;
+    }
+
+    .template-card {
+      background-color: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 0.5rem;
+      padding: 1.25rem;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 1rem;
+    }
+
+    .context-menu {
+      position: fixed;
+      background-color: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 0.375rem;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+      z-index: 3000;
+      padding: 0.5rem 0;
+      min-width: 160px;
+    }
+
+    .context-menu button {
+      display: block;
+      width: 100%;
+      text-align: left;
+      background: none;
+      border: none;
+      color: var(--text-primary);
+      padding: 0.5rem 1rem;
+      cursor: pointer;
+      font-size: 0.85rem;
+    }
+
+    .context-menu button:hover {
+      background-color: var(--bg-card);
+      color: var(--accent-blue);
+    }
   </style>
 </head>
 <body>
@@ -566,6 +623,7 @@
         <option value="AUTO">AUTO</option>
       </select>
       <button class="btn btn-secondary btn-sm" id="btn-sync">⟳ SYNC</button>
+      <button class="btn btn-danger btn-sm" id="btn-reset-queues">⚠ RESET QUEUES</button>
     </div>
     <nav>
       <button class="nav-btn active" data-view="dashboard">Control Room</button>
@@ -575,6 +633,7 @@
       <button class="nav-btn" data-view="cycles">Cycles</button>
       <button class="nav-btn" data-view="queue">Queue</button>
       <button class="nav-btn" data-view="batch">Batch</button>
+      <button class="nav-btn" data-view="templates">Templates</button>
       <button class="nav-btn" data-view="proposals">Proposals</button>
       <button class="nav-btn" data-view="events">Events</button>
       <button class="nav-btn" data-view="history">History</button>
@@ -723,7 +782,7 @@
     <section id="view-queue" class="view">
       <h2>Queue Management</h2>
       <p style="margin-bottom: 1rem; color: var(--text-secondary); font-size: 0.9rem;">
-        Drag and drop READY tasks to reorder position. Right-click card to edit task. Hover + Ctrl to preview WHY.
+        Drag and drop READY tasks to reorder position. Right-click card to edit task or remember as template. Hover + Ctrl to preview WHY.
       </p>
       <div class="queue-columns">
         <div class="queue-column" id="col-ready">
@@ -799,6 +858,17 @@
       </div>
     </section>
 
+    <!-- TEMPLATES VIEW -->
+    <section id="view-templates" class="view">
+      <h2>Task Templates</h2>
+      <p style="margin-bottom: 1rem; color: var(--text-secondary); font-size: 0.9rem;">
+        Reusable task templates saved from context menu or API.
+      </p>
+      <div class="template-list" id="template-list">
+        <div class="empty-state">No templates available</div>
+      </div>
+    </section>
+
     <!-- PROPOSALS VIEW -->
     <section id="view-proposals" class="view">
       <h2>Task Proposals</h2>
@@ -869,6 +939,48 @@
       </div>
     </section>
 
+    <!-- RESET ALL QUEUES MODAL -->
+    <div class="modal-overlay" id="reset-modal-overlay" style="display: none;">
+      <div class="modal">
+        <h3>Reset All Queues</h3>
+        <div class="reset-confirm" style="margin-top: 1rem;">
+          <strong>WARNING:</strong> This action will clear all queued, running, and completed tasks across all queues.
+        </div>
+        <p style="font-size: 0.9rem; margin-bottom: 1rem; color: var(--text-secondary);">
+          Type <strong>RESET</strong> to confirm queue reset:
+        </p>
+        <input type="text" id="reset-confirm-input" placeholder="Type RESET to confirm" style="width: 100%;">
+        <div class="modal-actions">
+          <button type="button" class="btn btn-secondary" onclick="closeResetModal()">Cancel</button>
+          <button type="button" class="btn btn-danger" id="btn-confirm-reset" onclick="submitQueueReset()">Confirm Reset</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- REMEMBER TASK MODAL -->
+    <div class="modal-overlay" id="task-remember-modal" style="display: none;">
+      <div class="modal">
+        <h3>Remember Task as Template</h3>
+        <form id="task-remember-form" style="margin-top: 1rem;">
+          <input type="hidden" id="task-remember-id">
+          <div class="form-group">
+            <label for="task-remember-name">Template Name</label>
+            <input type="text" id="task-remember-name" placeholder="Enter template name..." required style="width: 100%;">
+          </div>
+          <div class="modal-actions">
+            <button type="button" class="btn btn-secondary" onclick="closeRememberTaskModal()">Cancel</button>
+            <button type="submit" class="btn btn-primary">Save Template</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- RIGHT CLICK CONTEXT MENU -->
+    <div id="task-context-menu" class="context-menu" style="display: none;">
+      <button type="button" id="ctx-edit-task">✏ Edit Task</button>
+      <button type="button" id="ctx-remember-task">⭐ Remember Task</button>
+    </div>
+
     <!-- PROPOSAL MODIFY MODAL -->
     <div class="modal-overlay" id="modify-modal-overlay" style="display: none;">
       <div class="modal">
@@ -893,17 +1005,37 @@
 
     <!-- TASK EDIT MODAL -->
     <div class="modal-overlay task-edit-modal" id="task-edit-modal-overlay" style="display: none;">
-      <div class="modal">
+      <div class="modal" style="max-width: 550px;">
         <h3>Right-Click Edit Task</h3>
         <form id="task-edit-form" style="margin-top: 1rem;">
           <input type="hidden" id="task-edit-id">
           <div class="form-group">
-            <label for="task-edit-input">Task Description / Title</label>
-            <textarea id="task-edit-input" class="task-edit-input" rows="3" required></textarea>
+            <label for="task-edit-request">Task Description / Title</label>
+            <textarea id="task-edit-request" class="task-edit-input" rows="3" required></textarea>
           </div>
           <div class="form-group">
             <label for="task-edit-priority">Priority (1-5)</label>
             <input type="number" id="task-edit-priority" min="1" max="5" value="3" required>
+          </div>
+          <div class="form-group">
+            <label for="task-edit-status">Status</label>
+            <select id="task-edit-status">
+              <option value="PENDING">PENDING</option>
+              <option value="READY">READY</option>
+              <option value="RUNNING">RUNNING</option>
+              <option value="REVIEW">REVIEW</option>
+              <option value="BLOCKED">BLOCKED</option>
+              <option value="COMPLETED">COMPLETED</option>
+              <option value="CANCELLED">CANCELLED</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="task-edit-notes">Notes</label>
+            <textarea id="task-edit-notes" rows="2" placeholder="Optional notes..."></textarea>
+          </div>
+          <div class="form-group">
+            <label for="task-edit-tags">Tags (comma-separated)</label>
+            <input type="text" id="task-edit-tags" placeholder="tag1, tag2">
           </div>
           <div class="modal-actions">
             <button type="button" id="task-edit-cancel" class="btn btn-secondary" onclick="closeTaskEditModal()">Cancel</button>
@@ -937,6 +1069,7 @@
     let currentProposals = [];
     let selectedTaskId = null;
     let isCtrlPressed = false;
+    let contextMenuTask = null;
 
     // Monitor Ctrl key press for WHY preview
     window.addEventListener('keydown', e => {
@@ -1034,6 +1167,7 @@
         renderBatchTasks();
         renderQueuedBatches();
         renderSchedulerStatus();
+        renderTemplates();
         renderProposals();
         renderEvents();
         renderHistory();
@@ -1056,6 +1190,38 @@
         showOffline();
       }
     });
+
+    // Reset Queues Button & Modal Logic
+    const btnResetQueues = document.getElementById('btn-reset-queues');
+    if (btnResetQueues) {
+      btnResetQueues.addEventListener('click', () => {
+        document.getElementById('reset-confirm-input').value = '';
+        document.getElementById('reset-modal-overlay').style.display = 'flex';
+      });
+    }
+
+    function closeResetModal() {
+      document.getElementById('reset-modal-overlay').style.display = 'none';
+    }
+
+    async function submitQueueReset() {
+      const confirmVal = document.getElementById('reset-confirm-input').value.trim();
+      if (confirmVal !== 'RESET') {
+        showError('You must type RESET to confirm queue reset.');
+        return;
+      }
+      try {
+        await fetchJSON(`${API_BASE}/queue/reset`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ confirm: 'RESET', scope: 'all' })
+        });
+        closeResetModal();
+        refreshData();
+      } catch (e) {
+        showError('Failed to reset queue: ' + e.message);
+      }
+    }
 
     // Command Intake submit handler
     const commandForm = document.getElementById('command-intake-form');
@@ -1103,6 +1269,41 @@
       });
     }
 
+    function openContextMenu(task, x, y) {
+      contextMenuTask = task;
+      const menu = document.getElementById('task-context-menu');
+      if (menu) {
+        menu.style.left = `${x}px`;
+        menu.style.top = `${y}px`;
+        menu.style.display = 'block';
+      }
+    }
+
+    function closeContextMenu() {
+      const menu = document.getElementById('task-context-menu');
+      if (menu) menu.style.display = 'none';
+    }
+
+    window.addEventListener('click', () => closeContextMenu());
+
+    const ctxEditBtn = document.getElementById('ctx-edit-task');
+    if (ctxEditBtn) {
+      ctxEditBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        closeContextMenu();
+        if (contextMenuTask) openTaskEditModal(contextMenuTask);
+      });
+    }
+
+    const ctxRememberBtn = document.getElementById('ctx-remember-task');
+    if (ctxRememberBtn) {
+      ctxRememberBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        closeContextMenu();
+        if (contextMenuTask) openRememberTaskModal(contextMenuTask);
+      });
+    }
+
     function createTaskCard(task) {
       const el = document.createElement('div');
       el.className = 'task-item task-card task-card-hover';
@@ -1135,10 +1336,10 @@
         </div>
       `;
 
-      // Right-click to edit task contextmenu
+      // Right-click contextmenu handler
       el.addEventListener('contextmenu', e => {
         e.preventDefault();
-        openTaskEditModal(task);
+        openContextMenu(task, e.clientX, e.clientY);
       });
 
       // Hover + Ctrl to preview WHY
@@ -1183,8 +1384,11 @@
 
     function openTaskEditModal(task) {
       document.getElementById('task-edit-id').value = task.id;
-      document.getElementById('task-edit-input').value = task.request || task.title || '';
+      document.getElementById('task-edit-request').value = task.request || task.title || task.description || '';
       document.getElementById('task-edit-priority').value = Math.min(Math.max(task.priority || 3, 1), 5);
+      document.getElementById('task-edit-status').value = task.status || 'READY';
+      document.getElementById('task-edit-notes').value = task.notes || '';
+      document.getElementById('task-edit-tags').value = Array.isArray(task.tags) ? task.tags.join(', ') : (task.tags || '');
       document.getElementById('task-edit-modal-overlay').style.display = 'flex';
     }
 
@@ -1197,14 +1401,51 @@
       taskEditForm.addEventListener('submit', async e => {
         e.preventDefault();
         const id = document.getElementById('task-edit-id').value;
-        const desc = document.getElementById('task-edit-input').value;
+        const req = document.getElementById('task-edit-request').value;
         const prio = parseInt(document.getElementById('task-edit-priority').value, 10);
+        const status = document.getElementById('task-edit-status').value;
+        const notes = document.getElementById('task-edit-notes').value;
+        const tagsInput = document.getElementById('task-edit-tags').value;
+        const tags = tagsInput.split(',').map(t => t.trim()).filter(Boolean);
+
         await fetchJSON(`${API_BASE}/tasks/${id}`, {
           method: 'PATCH',
           headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({ description: desc, priority: prio })
+          body: JSON.stringify({
+            request: req,
+            priority: prio,
+            status: status,
+            notes: notes,
+            tags: tags
+          })
         });
         closeTaskEditModal();
+        refreshData();
+      });
+    }
+
+    function openRememberTaskModal(task) {
+      document.getElementById('task-remember-id').value = task.id;
+      document.getElementById('task-remember-name').value = task.request || task.title || '';
+      document.getElementById('task-remember-modal').style.display = 'flex';
+    }
+
+    function closeRememberTaskModal() {
+      document.getElementById('task-remember-modal').style.display = 'none';
+    }
+
+    const taskRememberForm = document.getElementById('task-remember-form');
+    if (taskRememberForm) {
+      taskRememberForm.addEventListener('submit', async e => {
+        e.preventDefault();
+        const id = document.getElementById('task-remember-id').value;
+        const name = document.getElementById('task-remember-name').value;
+        await fetchJSON(`${API_BASE}/tasks/${id}/remember`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name })
+        });
+        closeRememberTaskModal();
         refreshData();
       });
     }
@@ -1525,6 +1766,63 @@
           statusDiv.innerHTML = `<span style="color: var(--accent-red);">Failed to run batch: ${escapeHTML(e.message)}</span>`;
         }
       });
+    }
+
+    // Render Templates List
+    async function renderTemplates() {
+      const container = document.getElementById('template-list');
+      if (!container) return;
+      try {
+        const templates = await fetchJSON(`${API_BASE}/templates`);
+        container.innerHTML = '';
+        if (!templates || templates.length === 0) {
+          container.innerHTML = '<div class="empty-state">No templates available</div>';
+          return;
+        }
+
+        templates.forEach(tmpl => {
+          const card = document.createElement('div');
+          card.className = 'template-card';
+          card.dataset.templateId = tmpl.id;
+          card.innerHTML = `
+            <div>
+              <div class="task-title" style="color: var(--accent-blue);">${escapeHTML(tmpl.name || tmpl.title || 'Untitled Template')}</div>
+              <div style="font-size: 0.85rem; color: var(--text-secondary); margin-top: 0.5rem;">
+                ${escapeHTML(tmpl.request || tmpl.description || '')}
+              </div>
+              <div class="task-meta" style="margin-top: 0.5rem;">
+                <span>ID: ${tmpl.id}</span>
+                <span>Priority: P${tmpl.priority || 3}</span>
+              </div>
+            </div>
+            <div style="display: flex; gap: 0.5rem; justify-content: flex-end;">
+              <button class="btn btn-primary btn-sm" onclick="useTemplate('${tmpl.id}')">Use</button>
+              <button class="btn btn-danger btn-sm" onclick="deleteTemplate('${tmpl.id}')">Delete</button>
+            </div>
+          `;
+          container.appendChild(card);
+        });
+      } catch (e) {
+        container.innerHTML = '<div class="empty-state">Failed to load templates</div>';
+      }
+    }
+
+    async function useTemplate(templateId) {
+      try {
+        await fetchJSON(`${API_BASE}/templates/${templateId}/use`, { method: 'POST' });
+        refreshData();
+      } catch (e) {
+        showError('Failed to use template: ' + e.message);
+      }
+    }
+
+    async function deleteTemplate(templateId) {
+      try {
+        await fetchJSON(`${API_BASE}/templates/${templateId}`, { method: 'DELETE' });
+        refreshData();
+      } catch (e) {
+        showError('Failed to delete template: ' + e.message);
+      }
     }
 
     // Consult Access view fetch & display
