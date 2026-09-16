@@ -41,6 +41,7 @@ from smos.core.queue import QueueManager
 from smos.core.proposals import ProposalManager
 from smos.core.events import EventTracker
 from smos.core.task import Task, TaskStatus
+from smos.core.batch import BatchManager, Batch
 from smos.adapters.jules_cli import JulesCLIAdapter
 
 import numpy as np
@@ -134,6 +135,13 @@ class CreateTwinRequest(BaseModel):
 class CreateClusterRequest(BaseModel):
     name: str
     domains: List[str]
+
+class BatchRunRequest(BaseModel):
+    task_ids: List[str]
+    schedule: str = "now"
+    concurrency: int = Field(default=3, ge=1, le=10)
+    autonomy: str = "MANUAL"
+    confirm: bool = False
 
 @app.get("/")
 def read_root():
@@ -317,6 +325,101 @@ def modify_proposal(id: str, req: ModifyProposalRequest):
         return _error_response(code="PROPOSAL_NOT_FOUND", message=f"Proposal with ID {id} not found", status_code=404)
     EventTracker.emit("proposal_modified", payload={"proposal_id": id})
     return {"status": "success", "proposal": prop.model_dump()}
+
+# --- BATCH ENDPOINTS ---
+
+@app.post("/api/batch/run")
+def run_batch(req: BatchRunRequest):
+    schedule = req.schedule.lower()
+    autonomy = req.autonomy.upper()
+
+    if schedule == "window":
+        return _error_response(
+            code="SCHEDULER_NOT_IMPLEMENTED",
+            message="Custom window scheduler backend not implemented",
+            status_code=400
+        )
+
+    if schedule not in ("now", "now-sequential", "night"):
+        return _error_response(
+            code="INVALID_SCHEDULE",
+            message=f"Unsupported schedule: {req.schedule}",
+            status_code=400
+        )
+
+    if autonomy == "MANUAL" and not req.confirm:
+        return _error_response(
+            code="CONFIRMATION_REQUIRED",
+            message="Manual execution requires explicit confirmation (confirm=true)",
+            status_code=400
+        )
+
+    bm = BatchManager()
+    qm = QueueManager()
+
+    if schedule == "night":
+        status = "queued"
+        started_ids = []
+        queued_ids = req.task_ids
+    elif schedule == "now-sequential":
+        status = "accepted"
+        started_ids = req.task_ids[:1]
+        queued_ids = req.task_ids[1:]
+    else:  # "now"
+        status = "accepted"
+        limit = req.concurrency
+        started_ids = req.task_ids[:limit]
+        queued_ids = req.task_ids[limit:]
+
+    # Transition started tasks
+    for tid in started_ids:
+        task = qm.get_task(tid)
+        if task:
+            task.transition_to(TaskStatus.RUNNING, message="Task started via batch execution")
+            qm.save_task(task)
+            EventTracker.emit("task_started", task_id=tid, payload={"execution_mode": "batch"})
+
+    batch = bm.create_batch(
+        task_ids=req.task_ids,
+        schedule=req.schedule,
+        concurrency=req.concurrency,
+        status=status,
+        started=started_ids,
+        queued=queued_ids,
+        autonomy=req.autonomy,
+    )
+
+    EventTracker.emit("batch_created", payload={"batch_id": batch.id, "schedule": schedule, "task_count": len(req.task_ids)})
+
+    return {
+        "status": batch.status,
+        "batch_id": batch.id,
+        "task_ids": batch.task_ids,
+        "concurrency": batch.concurrency,
+        "schedule": batch.schedule,
+        "started": batch.started,
+        "queued": batch.queued,
+    }
+
+@app.get("/api/batch/queue")
+def list_queued_batches():
+    bm = BatchManager()
+    batches = bm.list_queued_batches()
+    return [b.model_dump() for b in batches]
+
+@app.get("/api/batch")
+def list_recent_batches(limit: int = 50):
+    bm = BatchManager()
+    batches = bm.list_batches(limit=limit)
+    return [b.model_dump() for b in batches]
+
+@app.get("/api/batch/{id}")
+def get_batch_by_id(id: str):
+    bm = BatchManager()
+    batch = bm.get_batch(id)
+    if not batch:
+        return _error_response(code="BATCH_NOT_FOUND", message=f"Batch with ID {id} not found", status_code=404)
+    return batch.model_dump()
 
 @app.get("/api/events")
 def get_system_events(task_id: Optional[str] = None, limit: int = 50):
