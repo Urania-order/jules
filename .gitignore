@@ -25,3 +25,4 @@ __pycache__/
 .co-smos/state.json
 .jules/events/
 !.co-smos/state.json
+.jules/queue/deferred/
