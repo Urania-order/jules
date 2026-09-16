@@ -7,6 +7,7 @@ from smos.core.queue import QueueManager
 from smos.core.task import Task, TaskStatus
 
 client = TestClient(app)
+client.headers.update({"Authorization": "Bearer dev-operator-token"})
 
 @pytest.fixture
 def setup_tasks(tmp_path, monkeypatch):

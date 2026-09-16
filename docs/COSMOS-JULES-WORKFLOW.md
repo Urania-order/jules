@@ -218,7 +218,34 @@ started | completed | failed
 - <ISO8601> merged
 Картка — append-only під час життя задачі.
 
-§9. Logs
+§9. Consult Access (RBAC) & Logs
+
+### 9.1 Consult Access and Role-Based Access Control (RBAC)
+Co-SMOS v0.9 provides Role-Based Access Control (RBAC) for API consult endpoints and mutation operations.
+
+#### Environment Variables & Tokens
+Access authentication relies on Bearer tokens configured via environment variables:
+- `JULES_CONSULTANT_TOKEN` (default: `"dev-consultant-token"`)
+- `JULES_OPERATOR_TOKEN` (default: `"dev-operator-token"`)
+- `JULES_ADMIN_TOKEN` (default: `"dev-admin-token"`)
+
+> **SECURITY WARNING:** Tokens MUST NOT be committed to git or stored in browser `localStorage`. Real secret tokens must be provided via env vars in deployment environments.
+
+#### Roles and Permissions Matrix
+| Role | Allowed Endpoints / Actions | Description |
+|---|---|---|
+| **consultant** | `GET /api/consult/*` only | External AI consultants (e.g., DeepSeek). Read-only surface strictly forbidden from performing any state mutations. |
+| **operator** | consultant + `POST /api/tasks`, `PATCH /api/tasks/{id}`, `POST /api/proposals`, `POST /api/proposals/{id}/accept`, `POST /api/batch/run` | Trusted human operators for standard operational tasks and queue/batch controls. |
+| **admin** | operator + system configuration endpoints | Trusted system administrators with full administrative capabilities. |
+
+#### External AI Consultant Authentication (e.g. DeepSeek)
+- External AI consultants such as DeepSeek MUST be assigned the `consultant` role only using `JULES_CONSULTANT_TOKEN`.
+- Requests must include the HTTP header: `Authorization: Bearer <JULES_CONSULTANT_TOKEN>`.
+- `consultant` access is strictly read-only (`GET /api/consult/*`). Any write attempt (POST, PATCH, PUT, DELETE) returns `403 CONSULT_ROLE_FORBIDDEN`.
+- Unauthenticated requests return `401 CONSULT_AUTH_REQUIRED` (except `GET /api/consult/health?public=1` which allows public monitoring).
+- Trusted roles (`operator` and `admin`) are reserved exclusively for authorized human operators.
+
+### 9.2 Logs
 .jules/results/task-<id>.log — повний вивід jules remote new і jules remote pull.
 
 Правила:

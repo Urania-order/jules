@@ -38,21 +38,133 @@ from smos.services.commons_service import CommonsService
 # Core & Adapters
 from smos.core.state import StateManager
 from smos.core.queue import QueueManager
-from smos.core.proposals import ProposalManager
+from smos.core.proposals import ProposalManager, Proposal
 from smos.core.events import EventTracker
 from smos.core.task import Task, TaskStatus
 from smos.core.batch import BatchManager, Batch
 from smos.adapters.jules_cli import JulesCLIAdapter
 
+import hmac
+import json
+import logging
 import numpy as np
 from pydantic import BaseModel, Field
 from typing import Optional, Dict, Any, List
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 import os
 from pgvector.sqlalchemy import Vector
 
+logger = logging.getLogger(__name__)
+
 app = FastAPI(title="Co-SMOS Control Room API", version="0.9")
+
+CONSULTANT_TOKEN_ENV = "JULES_CONSULTANT_TOKEN"
+OPERATOR_TOKEN_ENV = "JULES_OPERATOR_TOKEN"
+ADMIN_TOKEN_ENV = "JULES_ADMIN_TOKEN"
+
+DEFAULT_CONSULTANT_TOKEN = "dev-consultant-token"
+DEFAULT_OPERATOR_TOKEN = "dev-operator-token"
+DEFAULT_ADMIN_TOKEN = "dev-admin-token"
+
+_warning_logged = False
+
+def log_default_token_warning_once():
+    global _warning_logged
+    if _warning_logged:
+        return
+    c_tok = os.environ.get(CONSULTANT_TOKEN_ENV, DEFAULT_CONSULTANT_TOKEN)
+    o_tok = os.environ.get(OPERATOR_TOKEN_ENV, DEFAULT_OPERATOR_TOKEN)
+    a_tok = os.environ.get(ADMIN_TOKEN_ENV, DEFAULT_ADMIN_TOKEN)
+
+    if (c_tok == DEFAULT_CONSULTANT_TOKEN and 
+        o_tok == DEFAULT_OPERATOR_TOKEN and 
+        a_tok == DEFAULT_ADMIN_TOKEN):
+        logger.warning("All Co-SMOS tokens are set to default development values.")
+        _warning_logged = True
+
+@app.on_event("startup")
+def startup_event():
+    log_default_token_warning_once()
+
+class AuthException(Exception):
+    def __init__(self, code: str, message: str, status_code: int):
+        self.code = code
+        self.message = message
+        self.status_code = status_code
+
+@app.exception_handler(AuthException)
+async def auth_exception_handler(request: Request, exc: AuthException):
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "status": "error",
+            "code": exc.code,
+            "message": exc.message,
+            "exit_code": None
+        }
+    )
+
+def resolve_role_from_request(request: Request) -> str:
+    log_default_token_warning_once()
+
+    # Public health check exception
+    if request.url.path == "/api/consult/health" and request.query_params.get("public") == "1":
+        return "public"
+
+    auth_header = request.headers.get("Authorization")
+    if not auth_header or not auth_header.startswith("Bearer "):
+        raise AuthException(
+            code="CONSULT_AUTH_REQUIRED",
+            message="Authorization header with Bearer token is required",
+            status_code=401
+        )
+
+    token = auth_header[7:].strip()
+    if not token:
+        raise AuthException(
+            code="CONSULT_AUTH_REQUIRED",
+            message="Bearer token cannot be empty",
+            status_code=401
+        )
+
+    c_tok = os.environ.get(CONSULTANT_TOKEN_ENV, DEFAULT_CONSULTANT_TOKEN)
+    o_tok = os.environ.get(OPERATOR_TOKEN_ENV, DEFAULT_OPERATOR_TOKEN)
+    a_tok = os.environ.get(ADMIN_TOKEN_ENV, DEFAULT_ADMIN_TOKEN)
+
+    token_bytes = token.encode("utf-8")
+
+    if hmac.compare_digest(token_bytes, a_tok.encode("utf-8")):
+        return "admin"
+    if hmac.compare_digest(token_bytes, o_tok.encode("utf-8")):
+        return "operator"
+    if hmac.compare_digest(token_bytes, c_tok.encode("utf-8")):
+        return "consultant"
+
+    raise AuthException(
+        code="CONSULT_AUTH_INVALID",
+        message="Invalid authorization token",
+        status_code=403
+    )
+
+def require_roles(allowed_roles: List[str]):
+    def dependency(request: Request) -> str:
+        role = resolve_role_from_request(request)
+        if role == "public" and "public" in allowed_roles:
+            return role
+        if role not in allowed_roles:
+            raise AuthException(
+                code="CONSULT_ROLE_FORBIDDEN",
+                message=f"Role '{role}' is forbidden from accessing this resource",
+                status_code=403
+            )
+        return role
+    return dependency
+
+require_consultant = require_roles(["consultant", "operator", "admin"])
+require_consultant_or_public = require_roles(["public", "consultant", "operator", "admin"])
+require_operator = require_roles(["operator", "admin"])
+require_admin = require_roles(["admin"])
 
 app.add_middleware(
     CORSMiddleware,
@@ -110,6 +222,12 @@ class CreateTaskRequest(BaseModel):
     request: str
     priority: int = 5
 
+class CreateProposalRequest(BaseModel):
+    description: str
+    priority: int = 3
+    source_task: Optional[str] = None
+    proposed_by: Optional[str] = "operator"
+
 class RunQueueRequest(BaseModel):
     mode: str = "once"
     dry_run: bool = False
@@ -163,7 +281,7 @@ def get_queue_tasks():
     tasks = qm.list_queue_tasks()
     return [t.model_dump() for t in tasks]
 
-@app.post("/api/queue")
+@app.post("/api/queue", dependencies=[Depends(require_operator)])
 def add_task_to_queue(req: CreateTaskRequest):
     adapter = JulesCLIAdapter()
     res = adapter.add_task(description=req.request, priority=req.priority)
@@ -190,7 +308,11 @@ def add_task_to_queue(req: CreateTaskRequest):
     EventTracker.emit("task_created", task_id=latest_task.id if latest_task else None, payload={"request": req.request})
     return {"status": "success", "cli_output": res["stdout"], "task": latest_task.model_dump() if latest_task else None}
 
-@app.post("/api/queue/run")
+@app.post("/api/tasks", dependencies=[Depends(require_operator)])
+def create_task_endpoint(req: CreateTaskRequest):
+    return add_task_to_queue(req)
+
+@app.post("/api/queue/run", dependencies=[Depends(require_operator)])
 def run_queue(req: RunQueueRequest):
     adapter = JulesCLIAdapter()
     res = adapter.run_queue(mode=req.mode, dry_run=req.dry_run)
@@ -203,7 +325,7 @@ def run_queue(req: RunQueueRequest):
         )
     return {"status": "success", "cli_output": res["stdout"]}
 
-@app.post("/api/queue/reorder")
+@app.post("/api/queue/reorder", dependencies=[Depends(require_operator)])
 def reorder_queue(req: ReorderQueueRequest):
     qm = QueueManager()
     reordered = qm.reorder_queue(req.task_ids)
@@ -224,7 +346,7 @@ def get_task_by_id(id: str):
         return _error_response(code="TASK_NOT_FOUND", message=f"Task with ID {id} not found", status_code=404)
     return task.model_dump()
 
-@app.patch("/api/tasks/{id}")
+@app.patch("/api/tasks/{id}", dependencies=[Depends(require_operator)])
 def update_task_by_id(id: str, req: UpdateTaskRequest):
     qm = QueueManager()
     task = qm.get_task(id)
@@ -248,7 +370,7 @@ def update_task_by_id(id: str, req: UpdateTaskRequest):
     EventTracker.emit("task_updated", task_id=id, payload=req.model_dump(exclude_unset=True))
     return task.model_dump()
 
-@app.post("/api/tasks/{id}/start")
+@app.post("/api/tasks/{id}/start", dependencies=[Depends(require_operator)])
 def start_task(id: str):
     qm = QueueManager()
     task = qm.get_task(id)
@@ -264,7 +386,7 @@ def start_task(id: str):
     res = adapter.run_queue(mode="once", dry_run=False)
     return {"status": "success", "task": task.model_dump(), "runner_output": res.get("stdout")}
 
-@app.post("/api/tasks/{id}/cancel")
+@app.post("/api/tasks/{id}/cancel", dependencies=[Depends(require_operator)])
 def cancel_task(id: str):
     qm = QueueManager()
     task = qm.get_task(id)
@@ -282,6 +404,22 @@ def list_proposals(status: Optional[str] = None):
     props = pm.list_proposals(status=status)
     return [p.model_dump() for p in props]
 
+@app.post("/api/proposals", dependencies=[Depends(require_operator)])
+def create_proposal(req: CreateProposalRequest):
+    pm = ProposalManager()
+    prop_id = f"prop-{datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')}"
+    prop = Proposal(
+        id=prop_id,
+        description=req.description,
+        priority=req.priority,
+        source_task=req.source_task,
+        proposed_by=req.proposed_by or "operator",
+    )
+    target_file = pm.proposed_dir / f"{prop_id}.json"
+    target_file.write_text(json.dumps(prop.model_dump(), indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    EventTracker.emit("proposal_created", payload={"proposal_id": prop_id, "description": req.description})
+    return {"status": "success", "proposal": prop.model_dump()}
+
 @app.get("/api/proposals/{id}")
 def get_proposal_by_id(id: str):
     pm = ProposalManager()
@@ -290,7 +428,7 @@ def get_proposal_by_id(id: str):
         return _error_response(code="PROPOSAL_NOT_FOUND", message=f"Proposal with ID {id} not found", status_code=404)
     return prop.model_dump()
 
-@app.post("/api/proposals/{id}/accept")
+@app.post("/api/proposals/{id}/accept", dependencies=[Depends(require_operator)])
 def accept_proposal(id: str):
     adapter = JulesCLIAdapter()
     res = adapter.accept_proposal(id)
@@ -299,7 +437,7 @@ def accept_proposal(id: str):
     EventTracker.emit("proposal_accepted", payload={"proposal_id": id})
     return {"status": "success", "cli_output": res["stdout"]}
 
-@app.post("/api/proposals/{id}/defer")
+@app.post("/api/proposals/{id}/defer", dependencies=[Depends(require_operator)])
 def defer_proposal(id: str):
     adapter = JulesCLIAdapter()
     res = adapter.defer_proposal(id)
@@ -308,7 +446,7 @@ def defer_proposal(id: str):
     EventTracker.emit("proposal_deferred", payload={"proposal_id": id})
     return {"status": "success", "cli_output": res["stdout"]}
 
-@app.post("/api/proposals/{id}/reject")
+@app.post("/api/proposals/{id}/reject", dependencies=[Depends(require_operator)])
 def reject_proposal(id: str):
     adapter = JulesCLIAdapter()
     res = adapter.reject_proposal(id)
@@ -317,7 +455,7 @@ def reject_proposal(id: str):
     EventTracker.emit("proposal_rejected", payload={"proposal_id": id})
     return {"status": "success", "cli_output": res["stdout"]}
 
-@app.post("/api/proposals/{id}/modify")
+@app.post("/api/proposals/{id}/modify", dependencies=[Depends(require_operator)])
 def modify_proposal(id: str, req: ModifyProposalRequest):
     pm = ProposalManager()
     prop = pm.modify_proposal(id, new_description=req.description, new_priority=req.priority)
@@ -328,7 +466,7 @@ def modify_proposal(id: str, req: ModifyProposalRequest):
 
 # --- BATCH ENDPOINTS ---
 
-@app.post("/api/batch/run")
+@app.post("/api/batch/run", dependencies=[Depends(require_operator)])
 def run_batch(req: BatchRunRequest):
     schedule = req.schedule.lower()
     autonomy = req.autonomy.upper()
@@ -490,7 +628,7 @@ def get_task_replay(id: str):
         "timeline": timeline
     }
 
-@app.post("/api/tasks/{id}/retry")
+@app.post("/api/tasks/{id}/retry", dependencies=[Depends(require_operator)])
 def retry_task(id: str):
     qm = QueueManager()
     task = qm.get_task(id)
@@ -610,7 +748,7 @@ def _track_consult_request():
     global _consult_request_count
     _consult_request_count += 1
 
-@app.get("/api/consult/state")
+@app.get("/api/consult/state", dependencies=[Depends(require_consultant)])
 def get_consult_state():
     _track_consult_request()
     sm = StateManager()
@@ -620,14 +758,14 @@ def get_consult_state():
         "system_status": sm.get_system_status()
     }
 
-@app.get("/api/consult/tasks")
+@app.get("/api/consult/tasks", dependencies=[Depends(require_consultant)])
 def get_consult_tasks():
     _track_consult_request()
     qm = QueueManager()
     tasks = qm.list_all_tasks()
     return [t.model_dump() for t in tasks]
 
-@app.get("/api/consult/task/{id}")
+@app.get("/api/consult/task/{id}", dependencies=[Depends(require_consultant)])
 def get_consult_task_by_id(id: str):
     _track_consult_request()
     qm = QueueManager()
@@ -636,13 +774,13 @@ def get_consult_task_by_id(id: str):
         return _error_response(code="TASK_NOT_FOUND", message=f"Task with ID {id} not found", status_code=404)
     return task.model_dump()
 
-@app.get("/api/consult/events")
+@app.get("/api/consult/events", dependencies=[Depends(require_consultant)])
 def get_consult_events(limit: int = 100):
     _track_consult_request()
     events = EventTracker.list_events(limit=limit)
     return [e.model_dump() for e in events]
 
-@app.get("/api/consult/errata")
+@app.get("/api/consult/errata", dependencies=[Depends(require_consultant)])
 def get_consult_errata():
     _track_consult_request()
     project_root = Path(os.environ.get("JULES_PROJECT_ROOT", "."))
@@ -662,7 +800,7 @@ def get_consult_errata():
         "files": errata_files
     }
 
-@app.get("/api/consult/health")
+@app.get("/api/consult/health", dependencies=[Depends(require_consultant_or_public)])
 def get_consult_health():
     _track_consult_request()
     return {

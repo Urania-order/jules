@@ -6,7 +6,9 @@ from smos.api.main import app
 
 @pytest.fixture
 def client():
-    return TestClient(app)
+    c = TestClient(app)
+    c.headers.update({"Authorization": "Bearer dev-operator-token"})
+    return c
 
 @pytest.fixture
 def queue_dirs(tmp_path, monkeypatch):
@@ -196,7 +198,7 @@ def test_control_room_frontend_index(client):
     assert res.status_code == 200
     assert "Co-SMOS Web Control Room" in res.text
 
-def test_get_proposal_by_id(client):
+def test_get_proposal_by_id(client, queue_dirs):
     import json
     from smos.core.proposals import Proposal, ProposalManager
 
@@ -222,7 +224,7 @@ def test_get_proposal_by_id(client):
     if target_file.exists():
         target_file.unlink()
 
-def test_get_event_by_id(client):
+def test_get_event_by_id(client, queue_dirs):
     from smos.core.events import EventTracker
 
     # 404 case
@@ -241,7 +243,7 @@ def test_get_event_by_id(client):
     assert evt_data["type"] == "test_event_type"
     assert evt_data["payload"]["detail"] == "test event payload"
 
-def test_get_task_dependencies(client):
+def test_get_task_dependencies(client, queue_dirs):
     # 404 case
     res_404 = client.get("/api/tasks/nonexistent-task-999/dependencies")
     assert res_404.status_code == 404
@@ -260,7 +262,7 @@ def test_get_task_dependencies(client):
     assert dep_data["depends_on"] == []
     assert dep_data["blocks"] == []
 
-def test_get_task_replay(client):
+def test_get_task_replay(client, queue_dirs):
     from smos.core.events import EventTracker
 
     # 404 case
@@ -283,7 +285,7 @@ def test_get_task_replay(client):
     assert isinstance(replay_data["timeline"], list)
     assert len(replay_data["timeline"]) >= 1
 
-def test_post_task_retry(client):
+def test_post_task_retry(client, queue_dirs):
     # 404 case
     res_404 = client.post("/api/tasks/nonexistent-task-999/retry")
     assert res_404.status_code == 404
@@ -309,7 +311,7 @@ def test_post_task_retry(client):
     assert new_task["id"] != task_id
     assert new_task["request"] == "Task Not Retryable"
 
-def test_get_graph(client):
+def test_get_graph(client, queue_dirs):
     res_add = client.post("/api/queue", json={"request": "Graph Node Task", "priority": 7})
     task_id = res_add.json()["task"]["id"]
 
@@ -328,7 +330,7 @@ def test_get_graph(client):
     assert "priority" in node
     assert "title" in node
 
-def test_get_search(client):
+def test_get_search(client, queue_dirs):
     from smos.core.events import EventTracker
 
     # Empty query returns empty results

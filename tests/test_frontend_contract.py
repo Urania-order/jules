@@ -218,6 +218,7 @@ def test_frontend_contract_control_panel_elements():
 def test_consult_endpoints_read_only():
     """Verify backend consult endpoints exist and strictly reject state-modifying HTTP methods."""
     client = TestClient(app)
+    headers = {"Authorization": "Bearer dev-consultant-token"}
 
     consult_routes = [
         "/api/consult/state",
@@ -228,15 +229,15 @@ def test_consult_endpoints_read_only():
     ]
 
     for route in consult_routes:
-        res = client.get(route)
+        res = client.get(route, headers=headers)
         assert res.status_code == 200, f"GET {route} failed with {res.status_code}"
 
-        # Assert POST / PATCH / DELETE / PUT are not allowed or rejected (405 Method Not Allowed)
-        post_res = client.post(route, json={"test": "data"})
-        assert post_res.status_code in (405, 404), f"POST {route} did not reject with 405/404"
+        # Assert POST / PATCH / DELETE / PUT are not allowed or rejected (405 Method Not Allowed or 403 Role Forbidden)
+        post_res = client.post(route, json={"test": "data"}, headers=headers)
+        assert post_res.status_code in (405, 404, 403), f"POST {route} did not reject with 405/404/403"
 
-        patch_res = client.patch(route, json={"test": "data"})
-        assert patch_res.status_code in (405, 404), f"PATCH {route} did not reject with 405/404"
+        patch_res = client.patch(route, json={"test": "data"}, headers=headers)
+        assert patch_res.status_code in (405, 404, 403), f"PATCH {route} did not reject with 405/404/403"
 
-        delete_res = client.delete(route)
-        assert delete_res.status_code in (405, 404), f"DELETE {route} did not reject with 405/404"
+        delete_res = client.delete(route, headers=headers)
+        assert delete_res.status_code in (405, 404, 403), f"DELETE {route} did not reject with 405/404/403"
