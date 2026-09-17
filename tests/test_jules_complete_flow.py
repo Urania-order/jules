@@ -12,7 +12,8 @@ PROJECT_ROOT = Path(__file__).parent.parent
 def setup_complete_env(tmp_path, monkeypatch):
     """Sets up a mock repo environment for jules-complete.sh testing."""
     # Initialize git repo in tmp_path
-    subprocess.run(["git", "init", "-b", "main"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "init"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "checkout", "-b", "main"], cwd=tmp_path, check=True)
     subprocess.run(["git", "config", "user.name", "Test Agent"], cwd=tmp_path, check=True)
     subprocess.run(["git", "config", "user.email", "agent@example.com"], cwd=tmp_path, check=True)
 
