@@ -657,6 +657,41 @@
       background-color: var(--bg-card);
       color: var(--accent-blue);
     }
+
+    .sequence-template-card {
+      background-color: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 0.5rem;
+      padding: 1.25rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+
+    .record-indicator {
+      display: inline-block;
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background-color: var(--accent-red);
+      animation: pulse 1.5s infinite;
+    }
+
+    @keyframes pulse {
+      0% { opacity: 1; }
+      50% { opacity: 0.3; }
+      100% { opacity: 1; }
+    }
+
+    .batch-template-card {
+      background-color: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 0.5rem;
+      padding: 1rem 1.25rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
   </style>
 </head>
 <body>
@@ -683,6 +718,7 @@
       <button class="nav-btn" data-view="cycles">Cycles</button>
       <button class="nav-btn" data-view="queue">Queue</button>
       <button class="nav-btn" data-view="batch">Batch</button>
+      <button class="nav-btn" data-view="sequences">Sequences</button>
       <button class="nav-btn" data-view="templates">Templates</button>
       <button class="nav-btn" data-view="proposals">Proposals</button>
       <button class="nav-btn" data-view="events">Events</button>
@@ -895,15 +931,51 @@
           </div>
 
           <button id="batch-run" class="btn btn-primary">▶ RUN BATCH</button>
+          <button id="btn-remember-batch" class="btn btn-secondary">⭐ Remember as Batch Template</button>
         </div>
 
         <div id="batch-status" class="batch-status" style="display: none;"></div>
       </div>
 
       <div class="card">
+        <h3>Batch Templates</h3>
+        <div id="batch-templates-list" class="task-list" style="margin-top: 1rem;">
+          <div class="empty-state">No batch templates</div>
+        </div>
+      </div>
+
+      <div class="card">
         <h3>Queued Batches</h3>
         <div id="queued-batches-list" class="task-list" style="margin-top: 1rem;">
           <div class="empty-state">No queued batches</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SEQUENCE RECORDER PANEL -->
+    <section id="view-sequences" class="view">
+      <h2>Sequence Recording & Replay</h2>
+      <div class="card">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+          <h3>Recorder Control</h3>
+          <div id="recording-status-indicator" style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.85rem;">
+            <div id="record-led" class="led led-off"></div>
+            <span id="record-status-text">Idle</span>
+          </div>
+        </div>
+        <p style="margin-bottom: 1rem; color: var(--text-secondary); font-size: 0.9rem;">
+          Start recording to capture created tasks into a sequence template.
+        </p>
+        <div style="display: flex; gap: 1rem;">
+          <button id="btn-record-start" class="btn btn-primary">⏺ Start Recording</button>
+          <button id="btn-record-stop" class="btn btn-danger" disabled>⏹ Stop Recording</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Saved Sequence Templates</h3>
+        <div id="sequences-list" style="margin-top: 1rem; display: flex; flex-direction: column; gap: 0.75rem;">
+          <div class="empty-state">No saved sequences</div>
         </div>
       </div>
     </section>
@@ -1258,6 +1330,8 @@
         renderBatchTasks();
         renderQueuedBatches();
         renderSchedulerStatus();
+        renderSequences();
+        renderBatchTemplates();
         renderTemplates();
         renderProposals();
         renderEvents();
@@ -2348,6 +2422,217 @@
     const batchConcInput = document.getElementById('batch-concurrency');
     if (batchConcInput) {
       batchConcInput.max = 10;
+    }
+
+    // Sequence Recording & Replay UI
+    let isRecordingSequence = false;
+
+    const btnRecordStart = document.getElementById('btn-record-start');
+    const btnRecordStop = document.getElementById('btn-record-stop');
+
+    if (btnRecordStart) {
+      btnRecordStart.addEventListener('click', async () => {
+        try {
+          await fetchJSON(`${API_BASE}/sequences/record/start`, { method: 'POST' });
+          isRecordingSequence = true;
+          updateRecordingUI(true);
+        } catch (e) {
+          showError("Failed to start recording: " + e.message);
+        }
+      });
+    }
+
+    if (btnRecordStop) {
+      btnRecordStop.addEventListener('click', async () => {
+        const seqName = prompt("Enter sequence template name:", "Recorded Sequence");
+        try {
+          await fetchJSON(`${API_BASE}/sequences/record/stop`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: seqName || "Recorded Sequence" })
+          });
+          isRecordingSequence = false;
+          updateRecordingUI(false);
+          refreshData();
+        } catch (e) {
+          showError("Failed to stop recording: " + e.message);
+        }
+      });
+    }
+
+    function updateRecordingUI(recording) {
+      const led = document.getElementById('record-led');
+      const text = document.getElementById('record-status-text');
+      const btnStart = document.getElementById('btn-record-start');
+      const btnStop = document.getElementById('btn-record-stop');
+
+      if (recording) {
+        if (led) led.className = 'record-indicator';
+        if (text) text.textContent = 'RECORDING ACTIVE';
+        if (btnStart) btnStart.disabled = true;
+        if (btnStop) btnStop.disabled = false;
+      } else {
+        if (led) led.className = 'led led-off';
+        if (text) text.textContent = 'Idle';
+        if (btnStart) btnStart.disabled = false;
+        if (btnStop) btnStop.disabled = true;
+      }
+    }
+
+    async function renderSequences() {
+      const container = document.getElementById('sequences-list');
+      if (!container) return;
+      try {
+        const sequences = await fetchJSON(`${API_BASE}/sequences`);
+        container.innerHTML = '';
+        if (!sequences || sequences.length === 0) {
+          container.innerHTML = '<div class="empty-state">No saved sequences</div>';
+          return;
+        }
+
+        sequences.forEach(seq => {
+          const card = document.createElement('div');
+          card.className = 'sequence-template-card';
+          card.dataset.sequenceId = seq.id;
+          const taskCount = seq.tasks ? seq.tasks.length : 0;
+
+          card.innerHTML = `
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <div>
+                <div class="task-title" style="color: var(--accent-blue);">${escapeHTML(seq.name || seq.id)}</div>
+                <div class="task-meta" style="margin-top: 0.25rem;">
+                  <span>ID: ${seq.id}</span>
+                  <span>Tasks: ${taskCount}</span>
+                  <span>Created: ${new Date(seq.created_at).toLocaleTimeString()}</span>
+                </div>
+              </div>
+            </div>
+            <div style="display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center; border-top: 1px solid var(--border-color); padding-top: 0.5rem;">
+              <div class="form-group" style="width: 140px; margin-bottom: 0;">
+                <label style="font-size: 0.75rem;">Mode</label>
+                <select id="seq-mode-${seq.id}" style="padding: 0.3rem 0.5rem; font-size: 0.8rem;">
+                  <option value="sequential">Sequential</option>
+                  <option value="parallel">Parallel</option>
+                </select>
+              </div>
+              <div class="form-group" style="width: 130px; margin-bottom: 0;">
+                <label style="font-size: 0.75rem;">Schedule</label>
+                <select id="seq-sched-${seq.id}" style="padding: 0.3rem 0.5rem; font-size: 0.8rem;">
+                  <option value="now">Now</option>
+                  <option value="night">Night</option>
+                </select>
+              </div>
+              <div class="form-group" style="width: 100px; margin-bottom: 0;">
+                <label style="font-size: 0.75rem;">Concurrency</label>
+                <input type="number" id="seq-conc-${seq.id}" min="1" max="10" value="3" style="padding: 0.3rem 0.5rem; font-size: 0.8rem;">
+              </div>
+              <button id="btn-replay-sequence-${seq.id}" class="btn btn-primary btn-sm" style="align-self: flex-end; margin-left: auto;" onclick="replaySequence('${seq.id}')">▶ Replay Sequence</button>
+            </div>
+          `;
+          container.appendChild(card);
+        });
+      } catch (e) {
+        container.innerHTML = '<div class="empty-state">Failed to load sequences</div>';
+      }
+    }
+
+    async function replaySequence(seqId) {
+      const mode = document.getElementById(`seq-mode-${seqId}`)?.value || 'sequential';
+      const schedule = document.getElementById(`seq-sched-${seqId}`)?.value || 'now';
+      const concurrency = parseInt(document.getElementById(`seq-conc-${seqId}`)?.value || '3', 10);
+
+      try {
+        const res = await fetchJSON(`${API_BASE}/sequences/${seqId}/replay`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ mode, schedule, concurrency })
+        });
+        alert(`Sequence replayed successfully! Created ${res.created_tasks ? res.created_tasks.length : 0} task(s). Batch ID: ${res.batch_id || 'N/A'}`);
+        refreshData();
+      } catch (e) {
+        showError('Failed to replay sequence: ' + e.message);
+      }
+    }
+
+    // Batch Template Remember & Render
+    const btnRememberBatch = document.getElementById('btn-remember-batch');
+    if (btnRememberBatch) {
+      btnRememberBatch.addEventListener('click', async () => {
+        const selectedCheckboxes = [...document.querySelectorAll('.batch-select:checked')];
+        if (selectedCheckboxes.length === 0) {
+          showError("Select at least one task to remember as batch template.");
+          return;
+        }
+
+        const taskIds = selectedCheckboxes.map(cb => cb.dataset.taskId);
+        const tplName = prompt("Enter Batch Template name:", "Batch Template " + new Date().toLocaleTimeString());
+        if (!tplName) return;
+
+        const schedule = document.getElementById('batch-schedule').value;
+        const limit = parseInt(document.getElementById('batch-concurrency').value, 10) || 3;
+
+        try {
+          await fetchJSON(`${API_BASE}/batch/remember`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              name: tplName,
+              task_ids: taskIds,
+              concurrency: limit,
+              schedule: schedule
+            })
+          });
+          refreshData();
+        } catch (e) {
+          showError("Failed to remember batch template: " + e.message);
+        }
+      });
+    }
+
+    async function renderBatchTemplates() {
+      const container = document.getElementById('batch-templates-list');
+      if (!container) return;
+      try {
+        const templates = await fetchJSON(`${API_BASE}/batch/templates`);
+        container.innerHTML = '';
+        if (!templates || templates.length === 0) {
+          container.innerHTML = '<div class="empty-state">No batch templates</div>';
+          return;
+        }
+
+        templates.forEach(btpl => {
+          const card = document.createElement('div');
+          card.className = 'batch-template-card';
+          card.dataset.batchTemplateId = btpl.id;
+          const taskCount = btpl.tasks ? btpl.tasks.length : (btpl.task_ids ? btpl.task_ids.length : 0);
+
+          card.innerHTML = `
+            <div class="task-info">
+              <div class="task-title" style="color: var(--accent-blue);">${escapeHTML(btpl.name || btpl.id)}</div>
+              <div class="task-meta">
+                <span>ID: ${btpl.id}</span>
+                <span>Tasks: ${taskCount}</span>
+                <span>Schedule: ${escapeHTML(btpl.schedule || 'now')}</span>
+                <span>Concurrency: ${btpl.concurrency || 3}</span>
+              </div>
+            </div>
+            <button class="btn btn-primary btn-sm" onclick="replayBatchTemplate('${btpl.id}')">▶ Replay Batch Template</button>
+          `;
+          container.appendChild(card);
+        });
+      } catch (e) {
+        container.innerHTML = '<div class="empty-state">Failed to load batch templates</div>';
+      }
+    }
+
+    async function replayBatchTemplate(id) {
+      try {
+        const res = await fetchJSON(`${API_BASE}/batch/templates/${id}/replay`, { method: 'POST' });
+        alert(`Batch template replayed! Created ${res.created_tasks ? res.created_tasks.length : 0} tasks. Batch ID: ${res.batch_id || 'N/A'}`);
+        refreshData();
+      } catch (e) {
+        showError("Failed to replay batch template: " + e.message);
+      }
     }
 
     // Auto-refresh every 5 seconds

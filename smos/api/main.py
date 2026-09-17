@@ -45,6 +45,8 @@ from smos.core.batch import BatchManager, Batch
 from smos.core.scheduler import Scheduler
 from smos.core.queue_reset import QueueResetManager
 from smos.core.templates import TemplateManager
+from smos.core.sequences import SequenceManager
+from smos.core.batch import BatchManager, Batch, BatchTemplateManager
 from smos.adapters.jules_cli import JulesCLIAdapter
 from smos.core.consult import consult_settings_manager, consult_audit_logger
 
@@ -375,6 +377,20 @@ class ConsultSettingsPatchRequest(BaseModel):
     endpoints: Optional[Dict[str, bool]] = None
     tokens: Optional[Dict[str, Dict[str, Any]]] = None
 
+class SequenceRecordStopRequest(BaseModel):
+    name: Optional[str] = None
+
+class SequenceReplayRequest(BaseModel):
+    mode: str = "sequential"
+    schedule: str = "now"
+    concurrency: int = 3
+
+class BatchRememberRequest(BaseModel):
+    name: str
+    task_ids: List[str]
+    concurrency: int = 3
+    schedule: str = "now"
+
 @app.get("/")
 def read_root():
     index_file = Path("frontend/index.html")
@@ -419,6 +435,9 @@ def add_task_to_queue(req: CreateTaskRequest):
         if tasks:
             tasks.sort(key=lambda x: x.created_at, reverse=True)
             latest_task = tasks[0]
+    if latest_task:
+        seq_mgr = SequenceManager()
+        seq_mgr.record_task_if_active(latest_task)
     EventTracker.emit("task_created", task_id=latest_task.id if latest_task else None, payload={"request": req.request})
     return {"status": "success", "cli_output": res["stdout"], "task": latest_task.model_dump() if latest_task else None}
 
@@ -637,6 +656,52 @@ def modify_proposal(id: str, req: ModifyProposalRequest):
     EventTracker.emit("proposal_modified", payload={"proposal_id": id})
     return {"status": "success", "proposal": prop.model_dump()}
 
+# --- SEQUENCE ENDPOINTS ---
+
+@app.post("/api/sequences/record/start", dependencies=[Depends(require_operator)])
+def start_sequence_record():
+    sm = SequenceManager()
+    res = sm.start_recording()
+    EventTracker.emit("sequence_recording_started")
+    return res
+
+@app.post("/api/sequences/record/stop", dependencies=[Depends(require_operator)])
+def stop_sequence_record(req: Optional[SequenceRecordStopRequest] = None):
+    sm = SequenceManager()
+    name = req.name if req else None
+    res = sm.stop_recording(name=name)
+    EventTracker.emit("sequence_recording_stopped", payload={"sequence_id": res["sequence_id"]})
+    return res
+
+@app.get("/api/sequences")
+def list_sequences():
+    sm = SequenceManager()
+    seqs = sm.list_sequences()
+    return [s.model_dump() for s in seqs]
+
+@app.get("/api/sequences/{id}")
+def get_sequence_by_id(id: str):
+    sm = SequenceManager()
+    seq = sm.get_sequence(id)
+    if not seq:
+        return _error_response(code="SEQUENCE_NOT_FOUND", message=f"Sequence {id} not found", status_code=404)
+    return seq.model_dump()
+
+@app.post("/api/sequences/{id}/replay", dependencies=[Depends(require_operator)])
+def replay_sequence(id: str, req: SequenceReplayRequest):
+    sm = SequenceManager()
+    try:
+        res = sm.replay_sequence(
+            sequence_id=id,
+            mode=req.mode,
+            schedule=req.schedule,
+            concurrency=req.concurrency
+        )
+        EventTracker.emit("sequence_replayed", payload={"sequence_id": id, "batch_id": res.get("batch_id")})
+        return res
+    except ValueError as e:
+        return _error_response(code="SEQUENCE_NOT_FOUND", message=str(e), status_code=404)
+
 # --- BATCH ENDPOINTS ---
 
 @app.post("/api/batch/run", dependencies=[Depends(require_operator)])
@@ -716,6 +781,44 @@ def list_recent_batches(limit: int = 50):
     bm = BatchManager()
     batches = bm.list_batches(limit=limit)
     return [b.model_dump() for b in batches]
+
+# --- BATCH TEMPLATE ENDPOINTS ---
+
+@app.post("/api/batch/remember", dependencies=[Depends(require_operator)])
+def remember_batch_template(req: BatchRememberRequest):
+    btm = BatchTemplateManager()
+    tpl = btm.create_batch_template(
+        name=req.name,
+        task_ids=req.task_ids,
+        concurrency=req.concurrency,
+        schedule=req.schedule
+    )
+    EventTracker.emit("batch_template_created", payload={"template_id": tpl.id, "name": req.name})
+    return tpl.model_dump()
+
+@app.get("/api/batch/templates")
+def list_batch_templates():
+    btm = BatchTemplateManager()
+    templates = btm.list_templates()
+    return [t.model_dump() for t in templates]
+
+@app.get("/api/batch/templates/{id}")
+def get_batch_template_by_id(id: str):
+    btm = BatchTemplateManager()
+    tpl = btm.get_template(id)
+    if not tpl:
+        return _error_response(code="BATCH_TEMPLATE_NOT_FOUND", message=f"Batch template {id} not found", status_code=404)
+    return tpl.model_dump()
+
+@app.post("/api/batch/templates/{id}/replay", dependencies=[Depends(require_operator)])
+def replay_batch_template(id: str):
+    btm = BatchTemplateManager()
+    try:
+        res = btm.replay_template(template_id=id)
+        EventTracker.emit("batch_template_replayed", payload={"template_id": id, "batch_id": res.get("batch_id")})
+        return res
+    except ValueError as e:
+        return _error_response(code="BATCH_TEMPLATE_NOT_FOUND", message=str(e), status_code=404)
 
 @app.get("/api/batch/{id}")
 def get_batch_by_id(id: str):

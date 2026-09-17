@@ -118,6 +118,9 @@ def test_frontend_contract_css_classes():
         ".consult-settings",
         ".consult-audit-row",
         ".token-status",
+        ".sequence-template-card",
+        ".record-indicator",
+        ".batch-template-card",
     ]
 
     for cls in required_classes:
@@ -274,6 +277,23 @@ def test_frontend_contract_consult_tuning_elements():
 
     # Audit elements
     assert 'id="consult-audit-list"' in content
+
+
+def test_frontend_contract_sequence_and_batch_template_elements():
+    """Verify Sequence recording/replay and Batch template frontend contract elements."""
+    content = INDEX_PATH.read_text()
+
+    # Sequence recorder & replay
+    assert 'id="view-sequences"' in content
+    assert 'data-view="sequences"' in content
+    assert 'id="btn-record-start"' in content
+    assert 'id="btn-record-stop"' in content
+    assert 'sequence-template-card' in content or 'sequence_template_card' in content
+
+    # Batch template
+    assert 'id="btn-remember-batch"' in content
+    assert 'id="batch-templates-list"' in content
+    assert 'batch-template-card' in content or 'batch_template_card' in content
 
 
 def test_consult_endpoints_read_only():
