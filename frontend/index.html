@@ -349,6 +349,25 @@
       gap: 0.75rem;
     }
 
+    .queue-column-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid var(--border-color);
+      padding-bottom: 0.5rem;
+      margin-bottom: 0.25rem;
+    }
+
+    .queue-column-header h3 {
+      font-size: 0.95rem;
+      color: var(--accent-blue);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin: 0;
+      border: none;
+      padding: 0;
+    }
+
     .queue-column h3 {
       font-size: 0.95rem;
       color: var(--accent-blue);
@@ -357,6 +376,27 @@
       margin-bottom: 0.25rem;
       text-transform: uppercase;
       letter-spacing: 0.05em;
+    }
+
+    .queue-reset-btn {
+      font-size: 0.7rem;
+      padding: 0.15rem 0.4rem;
+      border-radius: 0.25rem;
+      border: 1px solid var(--border-color);
+      background-color: transparent;
+      color: var(--text-secondary);
+      cursor: pointer;
+    }
+
+    .queue-reset-btn:hover {
+      background-color: rgba(248, 113, 113, 0.15);
+      color: var(--accent-red);
+      border-color: var(--accent-red);
+    }
+
+    .queue-reset-btn-danger {
+      color: var(--accent-red);
+      border-color: var(--accent-red);
     }
 
     .modal-overlay {
@@ -870,25 +910,43 @@
       <p style="margin-bottom: 1rem; color: var(--text-secondary); font-size: 0.9rem;">
         Drag and drop READY tasks to reorder position. Right-click card to edit task or remember as template. Hover + Ctrl to preview WHY.
       </p>
+      <div style="margin-bottom: 0.75rem;">
+        <button class="queue-reset-btn queue-reset-btn-danger" id="btn-reset-all" onclick="openResetModal('all')">⚠ RESET ALL QUEUES</button>
+      </div>
       <div class="queue-columns">
         <div class="queue-column" id="col-ready">
-          <h3>READY</h3>
+          <div class="queue-column-header">
+            <h3>READY</h3>
+            <button class="queue-reset-btn" id="btn-reset-ready" onclick="openResetModal('ready')">Reset</button>
+          </div>
           <div id="queue-list-ready" class="task-list"></div>
         </div>
         <div class="queue-column" id="col-running">
-          <h3>RUNNING</h3>
+          <div class="queue-column-header">
+            <h3>RUNNING</h3>
+            <button class="queue-reset-btn" id="btn-reset-running" onclick="openResetModal('running')">Reset</button>
+          </div>
           <div id="queue-list-running" class="task-list"></div>
         </div>
         <div class="queue-column" id="col-review">
-          <h3>REVIEW</h3>
+          <div class="queue-column-header">
+            <h3>REVIEW</h3>
+            <button class="queue-reset-btn" id="btn-reset-review" onclick="openResetModal('review')">Reset</button>
+          </div>
           <div id="queue-list-review" class="task-list"></div>
         </div>
         <div class="queue-column" id="col-blocked">
-          <h3>BLOCKED</h3>
+          <div class="queue-column-header">
+            <h3>BLOCKED</h3>
+            <button class="queue-reset-btn" id="btn-reset-blocked" onclick="openResetModal('blocked')">Reset</button>
+          </div>
           <div id="queue-list-blocked" class="task-list"></div>
         </div>
         <div class="queue-column" id="col-completed">
-          <h3>COMPLETED</h3>
+          <div class="queue-column-header">
+            <h3>COMPLETED</h3>
+            <button class="queue-reset-btn" id="btn-reset-completed" onclick="openResetModal('completed')">Reset</button>
+          </div>
           <div id="queue-list-completed" class="task-list"></div>
         </div>
       </div>
@@ -1102,22 +1160,26 @@
       </div>
     </section>
 
-    <!-- RESET ALL QUEUES MODAL -->
-    <div class="modal-overlay" id="reset-modal-overlay" style="display: none;">
+    <!-- RESET QUEUES MODAL -->
+    <div class="modal-overlay" id="queue-reset-modal" style="display: none;">
       <div class="modal">
-        <h3>Reset All Queues</h3>
+        <h3 id="reset-modal-title">Reset Queue</h3>
         <div class="reset-confirm" style="margin-top: 1rem;">
-          <strong>WARNING:</strong> This action will clear all queued, running, and completed tasks across all queues.
+          <strong>WARNING:</strong> This action will clear tasks in scope: <span id="reset-scope-display">all</span>.
         </div>
         <p style="font-size: 0.9rem; margin-bottom: 1rem; color: var(--text-secondary);">
           Type <strong>RESET</strong> to confirm queue reset:
         </p>
-        <input type="text" id="reset-confirm-input" placeholder="Type RESET to confirm" style="width: 100%;">
+        <input type="text" id="queue-reset-confirm-input" placeholder="Type RESET to confirm" style="width: 100%;">
         <div class="modal-actions">
           <button type="button" class="btn btn-secondary" onclick="closeResetModal()">Cancel</button>
           <button type="button" class="btn btn-danger" id="btn-confirm-reset" onclick="submitQueueReset()">Confirm Reset</button>
         </div>
       </div>
+    </div>
+    <!-- Hidden sync compatibility overlay ID -->
+    <div id="reset-modal-overlay" style="display: none;">
+      <input type="text" id="reset-confirm-input" style="display:none;">
     </div>
 
     <!-- REMEMBER TASK MODAL -->
@@ -1357,29 +1419,54 @@
     });
 
     // Reset Queues Button & Modal Logic
+    let currentResetTargetScope = 'all';
+
+    function openResetModal(scope = 'all') {
+      currentResetTargetScope = scope;
+      const confirmInput = document.getElementById('queue-reset-confirm-input');
+      if (confirmInput) confirmInput.value = '';
+      const legacyInput = document.getElementById('reset-confirm-input');
+      if (legacyInput) legacyInput.value = '';
+
+      const scopeDisplay = document.getElementById('reset-scope-display');
+      if (scopeDisplay) scopeDisplay.textContent = scope.toUpperCase();
+
+      const modalTitle = document.getElementById('reset-modal-title');
+      if (modalTitle) modalTitle.textContent = scope === 'all' ? 'Reset All Queues' : `Reset Column (${scope.toUpperCase()})`;
+
+      const modal = document.getElementById('queue-reset-modal');
+      if (modal) modal.style.display = 'flex';
+    }
+
     const btnResetQueues = document.getElementById('btn-reset-queues');
     if (btnResetQueues) {
-      btnResetQueues.addEventListener('click', () => {
-        document.getElementById('reset-confirm-input').value = '';
-        document.getElementById('reset-modal-overlay').style.display = 'flex';
-      });
+      btnResetQueues.addEventListener('click', () => openResetModal('all'));
     }
 
     function closeResetModal() {
-      document.getElementById('reset-modal-overlay').style.display = 'none';
+      const modal = document.getElementById('queue-reset-modal');
+      if (modal) modal.style.display = 'none';
+      const legacyModal = document.getElementById('reset-modal-overlay');
+      if (legacyModal) legacyModal.style.display = 'none';
     }
 
     async function submitQueueReset() {
-      const confirmVal = document.getElementById('reset-confirm-input').value.trim();
+      const confirmInput = document.getElementById('queue-reset-confirm-input');
+      const confirmVal = confirmInput ? confirmInput.value.trim() : '';
       if (confirmVal !== 'RESET') {
         showError('You must type RESET to confirm queue reset.');
         return;
       }
       try {
-        await fetchJSON(`${API_BASE}/queue/reset`, {
+        const endpoint = currentResetTargetScope === 'all' ? `${API_BASE}/queue/reset` : `${API_BASE}/queue/reset-column`;
+        const payload = currentResetTargetScope === 'all'
+          ? { confirm: 'RESET', scope: 'all' }
+          : { confirm: 'RESET', column: currentResetTargetScope };
+
+        await fetchJSON(endpoint, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ confirm: 'RESET', scope: 'all' })
+          body: JSON.stringify(payload)
         });
         closeResetModal();
         refreshData();

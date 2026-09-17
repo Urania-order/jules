@@ -121,6 +121,9 @@ def test_frontend_contract_css_classes():
         ".sequence-template-card",
         ".record-indicator",
         ".batch-template-card",
+        ".queue-column-header",
+        ".queue-reset-btn",
+        ".queue-reset-btn-danger",
     ]
 
     for cls in required_classes:
@@ -229,9 +232,16 @@ def test_frontend_contract_v1_1_elements():
     """Verify v1.1 Frontend Contract elements: Reset Queues button, Extended Task Edit modal, Remember Task modal, and Templates UI."""
     content = INDEX_PATH.read_text()
 
-    # 1. Reset Queues Button & Modal
+    # 1. Reset Queues Button, Per-Column Reset Buttons & Modal
     assert 'id="btn-reset-queues"' in content
-    assert 'id="reset-confirm-input"' in content or 'RESET' in content
+    assert 'id="btn-reset-ready"' in content
+    assert 'id="btn-reset-running"' in content
+    assert 'id="btn-reset-review"' in content
+    assert 'id="btn-reset-blocked"' in content
+    assert 'id="btn-reset-completed"' in content
+    assert 'id="btn-reset-all"' in content
+    assert 'id="queue-reset-modal"' in content
+    assert 'id="queue-reset-confirm-input"' in content
 
     # 2. Extended Task Edit Modal Fields
     assert 'id="task-edit-request"' in content

@@ -333,6 +333,10 @@ class QueueResetRequest(BaseModel):
     confirm: str
     scope: str = "all"
 
+class QueueResetColumnRequest(BaseModel):
+    column: str
+    confirm: str
+
 class RememberTaskRequest(BaseModel):
     name: str
 
@@ -477,6 +481,22 @@ def reset_queue_endpoint(req: QueueResetRequest):
     try:
         res = qrm.reset_queue(scope=req.scope)
         EventTracker.emit("queue_reset", payload={"scope": req.scope, "cleared": res["cleared"]})
+        return res
+    except ValueError as e:
+        return _error_response(code="INVALID_SCOPE", message=str(e), status_code=400)
+
+@app.post("/api/queue/reset-column", dependencies=[Depends(require_operator)])
+def reset_queue_column_endpoint(req: QueueResetColumnRequest):
+    if req.confirm != "RESET":
+        return _error_response(
+            code="INVALID_CONFIRMATION",
+            message="Column reset requires confirmation string 'RESET'",
+            status_code=400
+        )
+    qrm = QueueResetManager()
+    try:
+        res = qrm.reset_queue(scope=req.column)
+        EventTracker.emit("queue_column_reset", payload={"column": req.column, "cleared": res["cleared"]})
         return res
     except ValueError as e:
         return _error_response(code="INVALID_SCOPE", message=str(e), status_code=400)
