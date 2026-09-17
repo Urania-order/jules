@@ -953,6 +953,7 @@
           <button class="reset-tab" id="tab-archive" data-tab="archive" onclick="switchResetTab('archive')">Archive</button>
           <button class="reset-tab" id="tab-undo" data-tab="undo" onclick="switchResetTab('undo')">Undo</button>
           <button class="reset-tab" id="tab-scheduled" data-tab="scheduled" onclick="switchResetTab('scheduled')">Scheduled</button>
+          <button class="reset-tab" id="tab-audit" data-tab="audit" onclick="switchResetTab('audit')">Audit</button>
         </div>
 
         <!-- COLUMNS TAB -->
@@ -1068,6 +1069,33 @@
           </div>
           <div id="schedules-list" style="display: flex; flex-direction: column; gap: 1rem;">
             <!-- Schedule cards rendered here -->
+          </div>
+        </div>
+
+        <!-- AUDIT TAB -->
+        <div id="reset-center-tab-audit" class="reset-tab-content" style="display: none;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+            <p style="color: var(--text-secondary); font-size: 0.9rem; margin: 0;">
+              Append-only audit log of queue resets, restorations, and scheduled operations.
+            </p>
+            <button class="btn btn-secondary" id="btn-refresh-audit" onclick="renderResetAuditList()">⟳ Refresh Audit</button>
+          </div>
+          <div style="overflow-x: auto;">
+            <table class="archive-list" id="audit-list">
+              <thead>
+                <tr style="border-bottom: 1px solid var(--border-color); text-align: left; color: var(--accent-blue);">
+                  <th style="padding: 0.5rem;">Timestamp</th>
+                  <th style="padding: 0.5rem;">Action</th>
+                  <th style="padding: 0.5rem;">Scope</th>
+                  <th style="padding: 0.5rem;">Moved</th>
+                  <th style="padding: 0.5rem;">Restored</th>
+                  <th style="padding: 0.5rem;">By</th>
+                </tr>
+              </thead>
+              <tbody id="audit-list-body">
+                <!-- Audit rows rendered here -->
+              </tbody>
+            </table>
           </div>
         </div>
 
@@ -3025,6 +3053,8 @@
         updateUndoFilterCount();
       } else if (tabName === 'scheduled') {
         renderSchedulesList();
+      } else if (tabName === 'audit') {
+        renderResetAuditList();
       }
     }
 
@@ -3037,6 +3067,38 @@
         await updateUndoFilterCount();
       } else if (tabName === 'scheduled') {
         await renderSchedulesList();
+      } else if (tabName === 'audit') {
+        await renderResetAuditList();
+      }
+    }
+
+    async function renderResetAuditList() {
+      const tbody = document.getElementById('audit-list-body');
+      if (!tbody) return;
+      try {
+        const data = await fetchJSON(`${API_BASE}/queue/reset/audit?limit=50`);
+        const entries = data.entries || [];
+        tbody.innerHTML = '';
+        if (entries.length === 0) {
+          tbody.innerHTML = '<tr class="audit-row"><td colspan="6" class="empty-state">No audit entries yet</td></tr>';
+          return;
+        }
+
+        entries.forEach(entry => {
+          const tr = document.createElement('tr');
+          tr.className = 'archive-row audit-row';
+          tr.innerHTML = `
+            <td style="padding: 0.5rem; font-family: monospace;">${entry.timestamp ? new Date(entry.timestamp).toLocaleString() : 'N/A'}</td>
+            <td style="padding: 0.5rem; font-weight: bold; color: var(--accent-blue);">${escapeHTML(entry.action || '')}</td>
+            <td style="padding: 0.5rem;">${escapeHTML(entry.scope || '-')}</td>
+            <td style="padding: 0.5rem;">${entry.moved ?? 0}</td>
+            <td style="padding: 0.5rem;">${entry.restored ?? 0}</td>
+            <td style="padding: 0.5rem;">${escapeHTML(entry.by || 'operator')}</td>
+          `;
+          tbody.appendChild(tr);
+        });
+      } catch (e) {
+        tbody.innerHTML = '<tr class="audit-row"><td colspan="6" class="empty-state">Failed to load audit entries</td></tr>';
       }
     }
 

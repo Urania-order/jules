@@ -7,8 +7,86 @@ from pathlib import Path
 from typing import Dict, Any, Optional, List
 from datetime import datetime, timezone
 
+import logging
+
 from smos.core.queue import QueueManager
 from smos.core.task import TaskStatus
+
+logger = logging.getLogger(__name__)
+
+
+def write_audit_entry(
+    action: str,
+    scope: Optional[str] = None,
+    moved: int = 0,
+    restored: int = 0,
+    by: str = "operator",
+    schedule_id: Optional[str] = None,
+    archive_file: Optional[str] = None,
+    timestamp: Optional[str] = None,
+    project_root: Optional[Path] = None
+) -> None:
+    """
+    Appends one JSON line to .jules/history/reset_audit.jsonl.
+    Never raises exceptions (logs warning on failure).
+    """
+    try:
+        if project_root is None:
+            project_root = Path(os.environ.get("JULES_PROJECT_ROOT", "."))
+        history_dir = Path(project_root) / ".jules" / "history"
+        history_dir.mkdir(parents=True, exist_ok=True)
+        audit_file = history_dir / "reset_audit.jsonl"
+
+        entry = {
+            "timestamp": timestamp or datetime.now(timezone.utc).isoformat(),
+            "action": action,
+            "scope": scope,
+            "moved": int(moved),
+            "restored": int(restored),
+            "by": str(by or "operator"),
+            "schedule_id": schedule_id,
+            "archive_file": str(archive_file) if archive_file is not None else None
+        }
+
+        line = json.dumps(entry, ensure_ascii=False) + "\n"
+        with audit_file.open("a", encoding="utf-8") as f:
+            f.write(line)
+    except Exception as e:
+        logger.warning("Failed to write reset audit entry: %s", e)
+
+
+def get_audit_entries(limit: int = 50, project_root: Optional[Path] = None) -> List[Dict[str, Any]]:
+    """
+    Reads .jules/history/reset_audit.jsonl and returns entries sorted by timestamp DESC.
+    Limits output to `limit` (max 500, default 50).
+    Handles missing file gracefully by returning empty list.
+    """
+    if project_root is None:
+        project_root = Path(os.environ.get("JULES_PROJECT_ROOT", "."))
+    audit_file = Path(project_root) / ".jules" / "history" / "reset_audit.jsonl"
+
+    if not audit_file.exists():
+        return []
+
+    entries = []
+    try:
+        lines = audit_file.read_text(encoding="utf-8").splitlines()
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                rec = json.loads(line)
+                entries.append(rec)
+            except Exception:
+                pass
+    except Exception as e:
+        logger.warning("Failed to read reset audit file: %s", e)
+        return []
+
+    entries.sort(key=lambda x: str(x.get("timestamp", "")), reverse=True)
+    clamped_limit = min(max(1, limit), 500)
+    return entries[:clamped_limit]
 
 
 def parse_cron_part(part: str, min_val: int, max_val: int) -> set:
@@ -799,8 +877,10 @@ class ResetScheduleManager:
                     "timestamp": now_iso,
                     "action": "scheduled_reset",
                     "scope": scope,
-                    "schedule_id": sched["id"],
                     "moved": res.get("moved", 0),
+                    "restored": 0,
+                    "by": "system",
+                    "schedule_id": sched["id"],
                     "archive_file": res.get("archive", "")
                 }
                 self.log_audit_entry(audit_entry)

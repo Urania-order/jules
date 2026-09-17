@@ -586,3 +586,142 @@ def test_schedule_audit(queue_env):
     assert entry["schedule_id"] == sched["id"]
     assert entry["moved"] == 1
     assert "reset-" in entry["archive_file"]
+
+
+def test_audit_log_written_on_reset(queue_env):
+    qm, tmp_path = queue_env
+    task = Task(id="task-audit-reset", request="Task to reset and audit", status=TaskStatus.READY)
+    qm.save_task(task)
+
+    res = client.post("/api/queue/reset-column", json={"confirm": "RESET", "column": "ready"}, headers=AUTH_HEADERS)
+    assert res.status_code == 200
+
+    audit_file = tmp_path / ".jules" / "history" / "reset_audit.jsonl"
+    assert audit_file.exists()
+
+    lines = [json.loads(line) for line in audit_file.read_text().strip().split("\n") if line]
+    assert len(lines) == 1
+    entry = lines[0]
+    assert entry["action"] == "reset-column"
+    assert entry["scope"] == "ready"
+    assert entry["moved"] == 1
+    assert entry["restored"] == 0
+    assert entry["by"] == "operator"
+    assert entry["schedule_id"] is None
+    assert "reset-" in entry["archive_file"]
+
+
+def test_audit_log_written_on_undo(queue_env):
+    qm, tmp_path = queue_env
+    task = Task(id="task-audit-undo", request="Task to reset then undo", status=TaskStatus.READY)
+    qm.save_task(task)
+
+    # 1. Reset
+    reset_res = client.post("/api/queue/reset", json={"confirm": "RESET", "scope": "ready"}, headers=AUTH_HEADERS)
+    assert reset_res.status_code == 200
+
+    # Get archive entry archive_id
+    arch_res = client.get("/api/queue/archive", headers=AUTH_HEADERS)
+    entries = arch_res.json()["entries"]
+    assert len(entries) == 1
+    aid = entries[0]["archive_id"]
+
+    # 2. Undo selected
+    undo_res = client.post("/api/queue/archive/undo", json={"archive_ids": [aid], "confirm": "UNDO"}, headers=AUTH_HEADERS)
+    assert undo_res.status_code == 200
+
+    audit_file = tmp_path / ".jules" / "history" / "reset_audit.jsonl"
+    lines = [json.loads(line) for line in audit_file.read_text().strip().split("\n") if line]
+    assert len(lines) == 2
+    undo_entry = lines[1]
+    assert undo_entry["action"] == "undo-selected"
+    assert undo_entry["restored"] == 1
+    assert undo_entry["by"] == "operator"
+
+    # 3. Undo filter
+    undo_flt_res = client.post("/api/queue/archive/undo-filter", json={"search": "nonexistent", "confirm": "UNDO"}, headers=AUTH_HEADERS)
+    assert undo_flt_res.status_code == 200
+
+    lines = [json.loads(line) for line in audit_file.read_text().strip().split("\n") if line]
+    assert len(lines) == 3
+    undo_flt_entry = lines[2]
+    assert undo_flt_entry["action"] == "undo-filter"
+    assert undo_flt_entry["restored"] == 0
+
+
+def test_audit_log_written_on_scheduled(queue_env):
+    from smos.core.queue_reset import ResetScheduleManager
+    from datetime import datetime, timezone
+
+    qm, tmp_path = queue_env
+    task = Task(id="task-sched-audit", request="Scheduled audit task", status=TaskStatus.COMPLETED)
+    qm.save_task(task)
+
+    rsm = ResetScheduleManager()
+    sched = rsm.create_schedule(name="Audit Schedule", cron="* * * * *", scope="completed")
+
+    dt = datetime(2026, 9, 18, 12, 0, tzinfo=timezone.utc)
+    rsm.check_and_run_due_schedules(now=dt)
+
+    audit_file = tmp_path / ".jules" / "history" / "reset_audit.jsonl"
+    lines = [json.loads(line) for line in audit_file.read_text().strip().split("\n") if line]
+    assert len(lines) == 1
+    entry = lines[0]
+    assert entry["action"] == "scheduled_reset"
+    assert entry["schedule_id"] == sched["id"]
+    assert entry["moved"] == 1
+
+
+def test_audit_endpoint_returns_entries(queue_env):
+    from smos.core.queue_reset import write_audit_entry
+
+    write_audit_entry(
+        action="reset-column",
+        scope="all",
+        moved=5,
+        restored=0,
+        by="admin",
+        schedule_id=None,
+        archive_file=".jules/queue/reset-20260918-120000.jsonl",
+        timestamp="2026-09-18T12:00:00+00:00"
+    )
+
+    res = client.get("/api/queue/reset/audit", headers=AUTH_HEADERS)
+    assert res.status_code == 200
+    data = res.json()
+    assert "entries" in data
+    assert len(data["entries"]) == 1
+    assert data["entries"][0]["action"] == "reset-column"
+    assert data["entries"][0]["moved"] == 5
+    assert data["entries"][0]["by"] == "admin"
+
+
+def test_audit_endpoint_limit(queue_env):
+    from smos.core.queue_reset import write_audit_entry
+
+    for i in range(10):
+        write_audit_entry(
+            action="reset-column",
+            scope="ready",
+            moved=i,
+            timestamp=f"2026-09-18T12:00:{i:02d}+00:00"
+        )
+
+    res = client.get("/api/queue/reset/audit?limit=3", headers=AUTH_HEADERS)
+    assert res.status_code == 200
+    entries = res.json()["entries"]
+    assert len(entries) == 3
+    # Sorted DESC by timestamp
+    assert entries[0]["timestamp"] == "2026-09-18T12:00:09+00:00"
+
+
+def test_audit_endpoint_empty_ok(queue_env):
+    res = client.get("/api/queue/reset/audit", headers=AUTH_HEADERS)
+    assert res.status_code == 200
+    assert res.json() == {"entries": []}
+
+
+def test_audit_requires_operator(queue_env):
+    consultant_headers = {"Authorization": "Bearer dev-consultant-token"}
+    res = client.get("/api/queue/reset/audit", headers=consultant_headers)
+    assert res.status_code == 403

@@ -409,3 +409,11 @@ def test_frontend_contract_reset_center_elements():
     assert 'id="tab-scheduled"' in content
     assert 'id="btn-add-schedule"' in content
     assert 'id="schedules-list"' in content
+
+    # Audit tab & table elements
+    assert 'id="tab-audit"' in content
+    assert 'data-tab="audit"' in content
+    assert 'id="reset-center-tab-audit"' in content
+    assert 'id="audit-list"' in content
+    assert 'audit-row' in content
+    assert 'id="btn-refresh-audit"' in content

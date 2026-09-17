@@ -43,7 +43,7 @@ from smos.core.events import EventTracker
 from smos.core.task import Task, TaskStatus
 from smos.core.batch import BatchManager, Batch
 from smos.core.scheduler import Scheduler
-from smos.core.queue_reset import QueueResetManager, ResetScheduleManager
+from smos.core.queue_reset import QueueResetManager, ResetScheduleManager, write_audit_entry, get_audit_entries
 from smos.core.templates import TemplateManager
 from smos.core.sequences import SequenceManager
 from smos.core.batch import BatchManager, Batch, BatchTemplateManager
@@ -497,7 +497,7 @@ def reorder_queue(req: ReorderQueueRequest):
     return {"status": "success", "reordered_tasks": [t.model_dump() for t in reordered]}
 
 @app.post("/api/queue/reset", dependencies=[Depends(require_operator)])
-def reset_queue_endpoint(req: QueueResetRequest):
+def reset_queue_endpoint(req: QueueResetRequest, role: str = Depends(require_operator)):
     if req.confirm != "RESET":
         return _error_response(
             code="INVALID_CONFIRMATION",
@@ -508,9 +508,24 @@ def reset_queue_endpoint(req: QueueResetRequest):
     try:
         res = qrm.reset_queue(scope=req.scope)
         EventTracker.emit("queue_reset", payload={"scope": req.scope, "cleared": res["cleared"]})
+        write_audit_entry(
+            action="reset-column",
+            scope=req.scope,
+            moved=res.get("moved", 0),
+            restored=0,
+            by=role,
+            schedule_id=None,
+            archive_file=res.get("archive")
+        )
         return res
     except ValueError as e:
         return _error_response(code="INVALID_SCOPE", message=str(e), status_code=400)
+
+
+@app.get("/api/queue/reset/audit", dependencies=[Depends(require_operator)])
+def get_queue_reset_audit(limit: int = 50):
+    entries = get_audit_entries(limit=limit)
+    return {"entries": entries}
 
 @app.get("/api/queue/reset/schedules", dependencies=[Depends(require_operator)])
 def list_queue_reset_schedules():
@@ -566,7 +581,7 @@ def get_queue_archive():
     return {"entries": entries}
 
 @app.post("/api/queue/archive/undo", dependencies=[Depends(require_operator)])
-def undo_queue_archive(req: ArchiveUndoRequest):
+def undo_queue_archive(req: ArchiveUndoRequest, role: str = Depends(require_operator)):
     if req.confirm != "UNDO":
         return _error_response(
             code="INVALID_CONFIRMATION",
@@ -577,12 +592,21 @@ def undo_queue_archive(req: ArchiveUndoRequest):
     try:
         res = qrm.undo_archive(archive_ids=req.archive_ids, confirm=req.confirm)
         EventTracker.emit("archive_undo", payload={"restored": res["restored"]})
+        write_audit_entry(
+            action="undo-selected",
+            scope=None,
+            moved=0,
+            restored=len(res.get("restored", [])),
+            by=role,
+            schedule_id=None,
+            archive_file=None
+        )
         return res
     except ValueError as e:
         return _error_response(code="INVALID_REQUEST", message=str(e), status_code=400)
 
 @app.post("/api/queue/archive/undo-filter", dependencies=[Depends(require_operator)])
-def undo_filter_queue_archive(req: ArchiveUndoFilterRequest):
+def undo_filter_queue_archive(req: ArchiveUndoFilterRequest, role: str = Depends(require_operator)):
     if not req.dry_run and req.confirm != "UNDO":
         return _error_response(
             code="INVALID_CONFIRMATION",
@@ -602,6 +626,15 @@ def undo_filter_queue_archive(req: ArchiveUndoFilterRequest):
         )
         if not req.dry_run:
             EventTracker.emit("archive_undo_filter", payload={"matched": res["matched"], "restored": res["restored"]})
+            write_audit_entry(
+                action="undo-filter",
+                scope=req.scope,
+                moved=0,
+                restored=len(res.get("restored", [])),
+                by=role,
+                schedule_id=None,
+                archive_file=None
+            )
         return res
     except ValueError as e:
         return _error_response(code="INVALID_REQUEST", message=str(e), status_code=400)
@@ -625,7 +658,7 @@ def export_queue_archive(format: str, scope: str = "all"):
         return _error_response(code="NOT_FOUND", message=str(e), status_code=404)
 
 @app.post("/api/queue/reset-column", dependencies=[Depends(require_operator)])
-def reset_queue_column_endpoint(req: QueueResetColumnRequest):
+def reset_queue_column_endpoint(req: QueueResetColumnRequest, role: str = Depends(require_operator)):
     if req.confirm != "RESET":
         return _error_response(
             code="INVALID_CONFIRMATION",
@@ -636,6 +669,15 @@ def reset_queue_column_endpoint(req: QueueResetColumnRequest):
     try:
         res = qrm.reset_queue(scope=req.column)
         EventTracker.emit("queue_column_reset", payload={"column": req.column, "cleared": res["cleared"]})
+        write_audit_entry(
+            action="reset-column",
+            scope=req.column,
+            moved=res.get("moved", 0),
+            restored=0,
+            by=role,
+            schedule_id=None,
+            archive_file=res.get("archive")
+        )
         return res
     except ValueError as e:
         return _error_response(code="INVALID_SCOPE", message=str(e), status_code=400)
