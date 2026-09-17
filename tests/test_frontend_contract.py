@@ -347,3 +347,53 @@ def test_consult_endpoints_read_only():
 
         delete_res = client.delete(route, headers=headers)
         assert delete_res.status_code in (405, 404, 403), f"DELETE {route} did not reject with 405/404/403"
+
+
+def test_frontend_contract_reset_center_elements():
+    """Verify Reset Center frontend contract elements and CSS classes."""
+    content = INDEX_PATH.read_text()
+
+    # Section view and nav button
+    assert 'id="view-reset-center"' in content
+    assert 'data-view="reset-center"' in content
+
+    # Tabs
+    assert 'id="tab-columns"' in content
+    assert 'id="tab-archive"' in content
+    assert 'id="tab-undo"' in content
+
+    # Archive list & selectors
+    assert 'id="archive-list"' in content
+    assert 'archive-row' in content
+    assert 'archive-select' in content
+
+    # Undo filters & matched count
+    assert 'id="undo-filter-status"' in content
+    assert 'id="undo-filter-from"' in content
+    assert 'id="undo-filter-to"' in content
+    assert 'id="undo-filter-scope"' in content
+    assert 'id="undo-filter-search"' in content
+    assert 'id="undo-matched-count"' in content
+
+    # Undo buttons
+    assert 'id="btn-undo-selected"' in content
+    assert 'id="btn-undo-all-matched"' in content
+
+    # Confirm modal
+    assert 'id="undo-confirm-modal"' in content
+    assert 'id="undo-confirm-input"' in content
+
+    # Required CSS classes
+    css_classes = [
+        ".reset-center-tabs",
+        ".reset-tab",
+        ".archive-list",
+        ".archive-row",
+        ".archive-select",
+        ".undo-filters",
+        ".undo-filter-row",
+        ".undo-btn",
+        ".undo-matched-count"
+    ]
+    for cls in css_classes:
+        assert cls in content, f"CSS class {cls} not found in frontend/index.html"

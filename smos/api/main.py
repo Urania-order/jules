@@ -337,6 +337,19 @@ class QueueResetColumnRequest(BaseModel):
     column: str
     confirm: str
 
+class ArchiveUndoRequest(BaseModel):
+    archive_ids: List[str]
+    confirm: str
+
+class ArchiveUndoFilterRequest(BaseModel):
+    status: Optional[str] = None
+    date_from: Optional[str] = None
+    date_to: Optional[str] = None
+    scope: Optional[str] = None
+    search: Optional[str] = None
+    confirm: str = ""
+    dry_run: bool = False
+
 class RememberTaskRequest(BaseModel):
     name: str
 
@@ -484,6 +497,53 @@ def reset_queue_endpoint(req: QueueResetRequest):
         return res
     except ValueError as e:
         return _error_response(code="INVALID_SCOPE", message=str(e), status_code=400)
+
+@app.get("/api/queue/archive", dependencies=[Depends(require_operator)])
+def get_queue_archive():
+    qrm = QueueResetManager()
+    entries = qrm.list_archive_entries()
+    return {"entries": entries}
+
+@app.post("/api/queue/archive/undo", dependencies=[Depends(require_operator)])
+def undo_queue_archive(req: ArchiveUndoRequest):
+    if req.confirm != "UNDO":
+        return _error_response(
+            code="INVALID_CONFIRMATION",
+            message="Archive undo requires confirmation string 'UNDO'",
+            status_code=400
+        )
+    qrm = QueueResetManager()
+    try:
+        res = qrm.undo_archive(archive_ids=req.archive_ids, confirm=req.confirm)
+        EventTracker.emit("archive_undo", payload={"restored": res["restored"]})
+        return res
+    except ValueError as e:
+        return _error_response(code="INVALID_REQUEST", message=str(e), status_code=400)
+
+@app.post("/api/queue/archive/undo-filter", dependencies=[Depends(require_operator)])
+def undo_filter_queue_archive(req: ArchiveUndoFilterRequest):
+    if not req.dry_run and req.confirm != "UNDO":
+        return _error_response(
+            code="INVALID_CONFIRMATION",
+            message="Archive undo filter requires confirmation string 'UNDO'",
+            status_code=400
+        )
+    qrm = QueueResetManager()
+    try:
+        res = qrm.undo_archive_filter(
+            status=req.status,
+            date_from=req.date_from,
+            date_to=req.date_to,
+            scope=req.scope,
+            search=req.search,
+            confirm=req.confirm,
+            dry_run=req.dry_run
+        )
+        if not req.dry_run:
+            EventTracker.emit("archive_undo_filter", payload={"matched": res["matched"], "restored": res["restored"]})
+        return res
+    except ValueError as e:
+        return _error_response(code="INVALID_REQUEST", message=str(e), status_code=400)
 
 @app.get("/api/queue/archive/export", dependencies=[Depends(require_operator)])
 def export_queue_archive(format: str, scope: str = "all"):

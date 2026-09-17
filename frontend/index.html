@@ -44,6 +44,62 @@
       align-items: center;
     }
 
+    .reset-center-tabs {
+      display: flex;
+      gap: 0.5rem;
+      border-bottom: 1px solid var(--border-color);
+      padding-bottom: 0.5rem;
+      margin-bottom: 1.5rem;
+    }
+    .reset-tab {
+      padding: 0.5rem 1rem;
+      border-radius: 0.25rem;
+      cursor: pointer;
+      background: var(--bg-primary);
+      border: 1px solid var(--border-color);
+      color: var(--text-secondary);
+      font-weight: 500;
+    }
+    .reset-tab.active {
+      background: var(--accent-blue);
+      color: #ffffff;
+      border-color: var(--accent-blue);
+    }
+    .archive-list {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.85rem;
+    }
+    .archive-row {
+      border-bottom: 1px solid var(--border-color);
+    }
+    .archive-row:hover {
+      background-color: var(--bg-card);
+    }
+    .archive-select {
+      cursor: pointer;
+    }
+    .undo-filters {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+    .undo-filter-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1rem;
+      align-items: flex-end;
+    }
+    .undo-btn {
+      padding: 0.6rem 1.2rem;
+    }
+    .undo-matched-count {
+      font-size: 1rem;
+      font-weight: bold;
+      color: var(--accent-blue);
+    }
+
     .logo-container {
       display: flex;
       align-items: center;
@@ -806,6 +862,7 @@
     <nav>
       <button class="nav-btn active" data-view="dashboard">Control Room</button>
       <button class="nav-btn" data-view="command-intake">Command Intake</button>
+      <button class="nav-btn" data-view="reset-center">♻️ Reset Center</button>
       <button class="nav-btn" data-view="stages">Stages</button>
       <button class="nav-btn" data-view="sequence">Sequence</button>
       <button class="nav-btn" data-view="cycles">Cycles</button>
@@ -868,6 +925,122 @@
           <button class="btn btn-secondary" id="btn-run-queue">Run Queue Runner Once</button>
         </div>
         <div id="recent-tasks-list" class="task-list"></div>
+      </div>
+    </section>
+
+    <!-- RESET CENTER PANEL -->
+    <section id="view-reset-center" class="view">
+      <h2>Reset Center</h2>
+      <div class="card">
+        <div class="reset-center-tabs">
+          <button class="reset-tab active" id="tab-columns" data-tab="columns" onclick="switchResetTab('columns')">Columns</button>
+          <button class="reset-tab" id="tab-archive" data-tab="archive" onclick="switchResetTab('archive')">Archive</button>
+          <button class="reset-tab" id="tab-undo" data-tab="undo" onclick="switchResetTab('undo')">Undo</button>
+        </div>
+
+        <!-- COLUMNS TAB -->
+        <div id="reset-center-tab-columns" class="reset-tab-content">
+          <p style="margin-bottom: 1rem; color: var(--text-secondary); font-size: 0.9rem;">
+            Reset queue columns or all queues. Cleared tasks will be archived.
+          </p>
+          <div style="display: flex; flex-wrap: wrap; gap: 0.75rem;">
+            <button class="btn btn-secondary queue-reset-btn-danger" id="btn-reset-ready-center" onclick="openResetModal('ready')">Reset READY</button>
+            <button class="btn btn-secondary queue-reset-btn-danger" id="btn-reset-running-center" onclick="openResetModal('running')">Reset RUNNING</button>
+            <button class="btn btn-secondary queue-reset-btn-danger" id="btn-reset-review-center" onclick="openResetModal('review')">Reset REVIEW</button>
+            <button class="btn btn-secondary queue-reset-btn-danger" id="btn-reset-blocked-center" onclick="openResetModal('blocked')">Reset BLOCKED</button>
+            <button class="btn btn-secondary queue-reset-btn-danger" id="btn-reset-completed-center" onclick="openResetModal('completed')">Reset COMPLETED</button>
+            <button class="btn btn-danger" id="btn-reset-all-center" onclick="openResetModal('all')">⚠ RESET ALL QUEUES</button>
+          </div>
+        </div>
+
+        <!-- ARCHIVE TAB -->
+        <div id="reset-center-tab-archive" class="reset-tab-content" style="display: none;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+            <p style="color: var(--text-secondary); font-size: 0.9rem; margin: 0;">
+              Archived tasks list. Select rows to undo. Shift+Click supported for range selection.
+            </p>
+            <button class="btn btn-primary undo-btn" id="btn-undo-selected-archive" onclick="triggerUndoSelected()">↩️ Undo Selected</button>
+          </div>
+          <div style="overflow-x: auto;">
+            <table class="archive-list" id="archive-list">
+              <thead>
+                <tr style="border-bottom: 1px solid var(--border-color); text-align: left; color: var(--accent-blue);">
+                  <th style="padding: 0.5rem;"><input type="checkbox" id="archive-select-all" onclick="toggleSelectAllArchive(this)"></th>
+                  <th style="padding: 0.5rem;">Task ID</th>
+                  <th style="padding: 0.5rem;">Status</th>
+                  <th style="padding: 0.5rem;">Priority</th>
+                  <th style="padding: 0.5rem;">Reset At</th>
+                  <th style="padding: 0.5rem;">Scope</th>
+                  <th style="padding: 0.5rem;">Restored</th>
+                </tr>
+              </thead>
+              <tbody id="archive-list-body">
+                <!-- Archive rows rendered here -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- UNDO TAB -->
+        <div id="reset-center-tab-undo" class="reset-tab-content" style="display: none;">
+          <div class="undo-filters">
+            <div class="undo-filter-row">
+              <div class="form-group" style="width: 150px; margin-bottom: 0;">
+                <label for="undo-filter-status">Status</label>
+                <select id="undo-filter-status" onchange="updateUndoFilterCount()">
+                  <option value="">All</option>
+                  <option value="ready">Ready</option>
+                  <option value="pending">Pending</option>
+                  <option value="running">Running</option>
+                  <option value="review">Review</option>
+                  <option value="blocked">Blocked</option>
+                  <option value="completed">Completed</option>
+                  <option value="failed">Failed</option>
+                  <option value="cancelled">Cancelled</option>
+                </select>
+              </div>
+
+              <div class="form-group" style="width: 180px; margin-bottom: 0;">
+                <label for="undo-filter-from">Date From</label>
+                <input type="text" id="undo-filter-from" placeholder="YYYY-MM-DD" oninput="updateUndoFilterCount()">
+              </div>
+
+              <div class="form-group" style="width: 180px; margin-bottom: 0;">
+                <label for="undo-filter-to">Date To</label>
+                <input type="text" id="undo-filter-to" placeholder="YYYY-MM-DD" oninput="updateUndoFilterCount()">
+              </div>
+
+              <div class="form-group" style="width: 150px; margin-bottom: 0;">
+                <label for="undo-filter-scope">Scope</label>
+                <select id="undo-filter-scope" onchange="updateUndoFilterCount()">
+                  <option value="">All</option>
+                  <option value="all">all</option>
+                  <option value="ready">ready</option>
+                  <option value="running">running</option>
+                  <option value="review">review</option>
+                  <option value="blocked">blocked</option>
+                  <option value="completed">completed</option>
+                </select>
+              </div>
+
+              <div class="form-group" style="flex: 1; min-width: 200px; margin-bottom: 0;">
+                <label for="undo-filter-search">Search (Request / Task ID)</label>
+                <input type="text" id="undo-filter-search" placeholder="Search substring..." oninput="updateUndoFilterCount()">
+              </div>
+            </div>
+          </div>
+
+          <div style="display: flex; justify-content: space-between; align-items: center; background-color: var(--bg-primary); padding: 1rem; border-radius: 0.375rem; border: 1px solid var(--border-color);">
+            <div class="undo-matched-count" id="undo-matched-count">
+              Matched: 0 tasks
+            </div>
+            <div style="display: flex; gap: 0.75rem;">
+              <button class="btn btn-primary undo-btn" id="btn-undo-selected" onclick="triggerUndoSelected()">↩️ Undo Selected</button>
+              <button class="btn btn-danger undo-btn" id="btn-undo-all-matched" onclick="triggerUndoAllMatched()">↩️ Undo All Matched</button>
+            </div>
+          </div>
+        </div>
+
       </div>
     </section>
 
@@ -1195,6 +1368,21 @@
       </div>
     </section>
 
+    <!-- UNDO CONFIRM MODAL -->
+    <div class="modal-overlay" id="undo-confirm-modal" style="display: none;">
+      <div class="modal">
+        <h3>Confirm Archive Undo</h3>
+        <p id="undo-confirm-message" style="font-size: 0.9rem; margin: 1rem 0; color: var(--text-secondary);">
+          Type <strong>UNDO</strong> to confirm task restoration:
+        </p>
+        <input type="text" id="undo-confirm-input" placeholder="Type UNDO to confirm" style="width: 100%;">
+        <div class="modal-actions">
+          <button type="button" class="btn btn-secondary" onclick="closeUndoConfirmModal()">Cancel</button>
+          <button type="button" class="btn btn-primary" id="btn-confirm-undo-submit" onclick="submitUndoAction()">Confirm Undo</button>
+        </div>
+      </div>
+    </div>
+
     <!-- TASK DETAIL VIEW -->
     <section id="view-task-detail" class="view">
       <button class="btn btn-secondary" id="btn-back-dashboard" style="margin-bottom: 1rem;">&larr; Back</button>
@@ -1458,6 +1646,7 @@
         renderEvents();
         renderHistory();
         renderConsultView();
+        renderResetCenter();
       } catch (e) {
         console.error('Refresh error:', e);
         showOffline();
@@ -2778,6 +2967,213 @@
         refreshData();
       } catch (e) {
         showError("Failed to replay batch template: " + e.message);
+      }
+    }
+
+    // Reset Center Tab & Action Logic
+    let lastCheckedArchiveCheckbox = null;
+    let pendingUndoType = null;
+
+    function switchResetTab(tabName) {
+      document.querySelectorAll('.reset-tab').forEach(btn => {
+        if (btn.dataset.tab === tabName) {
+          btn.classList.add('active');
+        } else {
+          btn.classList.remove('active');
+        }
+      });
+      document.querySelectorAll('.reset-tab-content').forEach(content => {
+        content.style.display = 'none';
+      });
+      const activeContent = document.getElementById(`reset-center-tab-${tabName}`);
+      if (activeContent) {
+        activeContent.style.display = 'block';
+      }
+      if (tabName === 'archive') {
+        renderArchiveList();
+      } else if (tabName === 'undo') {
+        updateUndoFilterCount();
+      }
+    }
+
+    async function renderResetCenter() {
+      const activeTab = document.querySelector('.reset-tab.active');
+      const tabName = activeTab ? activeTab.dataset.tab : 'columns';
+      if (tabName === 'archive') {
+        await renderArchiveList();
+      } else if (tabName === 'undo') {
+        await updateUndoFilterCount();
+      }
+    }
+
+    async function renderArchiveList() {
+      const tbody = document.getElementById('archive-list-body');
+      if (!tbody) return;
+      try {
+        const data = await fetchJSON(`${API_BASE}/queue/archive`);
+        const entries = data.entries || [];
+        tbody.innerHTML = '';
+        if (entries.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="7" class="empty-state">No archived tasks found</td></tr>';
+          return;
+        }
+
+        entries.forEach(entry => {
+          const tr = document.createElement('tr');
+          tr.className = 'archive-row';
+          const isRestored = !!entry.restored;
+          const restoredBadge = isRestored
+            ? '<span style="color: var(--accent-green); font-weight: bold;">true</span>'
+            : '<span style="color: var(--text-secondary);">false</span>';
+
+          tr.innerHTML = `
+            <td style="padding: 0.5rem;"><input type="checkbox" class="archive-select" data-archive-id="${entry.archive_id}" ${isRestored ? 'disabled' : ''}></td>
+            <td style="padding: 0.5rem; font-family: monospace;">${escapeHTML(entry.task_id)}</td>
+            <td style="padding: 0.5rem;"><span class="badge badge-${(entry.status || '').toUpperCase()}">${escapeHTML(entry.status)}</span></td>
+            <td style="padding: 0.5rem;">P${entry.priority}</td>
+            <td style="padding: 0.5rem;">${entry.reset_at ? new Date(entry.reset_at).toLocaleString() : ''}</td>
+            <td style="padding: 0.5rem;">${escapeHTML(entry.scope || '')}</td>
+            <td style="padding: 0.5rem;">${restoredBadge}</td>
+          `;
+          tbody.appendChild(tr);
+        });
+
+        // Attach Shift+Click handler to archive checkboxes
+        document.querySelectorAll('.archive-select').forEach(cb => {
+          cb.addEventListener('click', handleArchiveCheckboxClick);
+        });
+
+      } catch (e) {
+        tbody.innerHTML = '<tr><td colspan="7" class="empty-state">Failed to load archive entries</td></tr>';
+      }
+    }
+
+    function handleArchiveCheckboxClick(e) {
+      const checkbox = e.target;
+      if (e.shiftKey && lastCheckedArchiveCheckbox && lastCheckedArchiveCheckbox !== checkbox) {
+        const checkboxes = Array.from(document.querySelectorAll('.archive-select:not([disabled])'));
+        const start = checkboxes.indexOf(lastCheckedArchiveCheckbox);
+        const end = checkboxes.indexOf(checkbox);
+        if (start !== -1 && end !== -1) {
+          const [min, max] = [Math.min(start, end), Math.max(start, end)];
+          for (let i = min; i <= max; i++) {
+            checkboxes[i].checked = checkbox.checked;
+          }
+        }
+      }
+      lastCheckedArchiveCheckbox = checkbox;
+    }
+
+    function toggleSelectAllArchive(masterCheckbox) {
+      document.querySelectorAll('.archive-select:not([disabled])').forEach(cb => {
+        cb.checked = masterCheckbox.checked;
+      });
+    }
+
+    async function updateUndoFilterCount() {
+      const status = document.getElementById('undo-filter-status')?.value || '';
+      const date_from = document.getElementById('undo-filter-from')?.value || '';
+      const date_to = document.getElementById('undo-filter-to')?.value || '';
+      const scope = document.getElementById('undo-filter-scope')?.value || '';
+      const search = document.getElementById('undo-filter-search')?.value || '';
+
+      const countEl = document.getElementById('undo-matched-count');
+      try {
+        const res = await fetchJSON(`${API_BASE}/queue/archive/undo-filter`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            status, date_from, date_to, scope, search,
+            dry_run: true
+          })
+        });
+        if (countEl) {
+          countEl.textContent = `Matched: ${res.matched ?? 0} tasks`;
+        }
+      } catch (e) {
+        if (countEl) {
+          countEl.textContent = 'Matched: 0 tasks';
+        }
+      }
+    }
+
+    function triggerUndoSelected() {
+      const selected = Array.from(document.querySelectorAll('.archive-select:checked'));
+      if (selected.length === 0) {
+        showError('No archive tasks selected for undo.');
+        return;
+      }
+      pendingUndoType = 'selected';
+      const msg = document.getElementById('undo-confirm-message');
+      if (msg) {
+        msg.innerHTML = `Type <strong>UNDO</strong> to confirm restoring ${selected.length} selected task(s):`;
+      }
+      openUndoConfirmModal();
+    }
+
+    function triggerUndoAllMatched() {
+      pendingUndoType = 'matched';
+      const countText = document.getElementById('undo-matched-count')?.textContent || 'Matched tasks';
+      const msg = document.getElementById('undo-confirm-message');
+      if (msg) {
+        msg.innerHTML = `Type <strong>UNDO</strong> to confirm restoring all tasks matching filter (${countText}):`;
+      }
+      openUndoConfirmModal();
+    }
+
+    function openUndoConfirmModal() {
+      const input = document.getElementById('undo-confirm-input');
+      if (input) input.value = '';
+      const modal = document.getElementById('undo-confirm-modal');
+      if (modal) modal.style.display = 'flex';
+    }
+
+    function closeUndoConfirmModal() {
+      const modal = document.getElementById('undo-confirm-modal');
+      if (modal) modal.style.display = 'none';
+      pendingUndoType = null;
+    }
+
+    async function submitUndoAction() {
+      const confirmInput = document.getElementById('undo-confirm-input');
+      const confirmVal = confirmInput ? confirmInput.value.trim() : '';
+      if (confirmVal !== 'UNDO') {
+        showError("You must type UNDO to confirm restoration.");
+        return;
+      }
+
+      try {
+        if (pendingUndoType === 'selected') {
+          const selectedCheckboxes = Array.from(document.querySelectorAll('.archive-select:checked'));
+          const archive_ids = selectedCheckboxes.map(cb => cb.dataset.archiveId).filter(Boolean);
+          const res = await fetchJSON(`${API_BASE}/queue/archive/undo`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ archive_ids, confirm: 'UNDO' })
+          });
+          alert(`Restored ${res.restored ? res.restored.length : 0} task(s).`);
+        } else if (pendingUndoType === 'matched') {
+          const status = document.getElementById('undo-filter-status')?.value || '';
+          const date_from = document.getElementById('undo-filter-from')?.value || '';
+          const date_to = document.getElementById('undo-filter-to')?.value || '';
+          const scope = document.getElementById('undo-filter-scope')?.value || '';
+          const search = document.getElementById('undo-filter-search')?.value || '';
+
+          const res = await fetchJSON(`${API_BASE}/queue/archive/undo-filter`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              status, date_from, date_to, scope, search,
+              confirm: 'UNDO',
+              dry_run: false
+            })
+          });
+          alert(`Matched ${res.matched ?? 0} task(s). Restored ${res.restored ? res.restored.length : 0} task(s).`);
+        }
+        closeUndoConfirmModal();
+        refreshData();
+      } catch (e) {
+        showError("Failed to undo archive: " + e.message);
       }
     }
 

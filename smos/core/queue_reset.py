@@ -325,3 +325,233 @@ class QueueResetManager:
             media_type = "application/x-jsonlines"
 
         return content, filename, media_type
+
+    def list_archive_entries(self) -> list[Dict[str, Any]]:
+        """
+        List all archive entries across all reset-*.jsonl files with unique archive_ids.
+        """
+        archive_files = sorted(self.queue_dir.glob("reset-*.jsonl"))
+        entries = []
+        for path in archive_files:
+            try:
+                lines = path.read_text(encoding="utf-8").splitlines()
+                for idx, line in enumerate(lines, start=1):
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        record = json.loads(line)
+                        archive_id = f"{path.name}:{idx}"
+                        entries.append({
+                            "archive_id": archive_id,
+                            "task_id": record.get("task_id", ""),
+                            "status": record.get("status", ""),
+                            "request": record.get("request", ""),
+                            "priority": record.get("priority", 5),
+                            "created_at": record.get("created_at", ""),
+                            "reset_at": record.get("reset_at", ""),
+                            "scope": record.get("scope", ""),
+                            "restored": bool(record.get("restored", False)),
+                            "why": record.get("why", {})
+                        })
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+        return entries
+
+    def undo_archive(self, archive_ids: list[str], confirm: str = "") -> Dict[str, Any]:
+        """
+        Restore specified archived tasks by archive_id.
+        """
+        if confirm != "UNDO":
+            raise ValueError("Confirmation string 'UNDO' is required")
+
+        restored_ids = []
+        failed_ids = []
+
+        # Index current files to avoid multiple reads/writes per file
+        entries_by_file: Dict[str, list[tuple[int, str]]] = {}
+        for aid in archive_ids:
+            if ":" not in aid:
+                failed_ids.append(aid)
+                continue
+            fname, lnum_str = aid.split(":", 1)
+            try:
+                lnum = int(lnum_str)
+                entries_by_file.setdefault(fname, []).append((lnum, aid))
+            except ValueError:
+                failed_ids.append(aid)
+
+        now_utc = datetime.now(timezone.utc)
+        now_iso = now_utc.isoformat()
+
+        import uuid
+        for fname, target_lines in entries_by_file.items():
+            fpath = self.queue_dir / fname
+            if not fpath.exists():
+                for _, aid in target_lines:
+                    failed_ids.append(aid)
+                continue
+
+            try:
+                lines = fpath.read_text(encoding="utf-8").splitlines()
+                file_modified = False
+
+                for lnum, aid in target_lines:
+                    if lnum < 1 or lnum > len(lines):
+                        failed_ids.append(aid)
+                        continue
+
+                    line_str = lines[lnum - 1].strip()
+                    if not line_str:
+                        failed_ids.append(aid)
+                        continue
+
+                    try:
+                        record = json.loads(line_str)
+                    except Exception:
+                        failed_ids.append(aid)
+                        continue
+
+                    if record.get("restored"):
+                        # Already restored -> skip
+                        continue
+
+                    # Create new Task
+                    new_task_id = f"task-{now_utc.strftime('%Y%m%d-%H%M%S')}-{uuid.uuid4().hex[:6]}"
+                    req_str = record.get("request", "Unnamed task")
+                    prio = int(record.get("priority", 5))
+
+                    why_data = record.get("why") if isinstance(record.get("why"), dict) else {}
+                    existing_transitions = why_data.get("history_transitions", [])
+                    if not isinstance(existing_transitions, list):
+                        existing_transitions = []
+
+                    new_transition = {
+                        "timestamp": now_iso,
+                        "status": "PENDING",
+                        "message": f"RESTORED from {aid}"
+                    }
+                    updated_transitions = existing_transitions + [new_transition]
+
+                    updated_why = {
+                        "source_task": why_data.get("source_task"),
+                        "proposal_origin": why_data.get("proposal_origin"),
+                        "proposed_by": why_data.get("proposed_by"),
+                        "history_transitions": updated_transitions
+                    }
+
+                    from smos.core.task import Task, TaskStatus, TaskHistoryItem
+
+                    # Build history list for Task model
+                    task_history = []
+                    for h in updated_transitions:
+                        if isinstance(h, dict):
+                            st_str = str(h.get("status", "PENDING")).upper()
+                            try:
+                                st_enum = TaskStatus(st_str)
+                            except ValueError:
+                                st_enum = TaskStatus.PENDING
+                            task_history.append(TaskHistoryItem(
+                                timestamp=h.get("timestamp", now_iso),
+                                status=st_enum,
+                                message=h.get("message")
+                            ))
+
+                    new_task = Task(
+                        id=new_task_id,
+                        request=req_str,
+                        title=req_str[:50],
+                        description=req_str,
+                        status=TaskStatus.PENDING,
+                        priority=prio,
+                        created_at=now_iso,
+                        source_task=updated_why.get("source_task"),
+                        proposed_by=updated_why.get("proposed_by"),
+                        metadata={"why": updated_why},
+                        history=task_history
+                    )
+
+                    self.queue_mgr.save_task(new_task)
+
+                    # Mark archive line restored: true
+                    record["restored"] = True
+                    lines[lnum - 1] = json.dumps(record, ensure_ascii=False)
+                    file_modified = True
+                    restored_ids.append(aid)
+
+                if file_modified:
+                    fpath.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+            except Exception:
+                for _, aid in target_lines:
+                    if aid not in restored_ids and aid not in failed_ids:
+                        failed_ids.append(aid)
+
+        return {
+            "status": "success",
+            "restored": restored_ids,
+            "failed": failed_ids
+        }
+
+    def undo_archive_filter(
+        self,
+        status: Optional[str] = None,
+        date_from: Optional[str] = None,
+        date_to: Optional[str] = None,
+        scope: Optional[str] = None,
+        search: Optional[str] = None,
+        confirm: str = "",
+        dry_run: bool = False
+    ) -> Dict[str, Any]:
+        all_entries = self.list_archive_entries()
+
+        matched_entries = []
+        for entry in all_entries:
+            if status:
+                if (entry.get("status") or "").lower() != status.lower():
+                    continue
+            if date_from:
+                if (entry.get("reset_at") or "") < date_from:
+                    continue
+            if date_to:
+                if (entry.get("reset_at") or "") > date_to:
+                    continue
+            if scope:
+                if (entry.get("scope") or "").lower() != scope.lower():
+                    continue
+            if search:
+                s_lower = search.lower()
+                req_text = (entry.get("request") or "").lower()
+                tid_text = (entry.get("task_id") or "").lower()
+                if s_lower not in req_text and s_lower not in tid_text:
+                    continue
+            matched_entries.append(entry)
+
+        if dry_run:
+            return {
+                "status": "success",
+                "matched": len(matched_entries),
+                "entries": matched_entries
+            }
+
+        if confirm != "UNDO":
+            raise ValueError("Confirmation string 'UNDO' is required")
+
+        unrestored_ids = [e["archive_id"] for e in matched_entries if not e.get("restored")]
+        if not unrestored_ids:
+            return {
+                "status": "success",
+                "matched": len(matched_entries),
+                "restored": [],
+                "failed": []
+            }
+
+        undo_res = self.undo_archive(archive_ids=unrestored_ids, confirm=confirm)
+        return {
+            "status": "success",
+            "matched": len(matched_entries),
+            "restored": undo_res["restored"],
+            "failed": undo_res["failed"]
+        }
