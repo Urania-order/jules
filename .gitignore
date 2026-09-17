@@ -28,3 +28,7 @@ __pycache__/
 .jules/queue/deferred/
 .jules/consult_audit.jsonl
 .jules/consult_settings.json
+
+# Reset archives (runtime)
+.jules/queue/reset-*.jsonl
+.jules/history/reset-*.md

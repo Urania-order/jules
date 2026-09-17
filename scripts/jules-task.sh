@@ -129,7 +129,11 @@ fi
 
 echo "[2/4] Starting Jules..."
 
+# Extract task title for Jules session Description (first line, max 80 chars)
+TASK_TITLE="$(echo "$TASK" | head -1 | cut -c1-80)"
 JULES_PROMPT=$(cat <<PROMPTEOF
+$TASK_TITLE
+
 You are working inside the repository:
 
 $REPOSITORY
