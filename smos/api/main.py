@@ -43,7 +43,7 @@ from smos.core.events import EventTracker
 from smos.core.task import Task, TaskStatus
 from smos.core.batch import BatchManager, Batch
 from smos.core.scheduler import Scheduler
-from smos.core.queue_reset import QueueResetManager
+from smos.core.queue_reset import QueueResetManager, ResetScheduleManager
 from smos.core.templates import TemplateManager
 from smos.core.sequences import SequenceManager
 from smos.core.batch import BatchManager, Batch, BatchTemplateManager
@@ -72,6 +72,8 @@ async def background_scheduler_loop():
     while True:
         try:
             scheduler_instance.check_due_batches()
+            rsm = ResetScheduleManager()
+            rsm.check_and_run_due_schedules()
         except Exception as e:
             logger.error("Error in background scheduler loop: %s", e)
         await asyncio.sleep(60)
@@ -337,6 +339,18 @@ class QueueResetColumnRequest(BaseModel):
     column: str
     confirm: str
 
+class ResetScheduleCreateRequest(BaseModel):
+    name: str
+    cron: str
+    scope: str
+    enabled: bool = True
+
+class ResetScheduleUpdateRequest(BaseModel):
+    name: Optional[str] = None
+    cron: Optional[str] = None
+    scope: Optional[str] = None
+    enabled: Optional[bool] = None
+
 class ArchiveUndoRequest(BaseModel):
     archive_ids: List[str]
     confirm: str
@@ -497,6 +511,53 @@ def reset_queue_endpoint(req: QueueResetRequest):
         return res
     except ValueError as e:
         return _error_response(code="INVALID_SCOPE", message=str(e), status_code=400)
+
+@app.get("/api/queue/reset/schedules", dependencies=[Depends(require_operator)])
+def list_queue_reset_schedules():
+    rsm = ResetScheduleManager()
+    return rsm.list_schedules()
+
+@app.post("/api/queue/reset/schedules", dependencies=[Depends(require_operator)])
+def create_queue_reset_schedule(req: ResetScheduleCreateRequest):
+    rsm = ResetScheduleManager()
+    try:
+        sched = rsm.create_schedule(
+            name=req.name,
+            cron=req.cron,
+            scope=req.scope,
+            enabled=req.enabled
+        )
+        EventTracker.emit("queue_reset_schedule_created", payload={"schedule_id": sched["id"], "name": sched["name"]})
+        return sched
+    except ValueError as e:
+        return _error_response(code="INVALID_SCHEDULE", message=str(e), status_code=400)
+
+@app.patch("/api/queue/reset/schedules/{id}", dependencies=[Depends(require_operator)])
+def update_queue_reset_schedule(id: str, req: ResetScheduleUpdateRequest):
+    rsm = ResetScheduleManager()
+    try:
+        sched = rsm.update_schedule(
+            schedule_id=id,
+            name=req.name,
+            cron=req.cron,
+            scope=req.scope,
+            enabled=req.enabled
+        )
+        EventTracker.emit("queue_reset_schedule_updated", payload={"schedule_id": id})
+        return sched
+    except KeyError as e:
+        return _error_response(code="SCHEDULE_NOT_FOUND", message=str(e), status_code=404)
+    except ValueError as e:
+        return _error_response(code="INVALID_SCHEDULE", message=str(e), status_code=400)
+
+@app.delete("/api/queue/reset/schedules/{id}", dependencies=[Depends(require_operator)])
+def delete_queue_reset_schedule(id: str):
+    rsm = ResetScheduleManager()
+    deleted = rsm.delete_schedule(id)
+    if not deleted:
+        return _error_response(code="SCHEDULE_NOT_FOUND", message=f"Schedule '{id}' not found", status_code=404)
+    EventTracker.emit("queue_reset_schedule_deleted", payload={"schedule_id": id})
+    return {"status": "success", "message": f"Schedule '{id}' deleted"}
 
 @app.get("/api/queue/archive", dependencies=[Depends(require_operator)])
 def get_queue_archive():

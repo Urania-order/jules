@@ -448,3 +448,141 @@ def test_archive_export_scope_filter(queue_env):
     lines = [json.loads(line) for line in res.text.strip().split("\n") if line]
     assert len(lines) == 1
     assert lines[0]["task_id"] == "task-s-ready"
+
+
+def test_schedule_crud(queue_env):
+    _, tmp_path = queue_env
+
+    # 1. Create schedule
+    payload = {
+        "name": "Nightly Reset",
+        "cron": "0 2 * * *",
+        "scope": "completed",
+        "enabled": True
+    }
+    res = client.post("/api/queue/reset/schedules", json=payload, headers=AUTH_HEADERS)
+    assert res.status_code == 200
+    sched = res.json()
+    assert sched["name"] == "Nightly Reset"
+    assert sched["cron"] == "0 2 * * *"
+    assert sched["scope"] == "completed"
+    assert sched["enabled"] is True
+    sched_id = sched["id"]
+
+    # 2. List schedules
+    res_list = client.get("/api/queue/reset/schedules", headers=AUTH_HEADERS)
+    assert res_list.status_code == 200
+    schedules = res_list.json()
+    assert len(schedules) == 1
+    assert schedules[0]["id"] == sched_id
+
+    # 3. Patch schedule
+    patch_payload = {
+        "name": "Updated Schedule",
+        "cron": "30 3 * * 1-5",
+        "enabled": False
+    }
+    res_patch = client.patch(f"/api/queue/reset/schedules/{sched_id}", json=patch_payload, headers=AUTH_HEADERS)
+    assert res_patch.status_code == 200
+    updated = res_patch.json()
+    assert updated["name"] == "Updated Schedule"
+    assert updated["cron"] == "30 3 * * 1-5"
+    assert updated["enabled"] is False
+
+    # 4. Delete schedule
+    res_del = client.delete(f"/api/queue/reset/schedules/{sched_id}", headers=AUTH_HEADERS)
+    assert res_del.status_code == 200
+
+    res_list_after = client.get("/api/queue/reset/schedules", headers=AUTH_HEADERS)
+    assert len(res_list_after.json()) == 0
+
+
+def test_schedule_crud_auth_and_validation(queue_env):
+    consultant_headers = {"Authorization": "Bearer dev-consultant-token"}
+
+    # Unauthorized access check
+    res_unauth = client.post("/api/queue/reset/schedules", json={"name": "X", "cron": "* * * * *", "scope": "all"}, headers=consultant_headers)
+    assert res_unauth.status_code == 403
+
+    # Invalid cron check
+    res_inv_cron = client.post("/api/queue/reset/schedules", json={"name": "X", "cron": "invalid cron", "scope": "all"}, headers=AUTH_HEADERS)
+    assert res_inv_cron.status_code == 400
+    assert res_inv_cron.json()["code"] == "INVALID_SCHEDULE"
+
+    # Invalid scope check
+    res_inv_scope = client.post("/api/queue/reset/schedules", json={"name": "X", "cron": "* * * * *", "scope": "invalid_scope"}, headers=AUTH_HEADERS)
+    assert res_inv_scope.status_code == 400
+
+
+def test_schedule_storage(queue_env):
+    from smos.core.queue_reset import ResetScheduleManager
+    _, tmp_path = queue_env
+
+    rsm = ResetScheduleManager()
+    s1 = rsm.create_schedule(name="S1", cron="0 0 * * *", scope="all")
+    
+    storage_file = tmp_path / ".jules" / "reset_schedules.json"
+    assert storage_file.exists()
+
+    file_data = json.loads(storage_file.read_text())
+    assert len(file_data) == 1
+    assert file_data[0]["id"] == s1["id"]
+    assert file_data[0]["name"] == "S1"
+
+
+def test_schedule_runs_due(queue_env):
+    from smos.core.queue_reset import ResetScheduleManager
+    from datetime import datetime, timezone
+
+    qm, tmp_path = queue_env
+    task_c = Task(id="task-sched-1", request="Completed task to reset", status=TaskStatus.COMPLETED)
+    qm.save_task(task_c)
+
+    rsm = ResetScheduleManager()
+    # Schedule set for 02:00 every day
+    sched = rsm.create_schedule(name="Nightly Reset", cron="0 2 * * *", scope="completed")
+
+    # Time that does not match (01:00)
+    dt_not_due = datetime(2026, 9, 18, 1, 0, tzinfo=timezone.utc)
+    ran_1 = rsm.check_and_run_due_schedules(now=dt_not_due)
+    assert len(ran_1) == 0
+    assert qm.get_task("task-sched-1") is not None
+
+    # Time that matches (02:00)
+    dt_due = datetime(2026, 9, 18, 2, 0, tzinfo=timezone.utc)
+    ran_2 = rsm.check_and_run_due_schedules(now=dt_due)
+    assert len(ran_2) == 1
+    assert ran_2[0]["schedule"]["id"] == sched["id"]
+    assert ran_2[0]["reset_result"]["moved"] == 1
+    assert qm.get_task("task-sched-1") is None
+
+    # Ensure duplicate execution in same minute is skipped
+    ran_3 = rsm.check_and_run_due_schedules(now=dt_due)
+    assert len(ran_3) == 0
+
+
+def test_schedule_audit(queue_env):
+    from smos.core.queue_reset import ResetScheduleManager
+    from datetime import datetime, timezone
+
+    qm, tmp_path = queue_env
+    task_p = Task(id="task-audit-1", request="Pending task for audit test", status=TaskStatus.PENDING)
+    qm.save_task(task_p)
+
+    rsm = ResetScheduleManager()
+    sched = rsm.create_schedule(name="Minutely Reset", cron="* * * * *", scope="pending")
+
+    dt = datetime(2026, 9, 18, 12, 0, tzinfo=timezone.utc)
+    rsm.check_and_run_due_schedules(now=dt)
+
+    audit_file = tmp_path / ".jules" / "history" / "reset_audit.jsonl"
+    assert audit_file.exists()
+
+    lines = [json.loads(line) for line in audit_file.read_text().strip().split("\n") if line]
+    assert len(lines) == 1
+    entry = lines[0]
+    assert entry["action"] == "scheduled_reset"
+    assert entry["scope"] == "pending"
+    assert entry["schedule_id"] == sched["id"]
+    assert entry["moved"] == 1
+    assert "reset-" in entry["archive_file"]

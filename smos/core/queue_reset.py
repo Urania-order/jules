@@ -2,12 +2,102 @@
 
 import json
 import os
+import uuid
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 from datetime import datetime, timezone
 
 from smos.core.queue import QueueManager
 from smos.core.task import TaskStatus
+
+
+def parse_cron_part(part: str, min_val: int, max_val: int) -> set:
+    """Parses a single cron field expression into a set of allowed integer values."""
+    allowed = set()
+    subparts = part.split(",")
+    for sub in subparts:
+        sub = sub.strip()
+        if not sub:
+            continue
+        step = 1
+        if "/" in sub:
+            sub_range, step_str = sub.split("/", 1)
+            step = int(step_str)
+            if step <= 0:
+                raise ValueError(f"Step must be positive in cron expression: {part}")
+        else:
+            sub_range = sub
+
+        if sub_range == "*":
+            start, end = min_val, max_val
+        elif "-" in sub_range:
+            s_str, e_str = sub_range.split("-", 1)
+            start, end = int(s_str), int(e_str)
+        else:
+            val = int(sub_range)
+            start, end = val, val if "/" not in sub else max_val
+
+        if start < min_val or end > max_val or start > end:
+            raise ValueError(f"Out of bounds range {start}-{end} for limits {min_val}-{max_val}")
+
+        for v in range(start, end + 1):
+            if (v - start) % step == 0:
+                allowed.add(v)
+    return allowed
+
+
+def validate_cron(cron_expr: str) -> bool:
+    """Validates 5-part cron syntax (min hour dom mon dow)."""
+    parts = cron_expr.strip().split()
+    if len(parts) != 5:
+        raise ValueError(f"Invalid cron expression '{cron_expr}': must have exactly 5 parts (min hour dom mon dow)")
+    try:
+        parse_cron_part(parts[0], 0, 59)
+        parse_cron_part(parts[1], 0, 23)
+        parse_cron_part(parts[2], 1, 31)
+        parse_cron_part(parts[3], 1, 12)
+        parse_cron_part(parts[4], 0, 7)
+    except Exception as e:
+        raise ValueError(f"Invalid cron expression '{cron_expr}': {e}")
+    return True
+
+
+def cron_matches(cron_expr: str, dt: datetime) -> bool:
+    """Checks if datetime dt matches 5-part cron expression (min hour dom mon dow)."""
+    try:
+        parts = cron_expr.strip().split()
+        if len(parts) != 5:
+            return False
+        min_expr, hour_expr, dom_expr, mon_expr, dow_expr = parts
+
+        dt_min = dt.minute
+        dt_hour = dt.hour
+        dt_dom = dt.day
+        dt_month = dt.month
+        # Python dt.weekday(): 0=Mon..6=Sun. Cron dow: 0=Sun, 1=Mon..6=Sat, 7=Sun.
+        cron_dt_dow = (dt.weekday() + 1) % 7
+
+        if dt_min not in parse_cron_part(min_expr, 0, 59):
+            return False
+        if dt_hour not in parse_cron_part(hour_expr, 0, 23):
+            return False
+        if dt_dom not in parse_cron_part(dom_expr, 1, 31):
+            return False
+        if dt_month not in parse_cron_part(mon_expr, 1, 12):
+            return False
+
+        allowed_dow = parse_cron_part(dow_expr, 0, 7)
+        if 7 in allowed_dow:
+            allowed_dow.add(0)
+        if 0 in allowed_dow:
+            allowed_dow.add(7)
+
+        if cron_dt_dow not in allowed_dow:
+            return False
+
+        return True
+    except Exception:
+        return False
 
 
 class QueueResetManager:
@@ -555,3 +645,172 @@ class QueueResetManager:
             "restored": undo_res["restored"],
             "failed": undo_res["failed"]
         }
+
+
+class ResetScheduleManager:
+    def __init__(self, project_root: Optional[Path] = None, reset_manager: Optional[QueueResetManager] = None):
+        if project_root is None:
+            project_root = Path(os.environ.get("JULES_PROJECT_ROOT", "."))
+        self.project_root = Path(project_root)
+        self.schedules_file = self.project_root / ".jules" / "reset_schedules.json"
+        self.audit_file = self.project_root / ".jules" / "history" / "reset_audit.jsonl"
+        self.reset_manager = reset_manager or QueueResetManager()
+
+    def _load_schedules(self) -> List[Dict[str, Any]]:
+        if not self.schedules_file.exists():
+            return []
+        try:
+            data = json.loads(self.schedules_file.read_text(encoding="utf-8"))
+            if isinstance(data, list):
+                return data
+        except Exception:
+            pass
+        return []
+
+    def _save_schedules(self, schedules: List[Dict[str, Any]]) -> None:
+        self.schedules_file.parent.mkdir(parents=True, exist_ok=True)
+        self.schedules_file.write_text(
+            json.dumps(schedules, indent=2, ensure_ascii=False) + "\n",
+            encoding="utf-8"
+        )
+
+    def list_schedules(self) -> List[Dict[str, Any]]:
+        return self._load_schedules()
+
+    def get_schedule(self, schedule_id: str) -> Optional[Dict[str, Any]]:
+        schedules = self._load_schedules()
+        for s in schedules:
+            if s.get("id") == schedule_id:
+                return s
+        return None
+
+    def create_schedule(self, name: str, cron: str, scope: str, enabled: bool = True) -> Dict[str, Any]:
+        validate_cron(cron)
+        normalized_scope = scope.lower().strip()
+        valid_scopes = {"all", "ready", "pending", "running", "review", "blocked", "completed"}
+        if normalized_scope not in valid_scopes:
+            raise ValueError(f"Invalid scope: {scope}. Must be one of {valid_scopes}")
+
+        now_iso = datetime.now(timezone.utc).isoformat()
+        schedule_id = f"sched-{uuid.uuid4().hex[:8]}"
+
+        new_sched = {
+            "id": schedule_id,
+            "name": name.strip(),
+            "cron": cron.strip(),
+            "scope": normalized_scope,
+            "enabled": bool(enabled),
+            "created_at": now_iso,
+            "last_run": None
+        }
+
+        schedules = self._load_schedules()
+        schedules.append(new_sched)
+        self._save_schedules(schedules)
+
+        return new_sched
+
+    def update_schedule(
+        self,
+        schedule_id: str,
+        name: Optional[str] = None,
+        cron: Optional[str] = None,
+        scope: Optional[str] = None,
+        enabled: Optional[bool] = None
+    ) -> Dict[str, Any]:
+        schedules = self._load_schedules()
+        target = None
+        for s in schedules:
+            if s.get("id") == schedule_id:
+                target = s
+                break
+
+        if not target:
+            raise KeyError(f"Schedule '{schedule_id}' not found")
+
+        if cron is not None:
+            validate_cron(cron)
+            target["cron"] = cron.strip()
+
+        if scope is not None:
+            normalized_scope = scope.lower().strip()
+            valid_scopes = {"all", "ready", "pending", "running", "review", "blocked", "completed"}
+            if normalized_scope not in valid_scopes:
+                raise ValueError(f"Invalid scope: {scope}. Must be one of {valid_scopes}")
+            target["scope"] = normalized_scope
+
+        if name is not None:
+            target["name"] = name.strip()
+
+        if enabled is not None:
+            target["enabled"] = bool(enabled)
+
+        self._save_schedules(schedules)
+        return target
+
+    def delete_schedule(self, schedule_id: str) -> bool:
+        schedules = self._load_schedules()
+        initial_len = len(schedules)
+        schedules = [s for s in schedules if s.get("id") != schedule_id]
+        if len(schedules) < initial_len:
+            self._save_schedules(schedules)
+            return True
+        return False
+
+    def log_audit_entry(self, entry: Dict[str, Any]) -> None:
+        self.audit_file.parent.mkdir(parents=True, exist_ok=True)
+        line = json.dumps(entry, ensure_ascii=False) + "\n"
+        with self.audit_file.open("a", encoding="utf-8") as f:
+            f.write(line)
+
+    def check_and_run_due_schedules(self, now: Optional[datetime] = None) -> List[Dict[str, Any]]:
+        now_dt = now or datetime.now(timezone.utc)
+        now_iso = now_dt.isoformat()
+        now_min_key = now_dt.strftime("%Y-%m-%d %H:%M")
+
+        schedules = self._load_schedules()
+        ran_schedules = []
+        modified = False
+
+        for sched in schedules:
+            if not sched.get("enabled"):
+                continue
+
+            last_run = sched.get("last_run")
+            if last_run:
+                try:
+                    last_dt = datetime.fromisoformat(last_run)
+                    if last_dt.strftime("%Y-%m-%d %H:%M") == now_min_key:
+                        # Already executed in this minute
+                        continue
+                except Exception:
+                    pass
+
+            cron_expr = sched.get("cron", "")
+            if cron_matches(cron_expr, now_dt):
+                scope = sched.get("scope", "all")
+                # Run reset
+                res = self.reset_manager.reset_queue(scope=scope)
+
+                sched["last_run"] = now_iso
+                modified = True
+
+                audit_entry = {
+                    "timestamp": now_iso,
+                    "action": "scheduled_reset",
+                    "scope": scope,
+                    "schedule_id": sched["id"],
+                    "moved": res.get("moved", 0),
+                    "archive_file": res.get("archive", "")
+                }
+                self.log_audit_entry(audit_entry)
+                ran_schedules.append({
+                    "schedule": sched,
+                    "reset_result": res,
+                    "audit_entry": audit_entry
+                })
+
+        if modified:
+            self._save_schedules(schedules)
+
+        return ran_schedules

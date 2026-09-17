@@ -393,7 +393,19 @@ def test_frontend_contract_reset_center_elements():
         ".undo-filters",
         ".undo-filter-row",
         ".undo-btn",
-        ".undo-matched-count"
+        ".undo-matched-count",
+        ".schedule-card",
+        ".schedule-enabled",
+        ".schedule-name",
+        ".schedule-scope",
+        ".schedule-cron",
+        ".schedule-save",
+        ".schedule-delete"
     ]
     for cls in css_classes:
         assert cls in content, f"CSS class {cls} not found in frontend/index.html"
+
+    # Scheduled tab & buttons
+    assert 'id="tab-scheduled"' in content
+    assert 'id="btn-add-schedule"' in content
+    assert 'id="schedules-list"' in content
