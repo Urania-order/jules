@@ -32,3 +32,7 @@ __pycache__/
 # Reset archives (runtime)
 .jules/queue/reset-*.jsonl
 .jules/history/reset-*.md
+
+# Co-SMOS runtime state (not for version control)
+.jules/reset_schedules.json
+.jules/history/reset_audit.jsonl
