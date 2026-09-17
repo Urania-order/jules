@@ -1,10 +1,48 @@
 {
   "id": "proposal-20260914-033105-29264",
+  "request": "Add CLI auto-completion for jules-queue-review.sh and proposal IDs",
+  "title": "Add CLI auto-completion for jules-queue-review.sh ",
+  "description": "Add CLI auto-completion for jules-queue-review.sh and proposal IDs",
+  "status": "cancelled",
+  "priority": 3,
+  "created_at": "2026-09-14T00:31:07.859005+00:00",
+  "started_at": null,
+  "finished_at": "2026-09-17T13:55:40.967528+00:00",
   "proposed_by": "jules",
   "source_task": "task-20260914-012908",
-  "description": "Add CLI auto-completion for jules-queue-review.sh and proposal IDs",
-  "priority": 3,
-  "status": "deferred",
-  "created_at": "2026-09-14T00:31:07.859005+00:00",
-  "deferred_at": "2026-09-14T14:01:44.332703+00:00"
+  "session_id": null,
+  "jules_task_id": null,
+  "error": null,
+  "exit_code": null,
+  "notes": null,
+  "tags": [],
+  "metadata": {
+    "reset_from_scope": "completed"
+  },
+  "history": [
+    {
+      "timestamp": "2026-09-17T13:55:40.967528+00:00",
+      "status": "CANCELLED",
+      "message": "Task cancelled via API",
+      "details": null
+    },
+    {
+      "timestamp": "2026-09-17T13:55:43.461086+00:00",
+      "status": "CANCELLED",
+      "message": "Task cancelled via API",
+      "details": null
+    },
+    {
+      "timestamp": "2026-09-17T13:59:42.811753+00:00",
+      "status": "CANCELLED",
+      "message": "Task cancelled via API",
+      "details": null
+    },
+    {
+      "timestamp": "2026-09-17T14:02:13.860841+00:00",
+      "status": "CANCELLED",
+      "message": "Task cancelled via API",
+      "details": null
+    }
+  ]
 }
