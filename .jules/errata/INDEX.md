@@ -17,6 +17,7 @@ Known mistakes and rules to avoid them.
 
 ### macOS 10.13 Intel (environment-specific)
 
+- ERRATA-0018 — git init -b main fails on git < 2.28 (LOW)
 - ERRATA-0004 — date -Iseconds not supported (LOW)
 - ERRATA-0005 — git branch --show-current not supported (LOW)
 - ERRATA-0006 — NVM PATH not in scripts (MEDIUM)
@@ -56,6 +57,7 @@ Known mistakes and rules to avoid them.
 | 0015 | MEDIUM | Process | MITIGATED (auto-move in jules-complete.sh) |
 | 0016 | MEDIUM | Process | MITIGATED (idempotency check) |
 | 0017 | MEDIUM | Process | FIXED (test isolation, commit 8223f1b) |
+| 0018 | LOW | macOS | FIXED (git init + checkout -b) |
 
 ## Files
 
@@ -76,6 +78,7 @@ Known mistakes and rules to avoid them.
 - [ERRATA-0015](errata-0015-untracked-forbidden.md) — Post-pull check misses untracked forbidden files
 - [ERRATA-0016](errata-0016-jules-complete-not-idempotent.md) — jules-complete.sh is not idempotent
 - [ERRATA-0017](errata-0017-test-writes-real-queue.md) — test_cli_adapter.py writes to real .jules/queue/
+- [ERRATA-0018](errata-0018-git-init-b.md) — git init -b main fails on git < 2.28
 
 ## Usage
 
