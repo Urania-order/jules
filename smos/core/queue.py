@@ -12,7 +12,11 @@ class QueueManager:
         if queue_dir is None:
             project_root = Path(os.environ.get("JULES_PROJECT_ROOT", "."))
             queue_dir = project_root / ".jules" / "queue"
+            self.project_root = project_root
+        else:
+            self.project_root = queue_dir.parent.parent
         self.queue_dir = Path(queue_dir)
+        self.state_file = self.project_root / ".co-smos" / "state.json"
         self.pending_dir = self.queue_dir / "pending"
         self.running_dir = self.queue_dir / "running"
         self.completed_dir = self.queue_dir / "completed"
@@ -64,6 +68,33 @@ class QueueManager:
 
     def list_all_tasks(self) -> List[Task]:
         tasks = []
+        seen_ids = set()
+
+        # Primary source: state.json
+        if self.state_file.exists():
+            try:
+                state_data = json.loads(self.state_file.read_text(encoding="utf-8"))
+                candidates = []
+                if isinstance(state_data.get("tasks"), list):
+                    candidates.extend(state_data["tasks"])
+                if isinstance(state_data.get("history"), list):
+                    candidates.extend(state_data["history"])
+                if isinstance(state_data.get("active_task"), dict):
+                    candidates.append(state_data["active_task"])
+                if isinstance(state_data.get("last_task"), dict):
+                    candidates.append(state_data["last_task"])
+
+                for item in candidates:
+                    if not isinstance(item, dict):
+                        continue
+                    tid = item.get("id")
+                    if tid and tid not in seen_ids:
+                        tasks.append(self._task_from_dict(item, TaskStatus.PENDING))
+                        seen_ids.add(tid)
+            except Exception:
+                pass
+
+        # Legacy file source: .jules/queue/*.json
         directories = [
             (self.pending_dir, TaskStatus.PENDING),
             (self.running_dir, TaskStatus.RUNNING),
@@ -74,9 +105,13 @@ class QueueManager:
             for p in folder.glob("*.json"):
                 try:
                     data = json.loads(p.read_text(encoding="utf-8"))
-                    tasks.append(self._task_from_dict(data, default_status))
+                    tid = data.get("id") or p.stem
+                    if tid not in seen_ids:
+                        tasks.append(self._task_from_dict(data, default_status))
+                        seen_ids.add(tid)
                 except Exception:
                     continue
+
         return tasks
 
     def list_queue_tasks(self) -> List[Task]:
@@ -98,22 +133,48 @@ class QueueManager:
         return None
 
     def save_task(self, task: Task) -> None:
-        target_dir = self.pending_dir
-        if task.status == TaskStatus.RUNNING:
-            target_dir = self.running_dir
-        elif task.status in (TaskStatus.COMPLETED, TaskStatus.FAILED, TaskStatus.CANCELLED):
-            target_dir = self.completed_dir
-        elif task.status == TaskStatus.DEFERRED:
-            target_dir = self.deferred_dir
+        if self.state_file.exists():
+            try:
+                state_data = json.loads(self.state_file.read_text(encoding="utf-8"))
+            except Exception:
+                state_data = {}
+        else:
+            state_data = {}
+            self.state_file.parent.mkdir(parents=True, exist_ok=True)
 
+        task_dict = self._task_to_dict(task)
+        history = state_data.get("history")
+        if not isinstance(history, list):
+            history = []
+
+        updated = False
+        for idx, item in enumerate(history):
+            if isinstance(item, dict) and item.get("id") == task.id:
+                history[idx] = task_dict
+                updated = True
+                break
+        if not updated:
+            history.append(task_dict)
+
+        state_data["history"] = history
+
+        if task.status == TaskStatus.RUNNING:
+            state_data["active_task"] = task_dict
+            state_data["status"] = "busy"
+        elif state_data.get("active_task") and isinstance(state_data["active_task"], dict) and state_data["active_task"].get("id") == task.id:
+            state_data["active_task"] = None
+            state_data["status"] = "idle"
+
+        if task.status in (TaskStatus.COMPLETED, TaskStatus.FAILED, TaskStatus.CANCELLED):
+            state_data["last_task"] = task_dict
+
+        self.state_file.write_text(json.dumps(state_data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+
+        # Cleanup legacy file if any exists
         for d in [self.pending_dir, self.running_dir, self.completed_dir, self.deferred_dir]:
             old_file = d / f"{task.id}.json"
             if old_file.exists():
                 old_file.unlink()
-
-        filepath = target_dir / f"{task.id}.json"
-        data = self._task_to_dict(task)
-        filepath.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
     def reorder_queue(self, ordered_task_ids: List[str]) -> List[Task]:
         pending_tasks = {t.id: t for t in self.list_all_tasks() if t.status in (TaskStatus.PENDING, TaskStatus.READY)}
