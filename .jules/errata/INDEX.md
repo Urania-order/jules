@@ -26,6 +26,7 @@ Known mistakes and rules to avoid them.
 
 ### Process / Orchestration
 
+- ERRATA-0022 — Co-SMOS v1.1 Reset Center summary (INFO)
 - ERRATA-0021 — Must activate .venv before pytest (MEDIUM)
 - ERRATA-0020 — No Reset button at task level (MEDIUM)
 - ERRATA-0017 — test_cli_adapter.py writes to real .jules/queue/ (MEDIUM)
