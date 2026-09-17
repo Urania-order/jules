@@ -530,6 +530,56 @@
       display: inline-block;
     }
 
+    /* Consult Tuning CSS */
+    .consult-tab {
+      padding: 0.5rem 1rem;
+      border-radius: 0.25rem;
+      cursor: pointer;
+      background: var(--bg-primary);
+      border: 1px solid var(--border-color);
+      color: var(--text-secondary);
+      font-weight: 500;
+    }
+    .consult-tab.active {
+      background: var(--accent-blue);
+      color: #ffffff;
+      border-color: var(--accent-blue);
+    }
+    .consult-settings {
+      display: flex;
+      flex-direction: column;
+      gap: 1.5rem;
+      margin-top: 1rem;
+    }
+    .consult-audit-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.5rem 0.75rem;
+      border-bottom: 1px solid var(--border-color);
+      font-family: monospace;
+      font-size: 0.85rem;
+    }
+    .token-status {
+      display: inline-block;
+      padding: 0.2rem 0.5rem;
+      border-radius: 0.25rem;
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      margin-left: 0.5rem;
+    }
+    .token-status.active {
+      background: rgba(16, 185, 129, 0.2);
+      color: var(--accent-green);
+      border: 1px solid var(--accent-green);
+    }
+    .token-status.disabled {
+      background: rgba(239, 68, 68, 0.2);
+      color: var(--accent-red);
+      border: 1px solid var(--accent-red);
+    }
+
     .batch-select {
       cursor: pointer;
     }
@@ -902,16 +952,57 @@
           <div id="consult-time" style="color: var(--text-secondary); font-size: 0.85rem;">Last response: -</div>
         </div>
 
-        <h4 style="margin-bottom: 0.5rem; color: var(--accent-blue);">Available Consult Endpoints</h4>
-        <div class="consult-endpoint"><span>GET /api/consult/state</span> <span>Read-only system state</span></div>
-        <div class="consult-endpoint"><span>GET /api/consult/tasks</span> <span>Read-only task list</span></div>
-        <div class="consult-endpoint"><span>GET /api/consult/task/{id}</span> <span>Read-only single task record</span></div>
-        <div class="consult-endpoint"><span>GET /api/consult/events</span> <span>Read-only event stream</span></div>
-        <div class="consult-endpoint"><span>GET /api/consult/errata</span> <span>Read-only errata files index</span></div>
-        <div class="consult-endpoint"><span>GET /api/consult/health</span> <span>Read-only health check</span></div>
+        <div style="display: flex; gap: 0.5rem; margin-bottom: 1rem; border-bottom: 1px solid var(--border-color); padding-bottom: 0.5rem;">
+          <button class="consult-tab active" data-tab="endpoints" onclick="switchConsultTab('endpoints')">Endpoints</button>
+          <button class="consult-tab" data-tab="settings" onclick="switchConsultTab('settings')">Settings</button>
+          <button class="consult-tab" data-tab="audit" onclick="switchConsultTab('audit')">Audit</button>
+        </div>
 
-        <h4 style="margin-top: 1rem; margin-bottom: 0.5rem; color: var(--accent-blue);">Consult System State Snapshot</h4>
-        <div class="history-log" id="consult-snapshot" style="max-height: 250px;"></div>
+        <!-- ENDPOINTS TAB -->
+        <div id="consult-tab-endpoints" class="consult-tab-content">
+          <h4 style="margin-bottom: 0.5rem; color: var(--accent-blue);">Available Consult Endpoints</h4>
+          <div class="consult-endpoint"><span>GET /api/consult/state</span> <span>Read-only system state</span></div>
+          <div class="consult-endpoint"><span>GET /api/consult/tasks</span> <span>Read-only task list</span></div>
+          <div class="consult-endpoint"><span>GET /api/consult/task/{id}</span> <span>Read-only single task record</span></div>
+          <div class="consult-endpoint"><span>GET /api/consult/events</span> <span>Read-only event stream</span></div>
+          <div class="consult-endpoint"><span>GET /api/consult/errata</span> <span>Read-only errata files index</span></div>
+          <div class="consult-endpoint"><span>GET /api/consult/health</span> <span>Read-only health check</span></div>
+
+          <h4 style="margin-top: 1rem; margin-bottom: 0.5rem; color: var(--accent-blue);">Consult System State Snapshot</h4>
+          <div class="history-log" id="consult-snapshot" style="max-height: 250px;"></div>
+        </div>
+
+        <!-- SETTINGS TAB -->
+        <div id="consult-tab-settings" class="consult-tab-content consult-settings" style="display: none;">
+          <div id="view-consult-settings">
+            <h4 style="margin-bottom: 0.75rem; color: var(--accent-blue);">Token Management</h4>
+            <div id="consult-tokens-list" style="display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 1.5rem;">
+              <!-- Dynamically rendered tokens -->
+            </div>
+
+            <h4 style="margin-bottom: 0.75rem; color: var(--accent-blue);">Rate Limits (requests/hr)</h4>
+            <div style="display: flex; gap: 1rem; align-items: center; margin-bottom: 1.5rem;">
+              <label style="font-size: 0.85rem;">Consultant: <input type="number" id="rate-limit-consultant" class="task-edit-input" style="width: 100px; display: inline-block; margin-left: 0.5rem;" value="100"></label>
+              <label style="font-size: 0.85rem;">Operator: <input type="number" id="rate-limit-operator" class="task-edit-input" style="width: 100px; display: inline-block; margin-left: 0.5rem;" value="1000"></label>
+              <button class="btn btn-primary btn-sm" onclick="saveConsultRateLimits()">Save Limits</button>
+            </div>
+
+            <h4 style="margin-bottom: 0.75rem; color: var(--accent-blue);">Endpoint Toggles</h4>
+            <div id="consult-toggles-list" style="display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 1rem;">
+              <!-- Dynamically rendered endpoint toggles -->
+            </div>
+            <button class="btn btn-primary btn-sm" onclick="saveConsultToggles()">Save Toggles</button>
+          </div>
+        </div>
+
+        <!-- AUDIT TAB -->
+        <div id="consult-tab-audit" class="consult-tab-content" style="display: none;">
+          <h4 style="margin-bottom: 0.75rem; color: var(--accent-blue);">Audit Log (Last 50 Entries)</h4>
+          <div id="consult-audit-list" class="history-log" style="max-height: 400px; display: flex; flex-direction: column;">
+            <!-- Dynamically rendered audit log rows -->
+          </div>
+        </div>
+
       </div>
     </section>
 
@@ -1826,6 +1917,28 @@
     }
 
     // Consult Access view fetch & display
+    function switchConsultTab(tabName) {
+      document.querySelectorAll('.consult-tab').forEach(btn => {
+        if (btn.dataset.tab === tabName) {
+          btn.classList.add('active');
+        } else {
+          btn.classList.remove('active');
+        }
+      });
+      document.querySelectorAll('.consult-tab-content').forEach(content => {
+        content.style.display = 'none';
+      });
+      const activeContent = document.getElementById(`consult-tab-${tabName}`);
+      if (activeContent) {
+        activeContent.style.display = 'block';
+      }
+      if (tabName === 'settings') {
+        loadConsultSettings();
+      } else if (tabName === 'audit') {
+        loadConsultAudit();
+      }
+    }
+
     async function renderConsultView() {
       const snapshotContainer = document.getElementById('consult-snapshot');
       if (!snapshotContainer) return;
@@ -1835,6 +1948,160 @@
         snapshotContainer.textContent = JSON.stringify(data.system_status, null, 2);
       } catch (e) {
         snapshotContainer.textContent = 'Failed to load consult state snapshot.';
+      }
+    }
+
+    async function loadConsultSettings() {
+      try {
+        const settings = await fetchJSON(`${API_BASE}/consult/settings`, {
+          headers: { 'Authorization': 'Bearer dev-admin-token' }
+        });
+        if (settings.rate_limits) {
+          const cInput = document.getElementById('rate-limit-consultant');
+          if (cInput) cInput.value = settings.rate_limits.consultant ?? 100;
+          const oInput = document.getElementById('rate-limit-operator');
+          if (oInput) oInput.value = settings.rate_limits.operator ?? 1000;
+        }
+        renderConsultTokens(settings.tokens || {});
+        renderConsultToggles(settings.endpoints || {});
+      } catch (err) {
+        console.error('Failed to load consult settings:', err);
+      }
+    }
+
+    function renderConsultTokens(tokens) {
+      const container = document.getElementById('consult-tokens-list');
+      if (!container) return;
+      container.innerHTML = '';
+      const roles = ['consultant', 'operator', 'admin'];
+      roles.forEach(role => {
+        const info = tokens[role] || { status: 'active', token: '' };
+        const row = document.createElement('div');
+        row.className = 'consult-endpoint';
+        row.innerHTML = `
+          <div>
+            <strong style="text-transform: capitalize;">${role}</strong>
+            <span class="token-status ${info.status}">${info.status}</span>
+          </div>
+          <div style="display: flex; gap: 0.5rem;">
+            <button class="btn btn-secondary btn-sm" onclick="regenerateConsultToken('${role}')">Regenerate</button>
+            <button class="btn btn-secondary btn-sm" onclick="disableConsultToken('${role}')">Disable</button>
+          </div>
+        `;
+        container.appendChild(row);
+      });
+    }
+
+    function renderConsultToggles(endpoints) {
+      const container = document.getElementById('consult-toggles-list');
+      if (!container) return;
+      container.innerHTML = '';
+      const epList = [
+        '/api/consult/state',
+        '/api/consult/tasks',
+        '/api/consult/task/{id}',
+        '/api/consult/events',
+        '/api/consult/errata',
+        '/api/consult/health'
+      ];
+      epList.forEach(ep => {
+        const isEnabled = endpoints[ep] !== false;
+        const row = document.createElement('div');
+        row.className = 'consult-endpoint';
+        row.innerHTML = `
+          <span>${ep}</span>
+          <label style="cursor: pointer; display: flex; align-items: center; gap: 0.5rem;">
+            <input type="checkbox" data-endpoint="${ep}" ${isEnabled ? 'checked' : ''}> Enabled
+          </label>
+        `;
+        container.appendChild(row);
+      });
+    }
+
+    async function regenerateConsultToken(role) {
+      try {
+        const res = await fetchJSON(`${API_BASE}/consult/tokens/${role}/regenerate`, {
+          method: 'POST',
+          headers: { 'Authorization': 'Bearer dev-admin-token' }
+        });
+        alert(`Token for ${role} regenerated: ${res.token}`);
+        loadConsultSettings();
+      } catch (err) {
+        alert('Failed to regenerate token: ' + err.message);
+      }
+    }
+
+    async function disableConsultToken(role) {
+      try {
+        await fetchJSON(`${API_BASE}/consult/tokens/${role}/disable`, {
+          method: 'POST',
+          headers: { 'Authorization': 'Bearer dev-admin-token' }
+        });
+        loadConsultSettings();
+      } catch (err) {
+        alert('Failed to disable token: ' + err.message);
+      }
+    }
+
+    async function saveConsultRateLimits() {
+      const cVal = parseInt(document.getElementById('rate-limit-consultant').value, 10) || 100;
+      const oVal = parseInt(document.getElementById('rate-limit-operator').value, 10) || 1000;
+      try {
+        await fetchJSON(`${API_BASE}/consult/settings`, {
+          method: 'PATCH',
+          headers: { 'Authorization': 'Bearer dev-admin-token', 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            rate_limits: { consultant: cVal, operator: oVal }
+          })
+        });
+        alert('Rate limits saved successfully');
+      } catch (err) {
+        alert('Failed to save rate limits: ' + err.message);
+      }
+    }
+
+    async function saveConsultToggles() {
+      const endpoints = {};
+      document.querySelectorAll('#consult-toggles-list input[type="checkbox"]').forEach(cb => {
+        endpoints[cb.dataset.endpoint] = cb.checked;
+      });
+      try {
+        await fetchJSON(`${API_BASE}/consult/settings`, {
+          method: 'PATCH',
+          headers: { 'Authorization': 'Bearer dev-admin-token', 'Content-Type': 'application/json' },
+          body: JSON.stringify({ endpoints })
+        });
+        alert('Endpoint toggles saved successfully');
+      } catch (err) {
+        alert('Failed to save endpoint toggles: ' + err.message);
+      }
+    }
+
+    async function loadConsultAudit() {
+      const container = document.getElementById('consult-audit-list');
+      if (!container) return;
+      try {
+        const logs = await fetchJSON(`${API_BASE}/consult/audit?limit=50`, {
+          headers: { 'Authorization': 'Bearer dev-consultant-token' }
+        });
+        container.innerHTML = '';
+        if (!logs || logs.length === 0) {
+          container.textContent = 'No audit log entries found.';
+          return;
+        }
+        logs.forEach(log => {
+          const row = document.createElement('div');
+          row.className = 'consult-audit-row';
+          row.innerHTML = `
+            <span>${log.timestamp}</span>
+            <span style="color: var(--accent-blue);">${log.role}</span>
+            <span><strong>${log.method}</strong> ${log.path}</span>
+            <span style="color: ${log.status_code < 400 ? 'var(--accent-green)' : 'var(--accent-red)'}">${log.status_code}</span>
+          `;
+          container.appendChild(row);
+        });
+      } catch (err) {
+        container.textContent = 'Failed to load audit log.';
       }
     }
 

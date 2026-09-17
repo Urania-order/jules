@@ -114,6 +114,10 @@ def test_frontend_contract_css_classes():
         ".reset-confirm",
         ".template-card",
         ".template-list",
+        ".consult-tab",
+        ".consult-settings",
+        ".consult-audit-row",
+        ".token-status",
     ]
 
     for cls in required_classes:
@@ -243,6 +247,33 @@ def test_frontend_contract_v1_1_elements():
     assert 'template-card' in content
     assert 'template-list' in content
     assert 'id="template-list"' in content
+
+
+def test_frontend_contract_consult_tuning_elements():
+    """Verify Consult Tuning contract elements: consult tabs, settings panel, tokens UI, rate limits UI, endpoint toggles UI, and audit log list."""
+    content = INDEX_PATH.read_text()
+
+    # CSS classes
+    assert '.consult-tab' in content
+    assert '.consult-settings' in content
+    assert '.consult-audit-row' in content
+    assert '.token-status' in content
+
+    # Tabs
+    assert 'switchConsultTab' in content
+    assert 'data-tab="endpoints"' in content
+    assert 'data-tab="settings"' in content
+    assert 'data-tab="audit"' in content
+
+    # Settings panel elements
+    assert 'view-consult-settings' in content
+    assert 'id="consult-tokens-list"' in content
+    assert 'id="rate-limit-consultant"' in content
+    assert 'id="rate-limit-operator"' in content
+    assert 'id="consult-toggles-list"' in content
+
+    # Audit elements
+    assert 'id="consult-audit-list"' in content
 
 
 def test_consult_endpoints_read_only():

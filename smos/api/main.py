@@ -46,6 +46,7 @@ from smos.core.scheduler import Scheduler
 from smos.core.queue_reset import QueueResetManager
 from smos.core.templates import TemplateManager
 from smos.adapters.jules_cli import JulesCLIAdapter
+from smos.core.consult import consult_settings_manager, consult_audit_logger
 
 import asyncio
 import contextlib
@@ -152,24 +153,51 @@ def resolve_role_from_request(request: Request) -> str:
             status_code=401
         )
 
-    c_tok = os.environ.get(CONSULTANT_TOKEN_ENV, DEFAULT_CONSULTANT_TOKEN)
-    o_tok = os.environ.get(OPERATOR_TOKEN_ENV, DEFAULT_OPERATOR_TOKEN)
-    a_tok = os.environ.get(ADMIN_TOKEN_ENV, DEFAULT_ADMIN_TOKEN)
+    settings = consult_settings_manager.get_settings()
+    tokens_cfg = settings.get("tokens", {})
+
+    c_info = tokens_cfg.get("consultant", {})
+    o_info = tokens_cfg.get("operator", {})
+    a_info = tokens_cfg.get("admin", {})
+
+    c_tok = c_info.get("token") or os.environ.get(CONSULTANT_TOKEN_ENV, DEFAULT_CONSULTANT_TOKEN)
+    o_tok = o_info.get("token") or os.environ.get(OPERATOR_TOKEN_ENV, DEFAULT_OPERATOR_TOKEN)
+    a_tok = a_info.get("token") or os.environ.get(ADMIN_TOKEN_ENV, DEFAULT_ADMIN_TOKEN)
 
     token_bytes = token.encode("utf-8")
+    matched_role = None
 
     if hmac.compare_digest(token_bytes, a_tok.encode("utf-8")):
-        return "admin"
-    if hmac.compare_digest(token_bytes, o_tok.encode("utf-8")):
-        return "operator"
-    if hmac.compare_digest(token_bytes, c_tok.encode("utf-8")):
-        return "consultant"
+        matched_role = "admin"
+    elif hmac.compare_digest(token_bytes, o_tok.encode("utf-8")):
+        matched_role = "operator"
+    elif hmac.compare_digest(token_bytes, c_tok.encode("utf-8")):
+        matched_role = "consultant"
 
-    raise AuthException(
-        code="CONSULT_AUTH_INVALID",
-        message="Invalid authorization token",
-        status_code=403
-    )
+    if matched_role is None:
+        raise AuthException(
+            code="CONSULT_AUTH_INVALID",
+            message="Invalid authorization token",
+            status_code=403
+        )
+
+    role_cfg = tokens_cfg.get(matched_role, {})
+    if role_cfg.get("status") == "disabled":
+        raise AuthException(
+            code="CONSULT_AUTH_INVALID",
+            message=f"Token for role '{matched_role}' is disabled",
+            status_code=403
+        )
+
+    if request.url.path.startswith("/api/consult"):
+        if not consult_settings_manager.check_rate_limit(matched_role):
+            raise AuthException(
+                code="CONSULT_RATE_LIMIT_EXCEEDED",
+                message=f"Rate limit exceeded for role '{matched_role}'",
+                status_code=429
+            )
+
+    return matched_role
 
 def require_roles(allowed_roles: List[str]):
     def dependency(request: Request) -> str:
@@ -190,9 +218,52 @@ require_consultant_or_public = require_roles(["public", "consultant", "operator"
 require_operator = require_roles(["operator", "admin"])
 require_admin = require_roles(["admin"])
 
+def check_consult_endpoint_enabled(endpoint_key: str):
+    if not consult_settings_manager.is_endpoint_enabled(endpoint_key):
+        raise AuthException(
+            code="CONSULT_ENDPOINT_DISABLED",
+            message=f"Consult endpoint '{endpoint_key}' is disabled",
+            status_code=403
+        )
+
+@app.middleware("http")
+async def consult_audit_middleware(request: Request, call_next):
+    if not request.url.path.startswith("/api/consult"):
+        return await call_next(request)
+
+    response = await call_next(request)
+
+    role = "unauthenticated"
+    try:
+        if request.url.path == "/api/consult/health" and request.query_params.get("public") == "1":
+            role = "public"
+        else:
+            auth_header = request.headers.get("Authorization")
+            if auth_header and auth_header.startswith("Bearer "):
+                tok = auth_header[7:].strip()
+                settings = consult_settings_manager.get_settings()
+                tokens_cfg = settings.get("tokens", {})
+                for r in ["admin", "operator", "consultant"]:
+                    r_info = tokens_cfg.get(r, {})
+                    r_tok = r_info.get("token") or os.environ.get(f"JULES_{r.upper()}_TOKEN", f"dev-{r}-token")
+                    if hmac.compare_digest(tok.encode("utf-8"), r_tok.encode("utf-8")):
+                        role = r
+                        break
+    except Exception:
+        pass
+
+    consult_audit_logger.log_request(
+        role=role,
+        method=request.method,
+        path=request.url.path,
+        status_code=response.status_code
+    )
+
+    return response
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000", "http://localhost:8080", "http://127.0.0.1:8080"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -298,6 +369,11 @@ class BatchRunRequest(BaseModel):
 class ScheduleRegisterRequest(BaseModel):
     name: str
     config: Dict[str, Any]
+
+class ConsultSettingsPatchRequest(BaseModel):
+    rate_limits: Optional[Dict[str, Optional[int]]] = None
+    endpoints: Optional[Dict[str, bool]] = None
+    tokens: Optional[Dict[str, Dict[str, Any]]] = None
 
 @app.get("/")
 def read_root():
@@ -854,7 +930,7 @@ def search_control_room(q: str = "", limit: int = 50):
         "events": matched_events[:limit]
     }
 
-# --- CONSULT ACCESS ENDPOINTS (READ-ONLY) ---
+# --- CONSULT ACCESS ENDPOINTS (READ-ONLY & SETTINGS) ---
 
 _consult_request_count = 0
 
@@ -862,8 +938,36 @@ def _track_consult_request():
     global _consult_request_count
     _consult_request_count += 1
 
+@app.get("/api/consult/settings", dependencies=[Depends(require_admin)])
+def get_consult_settings():
+    return consult_settings_manager.get_settings()
+
+@app.patch("/api/consult/settings", dependencies=[Depends(require_admin)])
+def patch_consult_settings(req: ConsultSettingsPatchRequest):
+    updated = consult_settings_manager.update_settings(req.model_dump(exclude_unset=True))
+    return updated
+
+@app.post("/api/consult/tokens/{role}/regenerate", dependencies=[Depends(require_admin)])
+def regenerate_consult_token(role: str):
+    if role not in ("consultant", "operator", "admin"):
+        return _error_response(code="INVALID_ROLE", message=f"Invalid role '{role}'", status_code=400)
+    new_token = consult_settings_manager.regenerate_token(role)
+    return {"status": "success", "role": role, "token": new_token}
+
+@app.post("/api/consult/tokens/{role}/disable", dependencies=[Depends(require_admin)])
+def disable_consult_token(role: str):
+    if role not in ("consultant", "operator", "admin"):
+        return _error_response(code="INVALID_ROLE", message=f"Invalid role '{role}'", status_code=400)
+    consult_settings_manager.disable_token(role)
+    return {"status": "success", "role": role, "disabled": True}
+
+@app.get("/api/consult/audit", dependencies=[Depends(require_consultant)])
+def get_consult_audit(limit: int = 50):
+    return consult_audit_logger.get_logs(limit=limit)
+
 @app.get("/api/consult/state", dependencies=[Depends(require_consultant)])
 def get_consult_state():
+    check_consult_endpoint_enabled("/api/consult/state")
     _track_consult_request()
     sm = StateManager()
     return {
@@ -874,6 +978,7 @@ def get_consult_state():
 
 @app.get("/api/consult/tasks", dependencies=[Depends(require_consultant)])
 def get_consult_tasks():
+    check_consult_endpoint_enabled("/api/consult/tasks")
     _track_consult_request()
     qm = QueueManager()
     tasks = qm.list_all_tasks()
@@ -881,6 +986,7 @@ def get_consult_tasks():
 
 @app.get("/api/consult/task/{id}", dependencies=[Depends(require_consultant)])
 def get_consult_task_by_id(id: str):
+    check_consult_endpoint_enabled("/api/consult/task/{id}")
     _track_consult_request()
     qm = QueueManager()
     task = qm.get_task(id)
@@ -890,12 +996,14 @@ def get_consult_task_by_id(id: str):
 
 @app.get("/api/consult/events", dependencies=[Depends(require_consultant)])
 def get_consult_events(limit: int = 100):
+    check_consult_endpoint_enabled("/api/consult/events")
     _track_consult_request()
     events = EventTracker.list_events(limit=limit)
     return [e.model_dump() for e in events]
 
 @app.get("/api/consult/errata", dependencies=[Depends(require_consultant)])
 def get_consult_errata():
+    check_consult_endpoint_enabled("/api/consult/errata")
     _track_consult_request()
     project_root = Path(os.environ.get("JULES_PROJECT_ROOT", "."))
     errata_dir = project_root / ".jules" / "errata"
@@ -916,6 +1024,7 @@ def get_consult_errata():
 
 @app.get("/api/consult/health", dependencies=[Depends(require_consultant_or_public)])
 def get_consult_health():
+    check_consult_endpoint_enabled("/api/consult/health")
     _track_consult_request()
     return {
         "status": "ok",
