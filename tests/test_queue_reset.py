@@ -344,3 +344,107 @@ def test_reset_no_files_in_queue_dir(queue_env):
         folder = queue_dir / folder_name
         json_files = list(folder.glob("*.json"))
         assert len(json_files) == 0, f"Found unexpected task json files in {folder_name}: {json_files}"
+
+
+def test_archive_export_csv(queue_env):
+    qm, tmp_path = queue_env
+    task = Task(id="task-exp-csv", request="Export CSV Task", status=TaskStatus.READY, priority=2)
+    qm.save_task(task)
+
+    client.post("/api/queue/reset", json={"confirm": "RESET", "scope": "ready"}, headers=AUTH_HEADERS)
+
+    res = client.get("/api/queue/archive/export?format=csv", headers=AUTH_HEADERS)
+    assert res.status_code == 200
+    assert "text/csv" in res.headers["content-type"]
+    assert "attachment; filename=\"reset-archive-" in res.headers["content-disposition"]
+    assert ".csv\"" in res.headers["content-disposition"]
+
+    content = res.text
+    assert "task_id,status,request,priority,created_at,reset_at,scope,restored" in content
+    assert "task-exp-csv" in content
+    assert "Export CSV Task" in content
+
+
+def test_archive_export_md(queue_env):
+    qm, tmp_path = queue_env
+    task = Task(id="task-exp-md", request="Export MD Task", status=TaskStatus.RUNNING, source_task="src-10")
+    qm.save_task(task)
+
+    client.post("/api/queue/reset", json={"confirm": "RESET", "scope": "running"}, headers=AUTH_HEADERS)
+
+    res = client.get("/api/queue/archive/export?format=md", headers=AUTH_HEADERS)
+    assert res.status_code == 200
+    assert "text/markdown" in res.headers["content-type"]
+    assert "attachment; filename=\"reset-archive-" in res.headers["content-disposition"]
+    assert ".md\"" in res.headers["content-disposition"]
+
+    content = res.text
+    assert "# Queue Archive — Export" in content
+    assert "## task-exp-md" in content
+    assert "Export MD Task" in content
+    assert "source_task: src-10" in content
+
+
+def test_archive_export_jsonl(queue_env):
+    qm, tmp_path = queue_env
+    task = Task(id="task-exp-jsonl", request="Export JSONL Task", status=TaskStatus.COMPLETED)
+    qm.save_task(task)
+
+    client.post("/api/queue/reset", json={"confirm": "RESET", "scope": "completed"}, headers=AUTH_HEADERS)
+
+    res = client.get("/api/queue/archive/export?format=jsonl", headers=AUTH_HEADERS)
+    assert res.status_code == 200
+    assert "attachment; filename=\"reset-archive-" in res.headers["content-disposition"]
+    assert ".jsonl\"" in res.headers["content-disposition"]
+
+    lines = [json.loads(line) for line in res.text.strip().split("\n") if line]
+    assert len(lines) == 1
+    assert lines[0]["task_id"] == "task-exp-jsonl"
+
+
+def test_archive_export_empty(queue_env):
+    qm, tmp_path = queue_env
+    res = client.get("/api/queue/archive/export?format=csv", headers=AUTH_HEADERS)
+    assert res.status_code == 404
+    data = res.json()
+    assert data["code"] == "ARCHIVE_EMPTY"
+
+
+def test_archive_export_invalid_format(queue_env):
+    qm, tmp_path = queue_env
+    task = Task(id="task-inv-fmt", request="Test Task", status=TaskStatus.READY)
+    qm.save_task(task)
+    client.post("/api/queue/reset", json={"confirm": "RESET", "scope": "ready"}, headers=AUTH_HEADERS)
+
+    res = client.get("/api/queue/archive/export?format=xml", headers=AUTH_HEADERS)
+    assert res.status_code == 400
+    data = res.json()
+    assert data["code"] == "INVALID_FORMAT"
+
+
+def test_archive_export_requires_operator(queue_env):
+    qm, tmp_path = queue_env
+    task = Task(id="task-auth", request="Auth Test Task", status=TaskStatus.READY)
+    qm.save_task(task)
+    client.post("/api/queue/reset", json={"confirm": "RESET", "scope": "ready"}, headers=AUTH_HEADERS)
+
+    consultant_headers = {"Authorization": "Bearer dev-consultant-token"}
+    res = client.get("/api/queue/archive/export?format=jsonl", headers=consultant_headers)
+    assert res.status_code == 403
+
+
+def test_archive_export_scope_filter(queue_env):
+    qm, tmp_path = queue_env
+    t_ready = Task(id="task-s-ready", request="Ready task", status=TaskStatus.READY)
+    t_running = Task(id="task-s-run", request="Running task", status=TaskStatus.RUNNING)
+    qm.save_task(t_ready)
+    qm.save_task(t_running)
+
+    client.post("/api/queue/reset-column", json={"confirm": "RESET", "column": "ready"}, headers=AUTH_HEADERS)
+    client.post("/api/queue/reset-column", json={"confirm": "RESET", "column": "running"}, headers=AUTH_HEADERS)
+
+    res = client.get("/api/queue/archive/export?format=jsonl&scope=ready", headers=AUTH_HEADERS)
+    assert res.status_code == 200
+    lines = [json.loads(line) for line in res.text.strip().split("\n") if line]
+    assert len(lines) == 1
+    assert lines[0]["task_id"] == "task-s-ready"

@@ -173,9 +173,14 @@ class QueueResetManager:
                 except Exception:
                     pass
 
-        # Write jsonl archive
+        # Write jsonl archive (append if file for current second already exists)
         archive_jsonl_path = self.queue_dir / f"reset-{timestamp_str}.jsonl"
         archive_jsonl_content = "\n".join(archived_lines) + ("\n" if archived_lines else "")
+        if archive_jsonl_path.exists():
+            existing = archive_jsonl_path.read_text(encoding="utf-8")
+            if existing and not existing.endswith("\n"):
+                existing += "\n"
+            archive_jsonl_content = existing + archive_jsonl_content
         archive_jsonl_path.write_text(archive_jsonl_content, encoding="utf-8")
 
         # Write history markdown
@@ -203,3 +208,120 @@ class QueueResetManager:
             "archive": str(archive_jsonl_path),
             "history": str(history_md_path)
         }
+
+    def export_archive(self, fmt: str = "jsonl", scope: str = "all") -> tuple[str, str, str]:
+        """
+        Export merged archive files in CSV, Markdown, or JSONL format.
+        
+        :param fmt: 'csv' | 'md' | 'jsonl'
+        :param scope: 'all' or specific scope string to filter by
+        :return: Tuple of (content_string, filename, media_type)
+        """
+        normalized_fmt = fmt.lower().strip()
+        if normalized_fmt not in ("csv", "md", "jsonl"):
+            raise ValueError("INVALID_FORMAT")
+
+        normalized_scope = scope.lower().strip()
+
+        # Find all reset-*.jsonl files sorted chronologically
+        archive_files = sorted(self.queue_dir.glob("reset-*.jsonl"))
+        if not archive_files:
+            raise FileNotFoundError("ARCHIVE_EMPTY")
+
+        entries = []
+        for path in archive_files:
+            try:
+                lines = path.read_text(encoding="utf-8").splitlines()
+                for line in lines:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        record = json.loads(line)
+                        if normalized_scope != "all":
+                            rec_scope = (record.get("scope") or "").lower().strip()
+                            rec_status = (record.get("status") or "").lower().strip()
+                            matches = (
+                                rec_scope == normalized_scope or
+                                rec_status == normalized_scope or
+                                (normalized_scope in ("ready", "pending") and rec_scope in ("ready", "pending")) or
+                                (normalized_scope in ("ready", "pending") and rec_status in ("ready", "pending"))
+                            )
+                            if not matches:
+                                continue
+                        entries.append(record)
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+
+        if not entries:
+            raise FileNotFoundError("ARCHIVE_EMPTY")
+
+        now_utc = datetime.now(timezone.utc)
+        ts_filename = now_utc.strftime("%Y%m%d-%H%M%S")
+
+        if normalized_fmt == "csv":
+            import csv
+            import io
+            output = io.StringIO()
+            writer = csv.writer(output, quoting=csv.QUOTE_MINIMAL)
+            writer.writerow(["task_id", "status", "request", "priority", "created_at", "reset_at", "scope", "restored"])
+            for entry in entries:
+                writer.writerow([
+                    entry.get("task_id", ""),
+                    entry.get("status", ""),
+                    entry.get("request", ""),
+                    entry.get("priority", 5),
+                    entry.get("created_at", ""),
+                    entry.get("reset_at", ""),
+                    entry.get("scope", ""),
+                    entry.get("restored", False)
+                ])
+            content = output.getvalue()
+            filename = f"reset-archive-{ts_filename}.csv"
+            media_type = "text/csv"
+
+        elif normalized_fmt == "md":
+            md_lines = [
+                "# Queue Archive — Export",
+                f"Total: {len(entries)} tasks",
+                "---"
+            ]
+            for entry in entries:
+                md_lines.append(f"## {entry.get('task_id', 'unknown')}")
+                md_lines.append(f"- Status: {str(entry.get('status', '')).upper()}")
+                md_lines.append(f"- Request: {entry.get('request', '')}")
+                md_lines.append(f"- Priority: {entry.get('priority', 5)}")
+                md_lines.append(f"- Created: {entry.get('created_at', '')}")
+                md_lines.append(f"- Reset: {entry.get('reset_at', '')}")
+                md_lines.append(f"- Scope: {entry.get('scope', '')}")
+                
+                why = entry.get("why") if isinstance(entry.get("why"), dict) else {}
+                md_lines.append("- WHY:")
+                md_lines.append(f"  - source_task: {why.get('source_task', 'None') or 'None'}")
+                md_lines.append(f"  - proposed_by: {why.get('proposed_by', 'None') or 'None'}")
+                md_lines.append("  - history:")
+                history = why.get("history_transitions", [])
+                if isinstance(history, list) and history:
+                    for h in history:
+                        if isinstance(h, dict):
+                            ts = h.get("timestamp", "")
+                            st = str(h.get("status", "")).upper()
+                            msg = h.get("message", "")
+                            md_lines.append(f"    - [{ts}] {st}: {msg}")
+                        else:
+                            md_lines.append(f"    - {h}")
+                else:
+                    md_lines.append("    - None")
+            content = "\n".join(md_lines) + "\n"
+            filename = f"reset-archive-{ts_filename}.md"
+            media_type = "text/markdown"
+
+        else: # jsonl
+            jsonl_lines = [json.dumps(e, ensure_ascii=False) for e in entries]
+            content = "\n".join(jsonl_lines) + ("\n" if jsonl_lines else "")
+            filename = f"reset-archive-{ts_filename}.jsonl"
+            media_type = "application/x-jsonlines"
+
+        return content, filename, media_type

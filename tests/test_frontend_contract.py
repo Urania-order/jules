@@ -124,6 +124,9 @@ def test_frontend_contract_css_classes():
         ".queue-column-header",
         ".queue-reset-btn",
         ".queue-reset-btn-danger",
+        ".export-buttons",
+        ".export-btn",
+        ".export-toast",
     ]
 
     for cls in required_classes:
@@ -260,6 +263,18 @@ def test_frontend_contract_v1_1_elements():
     assert 'template-card' in content
     assert 'template-list' in content
     assert 'id="template-list"' in content
+
+
+def test_frontend_contract_export_archive_elements():
+    """Verify archive export buttons and toast feedback contract elements exist."""
+    content = INDEX_PATH.read_text()
+
+    assert 'id="btn-export-csv"' in content
+    assert 'id="btn-export-md"' in content
+    assert 'id="btn-export-jsonl"' in content
+    assert 'id="export-toast"' in content
+    assert 'exportArchive' in content
+    assert 'showExportToast' in content
 
 
 def test_frontend_contract_consult_tuning_elements():

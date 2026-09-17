@@ -485,6 +485,24 @@ def reset_queue_endpoint(req: QueueResetRequest):
     except ValueError as e:
         return _error_response(code="INVALID_SCOPE", message=str(e), status_code=400)
 
+@app.get("/api/queue/archive/export", dependencies=[Depends(require_operator)])
+def export_queue_archive(format: str, scope: str = "all"):
+    qrm = QueueResetManager()
+    try:
+        content, filename, media_type = qrm.export_archive(fmt=format, scope=scope)
+        headers = {
+            "Content-Disposition": f'attachment; filename="{filename}"'
+        }
+        return Response(content=content, media_type=media_type, headers=headers)
+    except ValueError as e:
+        if str(e) == "INVALID_FORMAT":
+            return _error_response(code="INVALID_FORMAT", message=f"Invalid format '{format}'. Must be one of: csv, md, jsonl", status_code=400)
+        return _error_response(code="INVALID_REQUEST", message=str(e), status_code=400)
+    except FileNotFoundError as e:
+        if str(e) == "ARCHIVE_EMPTY":
+            return _error_response(code="ARCHIVE_EMPTY", message="No archive files or matching entries found", status_code=404)
+        return _error_response(code="NOT_FOUND", message=str(e), status_code=404)
+
 @app.post("/api/queue/reset-column", dependencies=[Depends(require_operator)])
 def reset_queue_column_endpoint(req: QueueResetColumnRequest):
     if req.confirm != "RESET":
