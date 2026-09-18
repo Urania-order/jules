@@ -26,6 +26,7 @@ Known mistakes and rules to avoid them.
 
 ### Process / Orchestration
 
+- ERRATA-0029 — FIXED: 0027 + 0028 Issue 3 (INFO)
 - ERRATA-0028 — Schedule fired unexpectedly (MEDIUM)
 - ERRATA-0027 — state.json history overwritten by Reset (HIGH)
 - ERRATA-0026 — Undo Selected in Undo tab — no checkboxes (MEDIUM)
