@@ -160,3 +160,167 @@ def test_admin_run_timeout(client):
         latest = entries[0]
         assert latest["command"] == "test"
         assert latest["exit_code"] == 124
+
+
+def test_queue_add_writes_file(client, tmp_path):
+    """Verify POST /api/admin/queue/add creates prompt .txt and optional sidecar .meta.json in pending/."""
+    res = client.post(
+        "/api/admin/queue/add",
+        json={"text": "Implement feature X", "verify_task": "11"},
+        headers={"Authorization": "Bearer dev-operator-token"}
+    )
+    assert res.status_code == 200
+    data = res.json()
+    assert data["queued"] is True
+    filename = data["filename"]
+    assert filename.startswith("admin-")
+    assert filename.endswith(".txt")
+
+    pending_dir = tmp_path / ".jules" / "queue" / "pending"
+    txt_file = pending_dir / filename
+    assert txt_file.exists()
+    assert txt_file.read_text(encoding="utf-8") == "Implement feature X"
+
+    meta_file = pending_dir / (Path(filename).stem + ".meta.json")
+    assert meta_file.exists()
+    meta_data = json.loads(meta_file.read_text(encoding="utf-8"))
+    assert meta_data["verify_task"] == "11"
+    assert meta_data["by"] == "operator"
+
+
+def test_queue_add_requires_text(client):
+    """Verify POST /api/admin/queue/add returns 400 if prompt text is empty."""
+    res = client.post(
+        "/api/admin/queue/add",
+        json={"text": "   ", "verify_task": None},
+        headers={"Authorization": "Bearer dev-operator-token"}
+    )
+    assert res.status_code == 400
+    data = res.json()
+    assert data["status"] == "error"
+    assert data["code"] == "MISSING_TEXT"
+
+
+def test_queue_run_next_empty(client):
+    """Verify POST /api/admin/queue/run-next returns 400 next_task_not_formed when no pending tasks exist."""
+    res = client.post(
+        "/api/admin/queue/run-next",
+        headers={"Authorization": "Bearer dev-operator-token"}
+    )
+    assert res.status_code == 400
+    data = res.json()
+    assert data["status"] == "error"
+    assert data["code"] == "next_task_not_formed"
+    assert data["error"] == "next_task_not_formed"
+
+
+def test_queue_run_next_dispatches(client, tmp_path):
+    """Verify FULL lifecycle of task dispatch: pending/ -> running/ -> completed/."""
+    # 1. Add task to queue
+    add_res = client.post(
+        "/api/admin/queue/add",
+        json={"text": "Execute task cycle", "verify_task": "11"},
+        headers={"Authorization": "Bearer dev-operator-token"}
+    )
+    assert add_res.status_code == 200
+    filename = add_res.json()["filename"]
+    meta_filename = Path(filename).stem + ".meta.json"
+
+    pending_dir = tmp_path / ".jules" / "queue" / "pending"
+    running_dir = tmp_path / ".jules" / "queue" / "running"
+    completed_dir = tmp_path / ".jules" / "queue" / "completed"
+
+    assert (pending_dir / filename).exists()
+    assert (pending_dir / meta_filename).exists()
+
+    # Mock subprocess.run for run-task.sh
+    mock_process_res = subprocess.CompletedProcess(
+        args=["./scripts/run-task.sh"],
+        returncode=0,
+        stdout="=== [1/5] Dispatch ===\nTask ID: task-20260918-123456\n=== [5/5] Verify ===\nDone: task-20260918-123456",
+        stderr=""
+    )
+
+    with patch("subprocess.run", return_value=mock_process_res) as mock_run:
+        res = client.post(
+            "/api/admin/queue/run-next",
+            headers={"Authorization": "Bearer dev-operator-token"}
+        )
+        assert res.status_code == 200
+        data = res.json()
+
+        assert data["dispatched"] is True
+        assert data["filename"] == filename
+        assert data["task_id"] == "task-20260918-123456"
+        assert data["exit_code"] == 0
+
+        # Verify command argument passed to run-task.sh
+        called_cmd = mock_run.call_args[0][0]
+        assert "run-task.sh" in called_cmd[0]
+        assert filename in called_cmd[1]
+        assert "--verify" in called_cmd
+        assert "11" in called_cmd
+
+    # Assert FULL lifecycle state transitions:
+    # 1) pending/ is cleared
+    assert not (pending_dir / filename).exists()
+    assert not (pending_dir / meta_filename).exists()
+
+    # 2) running/ was used and cleared on completion
+    assert not (running_dir / filename).exists()
+    assert not (running_dir / meta_filename).exists()
+
+    # 3) completed/ contains the file and sidecar
+    assert (completed_dir / filename).exists()
+    assert (completed_dir / meta_filename).exists()
+
+
+def test_queue_list_returns_counts(client, tmp_path):
+    """Verify GET /api/admin/queue/list returns file details across pending, running, completed."""
+    pending_dir = tmp_path / ".jules" / "queue" / "pending"
+    running_dir = tmp_path / ".jules" / "queue" / "running"
+    completed_dir = tmp_path / ".jules" / "queue" / "completed"
+
+    (pending_dir / "admin-1.txt").write_text("task 1", encoding="utf-8")
+    (running_dir / "admin-2.txt").write_text("task 2", encoding="utf-8")
+    (completed_dir / "admin-3.txt").write_text("task 3", encoding="utf-8")
+
+    res = client.get(
+        "/api/admin/queue/list",
+        headers={"Authorization": "Bearer dev-operator-token"}
+    )
+    assert res.status_code == 200
+    data = res.json()
+
+    assert len(data["pending"]) == 1
+    assert data["pending"][0]["filename"] == "admin-1.txt"
+
+    assert len(data["running"]) == 1
+    assert data["running"][0]["filename"] == "admin-2.txt"
+
+    assert len(data["completed"]) == 1
+    assert data["completed"][0]["filename"] == "admin-3.txt"
+
+
+def test_queue_audit_logged(client):
+    """Verify queue/add and queue/run-next record audit entries."""
+    # 1. Add
+    add_res = client.post(
+        "/api/admin/queue/add",
+        json={"text": "Audit task text"},
+        headers={"Authorization": "Bearer dev-operator-token"}
+    )
+    assert add_res.status_code == 200
+
+    # 2. Audit check
+    audit_res = client.get(
+        "/api/admin/audit",
+        headers={"Authorization": "Bearer dev-operator-token"}
+    )
+    assert audit_res.status_code == 200
+    entries = audit_res.json()["entries"]
+    assert len(entries) > 0
+    latest = entries[0]
+    assert latest["command"] == "queue/add"
+    assert latest["by"] == "operator"
+    assert latest["exit_code"] == 0

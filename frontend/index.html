@@ -1378,6 +1378,42 @@
       <h2>Admin Web Terminal</h2>
 
       <div class="card">
+        <h3>Queue Status</h3>
+        <div class="stats-grid" style="margin-top: 1rem; margin-bottom: 0;">
+          <div class="stat-card">
+            <div class="stat-label">Pending</div>
+            <div class="stat-value" id="queue-pending-count">0</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Running</div>
+            <div class="stat-value" id="queue-running-count">0</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Completed</div>
+            <div class="stat-value" id="queue-completed-count">0</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>New Task</h3>
+        <div style="margin-top: 1rem;">
+          <div class="form-group">
+            <label for="admin-new-task-prompt">Prompt</label>
+            <textarea id="admin-new-task-prompt" rows="3" placeholder="Enter task prompt..."></textarea>
+          </div>
+          <div class="form-group">
+            <label for="admin-new-task-verify">Verify Task (optional)</label>
+            <input type="text" id="admin-new-task-verify" placeholder="e.g. 11">
+          </div>
+          <div style="display: flex; gap: 0.75rem; margin-top: 1rem;">
+            <button class="btn btn-primary" id="btn-admin-add-to-queue" onclick="adminAddToQueue()">📥 Add to Queue</button>
+            <button class="btn btn-secondary" id="btn-admin-run-next" onclick="adminRunNext()">▶ Run Next</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
         <h3>Quick Actions</h3>
         <div style="display: flex; flex-wrap: wrap; gap: 0.75rem; margin-top: 1rem;">
           <button class="btn btn-primary" id="btn-admin-test" onclick="runAdminCommand('test')">▶ Run Tests</button>
@@ -1770,6 +1806,7 @@
         renderHistory();
         renderConsultView();
         renderResetCenter();
+        renderAdminQueueStatus();
       } catch (e) {
         console.error('Refresh error:', e);
         showOffline();
@@ -3643,6 +3680,93 @@
       const cmd = document.getElementById('admin-command')?.value || 'test';
       const args = document.getElementById('admin-args')?.value || '';
       runAdminCommand(cmd, args);
+    }
+
+    async function renderAdminQueueStatus() {
+      const pendingCount = document.getElementById('queue-pending-count');
+      const runningCount = document.getElementById('queue-running-count');
+      const completedCount = document.getElementById('queue-completed-count');
+      if (!pendingCount || !runningCount || !completedCount) return;
+
+      try {
+        const data = await fetchJSON(`${API_BASE}/admin/queue/list`);
+        pendingCount.textContent = (data.pending || []).length;
+        runningCount.textContent = (data.running || []).length;
+        completedCount.textContent = (data.completed || []).length;
+      } catch (err) {
+        // ignore errors on status refresh
+      }
+    }
+
+    async function adminAddToQueue() {
+      const promptEl = document.getElementById('admin-new-task-prompt');
+      const verifyEl = document.getElementById('admin-new-task-verify');
+      const promptVal = promptEl ? promptEl.value : '';
+      const verifyVal = verifyEl ? verifyEl.value : '';
+
+      if (!promptVal || !promptVal.trim()) {
+        showError("Prompt is empty");
+        return;
+      }
+
+      try {
+        const res = await fetchJSON(`${API_BASE}/admin/queue/add`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: promptVal, verify_task: verifyVal || null })
+        });
+        if (promptEl) promptEl.value = '';
+        if (verifyEl) verifyEl.value = '';
+        showExportToast(`Added: ${res.filename}`, 'success');
+        renderAdminQueueStatus();
+      } catch (err) {
+        showError("Failed to add task: " + err.message);
+      }
+    }
+
+    async function adminRunNext() {
+      const outputEl = document.getElementById('admin-output');
+      const metaEl = document.getElementById('admin-meta-info');
+      const runBtn = document.getElementById('btn-admin-run-next');
+
+      if (outputEl) outputEl.textContent = 'Dispatching run-next...';
+      if (runBtn) runBtn.disabled = true;
+
+      try {
+        const headers = { 'Authorization': 'Bearer dev-operator-token', 'Content-Type': 'application/json' };
+        const res = await fetch(`${API_BASE}/admin/queue/run-next`, { method: 'POST', headers });
+        const data = await res.json();
+
+        if (res.status === 400 && data.code === 'next_task_not_formed') {
+          showError("Наступне завдання не сформовано");
+          const promptEl = document.getElementById('admin-new-task-prompt');
+          if (promptEl) {
+            promptEl.focus();
+            promptEl.style.borderColor = 'var(--accent-red)';
+            setTimeout(() => { promptEl.style.borderColor = 'var(--border-color)'; }, 1500);
+          }
+          if (outputEl) outputEl.textContent = 'No pending task files to run.';
+          renderAdminQueueStatus();
+          return;
+        }
+
+        if (!res.ok) {
+          throw new Error(data.message || `HTTP ${res.status}`);
+        }
+
+        if (outputEl) {
+          outputEl.textContent = `Dispatched task: ${data.filename}\nTask ID: ${data.task_id || 'N/A'}\nExit Code: ${data.exit_code}`;
+        }
+        if (metaEl) {
+          metaEl.textContent = `Duration: ${data.duration_ms}ms | Exit Code: ${data.exit_code}`;
+        }
+        renderAdminQueueStatus();
+      } catch (err) {
+        showError("Run next failed: " + err.message);
+        if (outputEl) outputEl.textContent = `Run next failed: ${err.message}`;
+      } finally {
+        if (runBtn) runBtn.disabled = false;
+      }
     }
 
     // Auto-refresh every 5 seconds

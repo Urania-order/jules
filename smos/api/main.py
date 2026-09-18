@@ -56,9 +56,12 @@ import hmac
 import json
 import logging
 import numpy as np
+import re
 import shlex
+import shutil
 import subprocess
 import time
+import uuid
 from pydantic import BaseModel, Field
 from typing import Optional, Dict, Any, List
 from datetime import datetime, timezone
@@ -429,6 +432,10 @@ class AdminRunRequest(BaseModel):
     command: str
     args: str = ""
 
+class AdminQueueAddRequest(BaseModel):
+    text: str
+    verify_task: Optional[str] = None
+
 ADMIN_COMMAND_WHITELIST = {
     "test": {
         "exec": "./scripts/test.sh",
@@ -633,6 +640,198 @@ def run_admin_command(req: AdminRunRequest, role: str = Depends(require_operator
 def get_admin_audit(limit: int = 50):
     entries = get_admin_audit_entries(limit=limit)
     return {"entries": entries}
+
+@app.post("/api/admin/queue/add", dependencies=[Depends(require_operator)])
+def admin_queue_add(req: AdminQueueAddRequest, role: str = Depends(require_operator)):
+    t0 = time.time()
+    text_content = req.text if req.text is not None else ""
+    if not text_content.strip():
+        write_admin_audit_entry(
+            command="queue/add",
+            args="",
+            exit_code=400,
+            by=role,
+            duration_ms=0
+        )
+        return JSONResponse(
+            status_code=400,
+            content={
+                "status": "error",
+                "code": "MISSING_TEXT",
+                "error": "MISSING_TEXT",
+                "message": "Prompt text is required",
+                "exit_code": None
+            }
+        )
+
+    uid = uuid.uuid4().hex[:8]
+    filename = f"admin-{uid}.txt"
+    project_root = Path(os.environ.get("JULES_PROJECT_ROOT", ".")).resolve()
+    pending_dir = project_root / ".jules" / "queue" / "pending"
+    pending_dir.mkdir(parents=True, exist_ok=True)
+
+    txt_file = pending_dir / filename
+    txt_file.write_text(text_content, encoding="utf-8")
+
+    if req.verify_task:
+        meta_file = pending_dir / f"admin-{uid}.meta.json"
+        meta_data = {
+            "verify_task": str(req.verify_task),
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "by": role
+        }
+        meta_file.write_text(json.dumps(meta_data, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    duration_ms = int((time.time() - t0) * 1000)
+    write_admin_audit_entry(
+        command="queue/add",
+        args=filename,
+        exit_code=0,
+        by=role,
+        duration_ms=duration_ms
+    )
+
+    return {"queued": True, "filename": filename}
+
+@app.post("/api/admin/queue/run-next", dependencies=[Depends(require_operator)])
+def admin_queue_run_next(role: str = Depends(require_operator)):
+    t0 = time.time()
+    project_root = Path(os.environ.get("JULES_PROJECT_ROOT", ".")).resolve()
+    queue_dir = project_root / ".jules" / "queue"
+    pending_dir = queue_dir / "pending"
+    running_dir = queue_dir / "running"
+    completed_dir = queue_dir / "completed"
+
+    pending_dir.mkdir(parents=True, exist_ok=True)
+    running_dir.mkdir(parents=True, exist_ok=True)
+    completed_dir.mkdir(parents=True, exist_ok=True)
+
+    pending_files = [f for f in pending_dir.glob("*.txt") if f.is_file()]
+    if not pending_files:
+        write_admin_audit_entry(
+            command="queue/run-next",
+            args="",
+            exit_code=400,
+            by=role,
+            duration_ms=0
+        )
+        return JSONResponse(
+            status_code=400,
+            content={
+                "status": "error",
+                "code": "next_task_not_formed",
+                "error": "next_task_not_formed",
+                "message": "No pending task files",
+                "exit_code": None
+            }
+        )
+
+    pending_files.sort(key=lambda f: f.stat().st_mtime)
+    oldest_txt = pending_files[0]
+    filename = oldest_txt.name
+
+    running_txt = running_dir / filename
+    shutil.move(str(oldest_txt), str(running_txt))
+
+    meta_filename = oldest_txt.stem + ".meta.json"
+    oldest_meta = pending_dir / meta_filename
+    running_meta = running_dir / meta_filename
+    verify_task = None
+
+    if oldest_meta.exists():
+        try:
+            meta_data = json.loads(oldest_meta.read_text(encoding="utf-8"))
+            verify_task = meta_data.get("verify_task")
+        except Exception:
+            pass
+        shutil.move(str(oldest_meta), str(running_meta))
+
+    run_task_script = project_root / "scripts" / "run-task.sh"
+    cmd = [str(run_task_script), str(running_txt)]
+    if verify_task:
+        cmd.extend(["--verify", str(verify_task)])
+
+    try:
+        res = subprocess.run(
+            cmd,
+            cwd=str(project_root),
+            capture_output=True,
+            text=True,
+            timeout=1200,
+            check=False
+        )
+        exit_code = res.returncode
+        stdout = res.stdout or ""
+        stderr = res.stderr or ""
+    except subprocess.TimeoutExpired as e:
+        exit_code = 124
+        stdout = e.stdout.decode() if isinstance(e.stdout, bytes) else (e.stdout or "")
+        stderr = (e.stderr.decode() if isinstance(e.stderr, bytes) else (e.stderr or "")) + "\nrun-task.sh timed out after 1200 seconds."
+    except Exception as e:
+        exit_code = 1
+        stdout = ""
+        stderr = str(e)
+
+    duration_ms = int((time.time() - t0) * 1000)
+
+    task_id = None
+    match = re.search(r"task-[0-9]{8}-[0-9]{6}", stdout)
+    if match:
+        task_id = match.group(0)
+
+    if exit_code == 0:
+        completed_txt = completed_dir / filename
+        shutil.move(str(running_txt), str(completed_txt))
+        if running_meta.exists():
+            completed_meta = completed_dir / meta_filename
+            shutil.move(str(running_meta), str(completed_meta))
+    else:
+        runner_log = queue_dir / "runner.log"
+        log_entry = f"[{datetime.now(timezone.utc).isoformat()}] Task {filename} failed with exit code {exit_code}:\nSTDOUT: {stdout}\nSTDERR: {stderr}\n"
+        with open(runner_log, "a", encoding="utf-8") as f:
+            f.write(log_entry)
+
+    write_admin_audit_entry(
+        command="queue/run-next",
+        args=filename,
+        exit_code=exit_code,
+        by=role,
+        duration_ms=duration_ms
+    )
+
+    return {
+        "dispatched": True,
+        "filename": filename,
+        "task_id": task_id,
+        "exit_code": exit_code,
+        "duration_ms": duration_ms
+    }
+
+@app.get("/api/admin/queue/list", dependencies=[Depends(require_operator)])
+def admin_queue_list():
+    project_root = Path(os.environ.get("JULES_PROJECT_ROOT", ".")).resolve()
+    queue_dir = project_root / ".jules" / "queue"
+
+    def _get_file_info(directory: Path):
+        if not directory.exists():
+            return []
+        res = []
+        for f in sorted(directory.glob("*.txt")):
+            if f.is_file():
+                stat = f.stat()
+                created_at = datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc).isoformat()
+                res.append({
+                    "filename": f.name,
+                    "size": stat.st_size,
+                    "created_at": created_at
+                })
+        return res
+
+    return {
+        "pending": _get_file_info(queue_dir / "pending"),
+        "running": _get_file_info(queue_dir / "running"),
+        "completed": _get_file_info(queue_dir / "completed"),
+    }
 
 @app.get("/")
 def read_root():

@@ -540,3 +540,24 @@ def test_frontend_contract_web_terminal_admin_elements():
     # JS execution functions
     assert 'runAdminCommand' in content
     assert 'runCustomAdminCommand' in content
+
+
+def test_frontend_contract_admin_queue_submission_elements():
+    """Verify v1.2.1 Admin View queue submission and status contract elements exist."""
+    content = INDEX_PATH.read_text()
+
+    # Queue Status counters
+    assert 'id="queue-pending-count"' in content
+    assert 'id="queue-running-count"' in content
+    assert 'id="queue-completed-count"' in content
+
+    # New Task controls
+    assert 'id="admin-new-task-prompt"' in content
+    assert 'id="admin-new-task-verify"' in content
+    assert 'id="btn-admin-add-to-queue"' in content
+    assert 'id="btn-admin-run-next"' in content
+
+    # JS functions
+    assert 'adminAddToQueue' in content
+    assert 'adminRunNext' in content
+    assert 'renderAdminQueueStatus' in content
