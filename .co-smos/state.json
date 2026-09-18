@@ -2,8 +2,11 @@
   "version": 1,
   "project": "jules-codespace",
   "agent": "jules",
-  "status": "ready",
-  "active_task": null,
+  "status": "running",
+  "active_task": {
+    "id": "task-20260918-044038",
+    "request": "Co-SMOS v1.1.3 — safeDate helper + Queue layout fix\n\nCONTEXT:\n- Repo: Urania-order/jules\n- File: frontend/index.html\n- Previous fixes:\n    * Задача 6: renderSequence() date fallback (line 2157) + truncate\n    * Задача 7: truncateTask() helper (line 2801) for all views\n- Still broken:\n    * line 1888 (Queue card):    new Date(task.created_at).toLocaleTimeString()\n    * line 2906 (Recordings):    new Date(seq.created_at).toLocaleTimeString()\n    * Queue COMPLETED card: badge [COMPLETED] + button [View] overlap text\n\nGOAL (2 fixes):\n\n1. Add shared safeDate() helper near truncateTask() (line 2801):\n     function safeDate(s) {\n       if (!s) return 'N/A';\n       const d = new Date(s);\n       return isNaN(d) ? String(s) : d.toLocaleString();\n     }\n\n2. Replace BOTH raw date calls:\n\n   Line 1888:\n   BEFORE:\n     <span>Created: ${new Date(task.created_at).toLocaleTimeString()}</span>\n   AFTER:\n     <span>Created: ${safeDate(task.created_at)}</span>\n\n   Line 2906:\n   BEFORE:\n     <span>Created: ${new Date(seq.created_at).toLocaleTimeString()}</span>\n   AFTER:\n     <span>Created: ${safeDate(seq.created_at)}</span>\n\n3. Fix Queue COMPLETED card layout:\n   - Badge [COMPLETED] + button [View] currently overlap card text\n   - Ensure they don't overlap: flex-wrap, gap, or separate row\n   - Card container: display:flex; flex-wrap:wrap; gap:0.5rem;\n   - Badge and button on a separate row below the title/meta\n\nREQUIREMENTS:\n- Only frontend/index.html + tests/test_frontend_contract.py\n- Do not break existing views\n- Add frontend contract tests:\n    * safeDate helper exists\n    * no raw new Date(task.created_at).toLocale* in view code\n    * no raw new Date(seq.created_at).toLocale* in view code\n    * COMPLETED card layout: badge/button don't overlap (best effort via class names)\n\nTESTS:\n- pytest tests/ + git diff --check\n- frontend contract passes\n\nCONSTRAINTS:\n- Do not touch .co-smos/, .jules/tasks/, .jules/results/\n- Do not weaken existing tests\n\nREPORT FORMAT: AGENTS.md §14\n\nFINAL REPORT:\n1. what already existed and was reused\n2. what was added\n3. what was deliberately not changed\n4. tests/results\n5. remaining gaps"
+  },
   "last_task": {
     "id": "task-20260918-040154",
     "status": "completed",
