@@ -2,8 +2,11 @@
   "version": 1,
   "project": "jules-codespace",
   "agent": "jules",
-  "status": "ready",
-  "active_task": null,
+  "status": "running",
+  "active_task": {
+    "id": "task-20260918-181721",
+    "request": "Co-SMOS v1.1.5 — Fix Undo tab buttons (ERRATA-0026 Option C)\n\nCONTEXT:\n- Repo: Urania-order/jules\n- File: frontend/index.html\n- Reset Center → Undo tab has TWO buttons:\n    Line ~1061: <button id=\"btn-undo-selected\" onclick=\"triggerUndoSelected()\">↩️ Undo Selected</button>\n    Line ~1062: <button id=\"btn-undo-all-matched\" onclick=\"triggerUndoAllMatched()\">↩️ Undo All Matched</button>\n- Problem: triggerUndoSelected() reads `.archive-select:checked` (checkboxes)\n  But checkboxes exist ONLY in Archive tab, NOT in Undo tab.\n  So \"Undo Selected\" in Undo tab always fails (\"No archive tasks selected\").\n\nGOAL (Option C):\n1. REMOVE \"↩️ Undo Selected\" button from Undo tab (line ~1061).\n2. RENAME \"↩️ Undo All Matched\" → \"↩️ Undo Filtered\" (line ~1062).\n   - Keep id=\"btn-undo-all-matched\" (avoid JS breakage)\n   - Only change button TEXT.\n3. Archive tab keeps its button:\n   - id=\"btn-undo-selected-archive\" with text \"↩️ Undo Selected\" (line ~985)\n   - unchanged\n4. triggerUndoAllMatched() — unchanged (calls /api/queue/archive/undo-filter)\n5. Remove triggerUndoSelected() only if no longer referenced anywhere.\n\nREQUIREMENTS:\n- Only frontend/index.html + tests/test_frontend_contract.py\n- Add frontend contract tests:\n    * Undo tab contains button id=\"btn-undo-all-matched\" with text \"Undo Filtered\"\n    * Undo tab does NOT contain button id=\"btn-undo-selected\"\n    * Archive tab STILL contains id=\"btn-undo-selected-archive\"\n- Do not weaken existing tests\n\nTESTS:\n- pytest tests/ + git diff --check\n\nCONSTRAINTS:\n- Do not touch .co-smos/, .jules/tasks/, .jules/results/\n\nREPORT FORMAT: AGENTS.md §14\n\nFINAL REPORT:\n1. what already existed and was reused\n2. what was added\n3. what was deliberately not changed\n4. tests/results\n5. remaining gaps"
+  },
   "last_task": {
     "id": "task-20260918-055754",
     "status": "completed",
