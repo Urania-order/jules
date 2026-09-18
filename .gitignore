@@ -24,7 +24,6 @@ __pycache__/
 .pytest_cache/
 .co-smos/state.json
 .jules/events/
-!.co-smos/state.json
 .jules/queue/deferred/
 .jules/consult_audit.jsonl
 .jules/consult_settings.json
