@@ -2,8 +2,11 @@
   "version": 1,
   "project": "jules-codespace",
   "agent": "jules",
-  "status": "ready",
-  "active_task": null,
+  "status": "running",
+  "active_task": {
+    "id": "task-20260918-032524",
+    "request": "Co-SMOS v1.1.1 — Fix Sequence UX + 2 bugs\n\nCONTEXT:\n- Repo: Urania-order/jules\n- File: frontend/index.html\n- renderSequence() at line 2144 (Command Sequence View, #view-sequence at line 1134)\n- renderSequences() at line 2875 (Recording & Replay, #view-sequences at line 1298)\n- Navbar at lines 883, 887:\n    <button class=\"nav-btn\" data-view=\"sequence\">Sequence</button>\n    <button class=\"nav-btn\" data-view=\"sequences\">Sequences</button>\n\nGOAL (3 fixes):\n\n1. Navbar labels (lines 883, 887):\n   - \"Sequence\"  -> \"Commands\"\n   - \"Sequences\" -> \"Recordings\"\n   - Keep data-view values unchanged.\n\n2. Fix \"[Invalid Date]\" in renderSequence() line 2157:\n   BEFORE:\n     const timeStr = new Date(task.created_at).toLocaleTimeString();\n   AFTER:\n     const rawDate = task.created_at;\n     const parsed = rawDate ? new Date(rawDate) : null;\n     const timeStr = (parsed && !isNaN(parsed)) ? parsed.toLocaleTimeString() : (rawDate || 'N/A');\n\n3. Truncate prompt in renderSequence() line 2167:\n   BEFORE:\n     <span style=\"color: var(--text-secondary); margin-left: auto;\">${escapeHTML(task.request || task.title)}</span>\n   AFTER:\n     <span style=\"color: var(--text-secondary); margin-left: auto;\" title=\"${escapeHTML(task.request || task.title || '')}\">${escapeHTML((task.title || task.request || '').substring(0, 120))}${(task.title || task.request || '').length > 120 ? '…' : ''}</span>\n\nTESTS:\n- tests/test_frontend_contract.py: add checks\n  * navbar contains \"Commands\" and \"Recordings\" labels\n  * renderSequence truncation logic present (substring, title=)\n  * date fallback present (isNaN)\n- pytest tests/ + git diff --check\n\nCONSTRAINTS:\n- Only frontend/index.html + tests/test_frontend_contract.py\n- Do not change data-view values\n- Do not weaken existing tests\n- Do not touch .co-smos/, .jules/tasks/, .jules/results/\n\nREPORT FORMAT: AGENTS.md §14\n\nFINAL REPORT:\n1. what already existed and was reused\n2. what was added\n3. what was deliberately not changed\n4. tests/results\n5. remaining gaps"
+  },
   "last_task": {
     "id": "task-20260918-020623",
     "status": "completed",
