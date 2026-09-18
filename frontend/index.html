@@ -1197,8 +1197,20 @@
       <p style="margin-bottom: 1rem; color: var(--text-secondary); font-size: 0.9rem;">
         Drag and drop READY tasks to reorder position. Right-click card to edit task or remember as template. Hover + Ctrl to preview WHY.
       </p>
-      <div style="margin-bottom: 0.75rem;">
+      <div style="margin-bottom: 0.75rem; display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center;">
         <button class="queue-reset-btn queue-reset-btn-danger" id="btn-reset-all" onclick="openResetModal('all')">⚠ RESET ALL QUEUES</button>
+        <select id="task-filter-author" style="padding: 0.35rem 0.6rem; font-size: 0.85rem;">
+          <option value="all">All authors</option>
+          <option value="operator">🧑 operator</option>
+          <option value="queue">⚙ queue</option>
+          <option value="consultant">✨ consultant</option>
+          <option value="unknown">? unknown</option>
+        </select>
+        <select id="task-sort-order" style="padding: 0.35rem 0.6rem; font-size: 0.85rem;">
+          <option value="desc">↓ Newest</option>
+          <option value="asc">↑ Oldest</option>
+        </select>
+        <input id="task-filter-search" type="text" placeholder="Search id / title / request / author" style="padding: 0.35rem 0.6rem; font-size: 0.85rem; flex: 1; min-width: 200px;">
       </div>
       <div class="queue-columns">
         <div class="queue-column" id="col-ready">
@@ -1860,6 +1872,51 @@
       });
     }
 
+    function sortTasksByCreatedAt(tasks, desc = true) {
+      const key = (t) => t.created_at || '';
+      return [...tasks].sort((a, b) => {
+        const ka = key(a), kb = key(b);
+        if (!ka && !kb) return 0;
+        if (!ka) return 1;
+        if (!kb) return -1;
+        return desc ? kb.localeCompare(ka) : ka.localeCompare(kb);
+      });
+    }
+
+    function filterTasksByAuthor(tasks, author) {
+      if (!author || author === 'all') return tasks;
+      return tasks.filter(t => (t.proposed_by || 'unknown') === author);
+    }
+
+    function searchTasks(tasks, q) {
+      if (!q) return tasks;
+      const needle = q.toLowerCase();
+      return tasks.filter(t => {
+        const hay = [t.id, t.title, t.request, t.proposed_by]
+          .filter(Boolean).join(' ').toLowerCase();
+        return hay.includes(needle);
+      });
+    }
+
+    function applyTaskFilters(tasks) {
+      const author = document.getElementById('task-filter-author')?.value || 'all';
+      const q = document.getElementById('task-filter-search')?.value || '';
+      const order = document.getElementById('task-sort-order')?.value || 'desc';
+      let out = tasks;
+      out = filterTasksByAuthor(out, author);
+      out = searchTasks(out, q);
+      out = sortTasksByCreatedAt(out, order === 'desc');
+      return out;
+    }
+
+    function formatAuthorBadge(proposed_by) {
+      const author = proposed_by || 'unknown';
+      if (author === 'operator') return '🧑 operator';
+      if (author === 'queue') return '⚙ queue';
+      if (author === 'consultant') return '✨ consultant';
+      return '? unknown';
+    }
+
     function createTaskCard(task) {
       const el = document.createElement('div');
       el.className = 'task-item task-card task-card-hover';
@@ -1883,6 +1940,7 @@
           <div class="task-meta">
             <span>ID: ${task.id}</span>
             <span class="task-priority-badge">${priorityBadgeText}</span>
+            <span>${escapeHTML(formatAuthorBadge(task.proposed_by))}</span>
             <span>Created: ${safeDate(task.created_at)}</span>
           </div>
         </div>
@@ -2017,7 +2075,9 @@
 
       Object.values(lists).forEach(el => { if (el) el.innerHTML = ''; });
 
-      currentTasks.forEach(task => {
+      const filtered = applyTaskFilters(currentTasks);
+
+      filtered.forEach(task => {
         const card = createTaskCard(task);
         let targetList = lists.READY;
 
@@ -2143,12 +2203,13 @@
       const list = document.getElementById('sequence-list');
       if (!list) return;
       list.innerHTML = '';
-      if (currentTasks.length === 0) {
+      const filtered = applyTaskFilters(currentTasks);
+      if (filtered.length === 0) {
         list.innerHTML = '<li class="empty-state">No items in command sequence</li>';
         return;
       }
 
-      currentTasks.forEach(task => {
+      filtered.forEach(task => {
         const li = document.createElement('li');
         li.className = 'sequence-item';
         li.dataset.taskId = task.id;
@@ -2175,7 +2236,7 @@
       const container = document.getElementById('batch-task-list');
       if (!container) return;
       container.innerHTML = '';
-      const readyTasks = currentTasks.filter(t => t.status === 'PENDING' || t.status === 'READY');
+      const readyTasks = applyTaskFilters(currentTasks).filter(t => t.status === 'PENDING' || t.status === 'READY');
       if (readyTasks.length === 0) {
         container.innerHTML = '<div class="empty-state">No ready tasks available for batch execution</div>';
         return;
@@ -2820,6 +2881,43 @@
       autonomySelect.value = savedAutonomy;
       autonomySelect.addEventListener('change', (e) => {
         localStorage.setItem('cosmos_autonomy', e.target.value);
+      });
+    }
+
+    // Task filter & sort controls handling with localStorage persistence
+    const taskAuthorFilter = document.getElementById('task-filter-author');
+    if (taskAuthorFilter) {
+      const savedAuthor = localStorage.getItem('cosmos_task_author_filter') || 'all';
+      taskAuthorFilter.value = savedAuthor;
+      taskAuthorFilter.addEventListener('change', (e) => {
+        localStorage.setItem('cosmos_task_author_filter', e.target.value);
+        renderQueueTasks();
+        renderSequence();
+        renderBatchTasks();
+      });
+    }
+
+    const taskSortOrder = document.getElementById('task-sort-order');
+    if (taskSortOrder) {
+      const savedSort = localStorage.getItem('cosmos_task_sort_order') || 'desc';
+      taskSortOrder.value = savedSort;
+      taskSortOrder.addEventListener('change', (e) => {
+        localStorage.setItem('cosmos_task_sort_order', e.target.value);
+        renderQueueTasks();
+        renderSequence();
+        renderBatchTasks();
+      });
+    }
+
+    const taskSearchInput = document.getElementById('task-filter-search');
+    if (taskSearchInput) {
+      const savedSearch = localStorage.getItem('cosmos_task_search_q') || '';
+      taskSearchInput.value = savedSearch;
+      taskSearchInput.addEventListener('input', (e) => {
+        localStorage.setItem('cosmos_task_search_q', e.target.value);
+        renderQueueTasks();
+        renderSequence();
+        renderBatchTasks();
       });
     }
 

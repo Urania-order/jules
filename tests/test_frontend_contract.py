@@ -477,3 +477,42 @@ def test_frontend_contract_safe_date_and_queue_layout():
     # 5. COMPLETED card layout (flex-wrap, task-card-actions, no text overlap)
     assert 'task-card-actions' in content
     assert 'flex-wrap: wrap' in content or 'flex-wrap:wrap' in content
+
+
+def test_frontend_contract_v1_1_7_task_explorer():
+    """Verify v1.1.7 Task Explorer helpers, UI controls, localStorage keys, and author badges exist."""
+    content = INDEX_PATH.read_text()
+
+    # Shared JS helpers
+    assert 'function sortTasksByCreatedAt(tasks, desc = true)' in content
+    assert 'function filterTasksByAuthor(tasks, author)' in content
+    assert 'function searchTasks(tasks, q)' in content
+    assert 'function applyTaskFilters(tasks)' in content
+
+    # UI controls
+    assert 'id="task-filter-author"' in content
+    assert 'id="task-sort-order"' in content
+    assert 'id="task-filter-search"' in content
+
+    # Author dropdown options
+    assert 'value="all">All authors' in content
+    assert 'value="operator">🧑 operator' in content
+    assert 'value="queue">⚙ queue' in content
+    assert 'value="consultant">✨ consultant' in content
+    assert 'value="unknown">? unknown' in content
+
+    # Sort dropdown options
+    assert 'value="desc">↓ Newest' in content
+    assert 'value="asc">↑ Oldest' in content
+
+    # LocalStorage keys
+    assert 'cosmos_task_author_filter' in content
+    assert 'cosmos_task_sort_order' in content
+    assert 'cosmos_task_search_q' in content
+
+    # Author badges and rendering
+    assert 'formatAuthorBadge' in content
+    assert '🧑 operator' in content
+    assert '⚙ queue' in content
+    assert '✨ consultant' in content
+    assert '? unknown' in content
