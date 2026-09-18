@@ -84,14 +84,17 @@ TASKEOF
 
 if command -v python3 >/dev/null 2>&1; then
 
-python3 - "$STATE_FILE" "$TASK_ID" "$TASK" <<'PY'
+python3 - "$STATE_FILE" "$TASK_ID" "$TASK" "$CURRENT_BRANCH" <<'PY'
 import json
+import os
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 state_file = Path(sys.argv[1])
 task_id = sys.argv[2]
 task = sys.argv[3]
+current_branch = sys.argv[4]
 
 if state_file.exists():
     try:
@@ -101,9 +104,18 @@ if state_file.exists():
 else:
     state = {}
 
+_now = datetime.now(timezone.utc).isoformat()
 state["active_task"] = {
     "id": task_id,
-    "request": task
+    "request": task,
+    "title": task.split("\n")[0][:80],
+    "status": "RUNNING",
+    "priority": 5,
+    "created_at": _now,
+    "started_at": _now,
+    "proposed_by": os.environ.get("COSMOS_AUTHOR", "operator"),
+    "source_task": None,
+    "branch": current_branch,
 }
 
 state["status"] = "running"

@@ -159,11 +159,14 @@ if dry_run:
 else:
     log("Dispatching task via jules-task.sh...")
     try:
+        env = os.environ.copy()
+        env["COSMOS_AUTHOR"] = task_data.get("proposed_by") or "runner"
         res = subprocess.run(
             ["./scripts/jules-task.sh", request],
             capture_output=True,
             text=True,
-            check=False
+            check=False,
+            env=env
         )
         if res.returncode == 0:
             log("  Task successfully dispatched via jules-task.sh.")
