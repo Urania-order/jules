@@ -379,9 +379,11 @@ def test_frontend_contract_reset_center_elements():
     assert 'id="undo-filter-search"' in content
     assert 'id="undo-matched-count"' in content
 
-    # Undo buttons
-    assert 'id="btn-undo-selected"' in content
+    # Undo buttons & Archive tab undo button
+    assert 'id="btn-undo-selected"' not in content
+    assert 'id="btn-undo-selected-archive"' in content
     assert 'id="btn-undo-all-matched"' in content
+    assert 'Undo Filtered' in content
 
     # Confirm modal
     assert 'id="undo-confirm-modal"' in content
