@@ -428,8 +428,22 @@ def test_frontend_contract_v1_1_1_sequence_ux():
     assert '<button class="nav-btn" data-view="sequences">Recordings</button>' in content
 
     # renderSequence truncation logic
-    assert '.substring(0, 120)' in content
+    assert 'truncateTask' in content or '.substring(0, 120)' in content
     assert 'title="' in content
 
     # date fallback logic
     assert 'isNaN(parsed)' in content
+
+
+def test_frontend_contract_truncate_task():
+    """Verify truncateTask helper exists and no raw task.request || task.title displays remain in view rendering."""
+    content = INDEX_PATH.read_text()
+
+    # Check truncateTask helper definition and defaults
+    assert 'function truncateTask(s, n=120)' in content
+
+    # Ensure all task request/title view code uses truncateTask
+    assert '${escapeHTML(truncateTask(task.title || task.request))}' in content
+
+    # Ensure no raw ${escapeHTML(task.request || task.title)} remains in frontend/index.html
+    assert '${escapeHTML(task.request || task.title)}' not in content

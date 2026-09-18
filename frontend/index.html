@@ -1880,7 +1880,7 @@
         <div class="task-info">
           <div style="display: flex; align-items: center; gap: 0.5rem;">
             <div class="led ${ledClass}"></div>
-            <div class="task-title">${escapeHTML(task.request || task.title)}</div>
+            <div class="task-title" title="${escapeHTML(task.request || task.title || '')}">${escapeHTML(truncateTask(task.title || task.request))}</div>
           </div>
           <div class="task-meta">
             <span>ID: ${task.id}</span>
@@ -2133,7 +2133,7 @@
         }).join('');
 
         card.innerHTML = `
-          <div style="font-weight: bold; margin-bottom: 0.5rem; color: var(--accent-blue);">Task: ${escapeHTML(task.request || task.title)} (${task.id})</div>
+          <div style="font-weight: bold; margin-bottom: 0.5rem; color: var(--accent-blue);" title="${escapeHTML(task.request || task.title || '')}">Task: ${escapeHTML(truncateTask(task.title || task.request))} (${task.id})</div>
           <ol class="stage-list">${stageListHTML}</ol>
         `;
         container.appendChild(card);
@@ -2166,7 +2166,7 @@
           <span class="seq-id">${task.id}</span>
           <span class="seq-state">${seqState}</span>
           <span class="seq-priority">P${task.priority || 3}</span>
-          <span style="color: var(--text-secondary); margin-left: auto;" title="${escapeHTML(task.request || task.title || '')}">${escapeHTML((task.title || task.request || '').substring(0, 120))}${(task.title || task.request || '').length > 120 ? '…' : ''}</span>
+          <span style="color: var(--text-secondary); margin-left: auto;" title="${escapeHTML(task.request || task.title || '')}">${escapeHTML(truncateTask(task.title || task.request))}</span>
         `;
         list.appendChild(li);
       });
@@ -2190,7 +2190,7 @@
           <div style="display: flex; align-items: center; gap: 0.75rem;">
             <input type="checkbox" class="batch-select" data-task-id="${task.id}">
             <div>
-              <div class="task-title">${escapeHTML(task.request || task.title)}</div>
+              <div class="task-title" title="${escapeHTML(task.request || task.title || '')}">${escapeHTML(truncateTask(task.title || task.request))}</div>
               <div class="task-meta">ID: ${task.id} | Priority: P${task.priority}</div>
             </div>
           </div>
@@ -2797,6 +2797,11 @@
       });
       refreshData();
     });
+
+    function truncateTask(s, n=120) {
+      s = s || '';
+      return s.length > n ? s.substring(0, n) + '…' : s;
+    }
 
     function escapeHTML(str) {
       return str ? str.replace(/[&<>'"]/g, 
