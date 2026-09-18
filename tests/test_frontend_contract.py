@@ -232,17 +232,21 @@ def test_frontend_contract_control_panel_elements():
 
 
 def test_frontend_contract_v1_1_elements():
-    """Verify v1.1 Frontend Contract elements: Reset Queues button, Extended Task Edit modal, Remember Task modal, and Templates UI."""
+    """Verify v1.1 Frontend Contract elements: Per-Column Reset Buttons, Reset Modal, Extended Task Edit modal, Remember Task modal, and Templates UI."""
     content = INDEX_PATH.read_text()
 
-    # 1. Reset Queues Button, Per-Column Reset Buttons & Modal
-    assert 'id="btn-reset-queues"' in content
+    # 1. Navbar must NOT contain RESET QUEUES topbar button
+    assert 'id="btn-reset-queues"' not in content
+    assert '⚠ RESET QUEUES' not in content
+
+    # 2. Queue Management view and Reset Center buttons & Modal
     assert 'id="btn-reset-ready"' in content
     assert 'id="btn-reset-running"' in content
     assert 'id="btn-reset-review"' in content
     assert 'id="btn-reset-blocked"' in content
     assert 'id="btn-reset-completed"' in content
     assert 'id="btn-reset-all"' in content
+    assert 'id="btn-reset-all-center"' in content
     assert 'id="queue-reset-modal"' in content
     assert 'id="queue-reset-confirm-input"' in content
 

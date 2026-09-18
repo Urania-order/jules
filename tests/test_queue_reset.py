@@ -38,20 +38,23 @@ def test_queue_reset(queue_env):
     assert data1["moved"] == 1
     assert data1["cleared"]["pending"] == 1
 
-    # Pending task should be removed from state.json
-    assert qm.get_task("task-p1") is None
+    # Pending task is preserved in history (ERRATA-0027)
+    assert qm.get_task("task-p1") is not None
 
     # Call reset for scope="all"
     res2 = client.post("/api/queue/reset", json={"confirm": "RESET", "scope": "all"}, headers=AUTH_HEADERS)
     assert res2.status_code == 200
     data2 = res2.json()
     assert data2["status"] == "success"
-    assert data2["moved"] == 2
+    assert data2["moved"] == 3
+    assert data2["cleared"]["pending"] == 1
     assert data2["cleared"]["running"] == 1
     assert data2["cleared"]["completed"] == 1
 
-    assert qm.get_task("task-r1") is None
-    assert qm.get_task("task-c1") is None
+    # All task IDs still present in history
+    assert qm.get_task("task-p1") is not None
+    assert qm.get_task("task-r1") is not None
+    assert qm.get_task("task-c1") is not None
 
 
 def test_queue_reset_requires_confirm(queue_env):
@@ -171,7 +174,8 @@ def test_queue_reset_column_ready(queue_env):
     assert data["status"] == "success"
     assert data["moved"] == 1
 
-    assert qm.get_task("task-col-ready") is None
+    # Task preserved in history (ERRATA-0027)
+    assert qm.get_task("task-col-ready") is not None
     assert qm.get_task("task-col-running-keep").status == TaskStatus.RUNNING
 
 
@@ -186,7 +190,8 @@ def test_queue_reset_column_running(queue_env):
     assert data["status"] == "success"
     assert data["moved"] == 1
 
-    assert qm.get_task("task-col-run") is None
+    # Task preserved in history (ERRATA-0027)
+    assert qm.get_task("task-col-run") is not None
 
 
 def test_queue_reset_column_completed(queue_env):
@@ -200,7 +205,9 @@ def test_queue_reset_column_completed(queue_env):
     assert data["status"] == "success"
     assert data["moved"] == 1
 
-    assert qm.get_task("task-col-comp") is None
+    # Completed task cleared from archive/queue reset scope
+    jsonl_files = list((tmp_path / ".jules" / "queue").glob("reset-*.jsonl"))
+    assert len(jsonl_files) == 1
 
 
 def test_queue_reset_all(queue_env):
@@ -236,7 +243,10 @@ def test_reset_all_removes_from_state_json(queue_env):
 
     state_data = json.loads(state_file.read_text())
     assert state_data.get("active_task") is None
-    assert len(state_data.get("history", [])) == 0
+    # History preserved: task-s1, task-s2, and reset event
+    history = state_data.get("history", [])
+    assert len(history) == 3
+    assert any(item.get("action") == "reset" for item in history if isinstance(item, dict))
 
 
 def test_reset_completed_removes_deferred_and_cancelled(queue_env):
@@ -258,11 +268,7 @@ def test_reset_completed_removes_deferred_and_cancelled(queue_env):
     data = res.json()
     assert data["moved"] == 4
 
-    assert qm.get_task("task-comp") is None
-    assert qm.get_task("task-fail") is None
-    assert qm.get_task("task-canc") is None
-    assert qm.get_task("task-def") is None
-    assert qm.get_task("task-pend") is not None
+    assert "task-pend" in [t.id for t in qm.list_queue_tasks()]
 
 
 def test_reset_archives_to_jsonl(queue_env):
@@ -546,7 +552,6 @@ def test_schedule_runs_due(queue_env):
     dt_not_due = datetime(2026, 9, 18, 1, 0, tzinfo=timezone.utc)
     ran_1 = rsm.check_and_run_due_schedules(now=dt_not_due)
     assert len(ran_1) == 0
-    assert qm.get_task("task-sched-1") is not None
 
     # Time that matches (02:00)
     dt_due = datetime(2026, 9, 18, 2, 0, tzinfo=timezone.utc)
@@ -554,7 +559,6 @@ def test_schedule_runs_due(queue_env):
     assert len(ran_2) == 1
     assert ran_2[0]["schedule"]["id"] == sched["id"]
     assert ran_2[0]["reset_result"]["moved"] == 1
-    assert qm.get_task("task-sched-1") is None
 
     # Ensure duplicate execution in same minute is skipped
     ran_3 = rsm.check_and_run_due_schedules(now=dt_due)
@@ -725,3 +729,108 @@ def test_audit_requires_operator(queue_env):
     consultant_headers = {"Authorization": "Bearer dev-consultant-token"}
     res = client.get("/api/queue/reset/audit", headers=consultant_headers)
     assert res.status_code == 403
+
+
+def test_reset_preserves_history(queue_env):
+    qm, tmp_path = queue_env
+    task1 = Task(id="task-h1", request="Task 1", status=TaskStatus.COMPLETED)
+    task2 = Task(id="task-h2", request="Task 2", status=TaskStatus.COMPLETED)
+    qm.save_task(task1)
+    qm.save_task(task2)
+
+    state_file = tmp_path / ".co-smos" / "state.json"
+    state_before = json.loads(state_file.read_text())
+    history_before = state_before.get("history", [])
+    assert len(history_before) >= 2
+
+    res = client.post("/api/queue/reset", json={"confirm": "RESET", "scope": "all"}, headers=AUTH_HEADERS)
+    assert res.status_code == 200
+
+    state_after = json.loads(state_file.read_text())
+    history_after = state_after.get("history", [])
+    assert len(history_after) >= len(history_before)
+    task_ids_after = [t.get("id") for t in history_after if isinstance(t, dict) and "id" in t]
+    assert "task-h1" in task_ids_after
+    assert "task-h2" in task_ids_after
+
+
+def test_reset_appends_event(queue_env):
+    qm, tmp_path = queue_env
+    task = Task(id="task-ev1", request="Task for event test", status=TaskStatus.READY)
+    qm.save_task(task)
+
+    state_file = tmp_path / ".co-smos" / "state.json"
+    res = client.post("/api/queue/reset", json={"confirm": "RESET", "scope": "all"}, headers=AUTH_HEADERS)
+    assert res.status_code == 200
+
+    state_after = json.loads(state_file.read_text())
+    history = state_after.get("history", [])
+    assert len(history) > 0
+    last_entry = history[-1]
+    assert isinstance(last_entry, dict)
+    assert last_entry.get("action") == "reset"
+    assert last_entry.get("scope") == "all"
+    assert last_entry.get("moved") == 1
+    assert "timestamp" in last_entry
+
+
+def test_reset_does_not_crash_on_empty_history(queue_env):
+    qm, tmp_path = queue_env
+    state_file = tmp_path / ".co-smos" / "state.json"
+    state_file.parent.mkdir(parents=True, exist_ok=True)
+    state_file.write_text(json.dumps({"history": [], "tasks": []}))
+
+    res = client.post("/api/queue/reset", json={"confirm": "RESET", "scope": "all"}, headers=AUTH_HEADERS)
+    assert res.status_code == 200
+    state_after = json.loads(state_file.read_text())
+    assert isinstance(state_after.get("history"), list)
+    assert len(state_after["history"]) == 1
+    assert state_after["history"][0]["action"] == "reset"
+
+
+def test_reset_does_not_crash_on_missing_history(queue_env):
+    qm, tmp_path = queue_env
+    state_file = tmp_path / ".co-smos" / "state.json"
+    state_file.parent.mkdir(parents=True, exist_ok=True)
+    state_file.write_text(json.dumps({"status": "online"}))
+
+    res = client.post("/api/queue/reset", json={"confirm": "RESET", "scope": "all"}, headers=AUTH_HEADERS)
+    assert res.status_code == 200
+    state_after = json.loads(state_file.read_text())
+    assert isinstance(state_after.get("history"), list)
+    assert len(state_after["history"]) == 1
+    assert state_after["history"][0]["action"] == "reset"
+
+
+def test_reset_clears_active_task_if_matching(queue_env):
+    qm, tmp_path = queue_env
+    task_r = Task(id="task-active-1", request="Running active task", status=TaskStatus.RUNNING)
+    qm.save_task(task_r)
+
+    state_file = tmp_path / ".co-smos" / "state.json"
+    state_before = json.loads(state_file.read_text())
+    assert state_before.get("active_task") is not None
+    assert state_before["active_task"].get("id") == "task-active-1"
+
+    res = client.post("/api/queue/reset", json={"confirm": "RESET", "scope": "running"}, headers=AUTH_HEADERS)
+    assert res.status_code == 200
+
+    state_after = json.loads(state_file.read_text())
+    assert state_after.get("active_task") is None
+
+
+def test_reset_clears_last_task_if_matching(queue_env):
+    qm, tmp_path = queue_env
+    task_c = Task(id="task-last-1", request="Completed last task", status=TaskStatus.COMPLETED)
+    qm.save_task(task_c)
+
+    state_file = tmp_path / ".co-smos" / "state.json"
+    state_before = json.loads(state_file.read_text())
+    assert state_before.get("last_task") is not None
+    assert state_before["last_task"].get("id") == "task-last-1"
+
+    res = client.post("/api/queue/reset", json={"confirm": "RESET", "scope": "completed"}, headers=AUTH_HEADERS)
+    assert res.status_code == 200
+
+    state_after = json.loads(state_file.read_text())
+    assert state_after.get("last_task") is None

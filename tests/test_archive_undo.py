@@ -81,6 +81,9 @@ def test_archive_list_returns_entries(undo_env):
 def test_undo_selected_creates_tasks(undo_env):
     qm, tmp_path = undo_env
 
+    # Initial state.json history has the 3 reset tasks
+    initial_task_count = len(qm.list_all_tasks())
+
     # Get archive list
     res_list = client.get("/api/queue/archive", headers=OPERATOR_HEADERS)
     entries = res_list.json()["entries"]
@@ -99,8 +102,8 @@ def test_undo_selected_creates_tasks(undo_env):
 
     # Verify a new task was created in queue
     all_tasks = qm.list_all_tasks()
-    assert len(all_tasks) == 1
-    new_task = all_tasks[0]
+    assert len(all_tasks) == initial_task_count + 1
+    new_task = all_tasks[-1]
     assert new_task.request == entries[0]["request"]
     assert new_task.priority == entries[0]["priority"]
     assert new_task.status == TaskStatus.PENDING
@@ -142,8 +145,7 @@ def test_undo_preserves_why(undo_env):
     )
 
     all_tasks = qm.list_all_tasks()
-    assert len(all_tasks) == 1
-    task = all_tasks[0]
+    task = all_tasks[-1]
 
     # Verify why block preserved
     meta_why = task.metadata.get("why", {})
@@ -160,6 +162,7 @@ def test_undo_preserves_why(undo_env):
 
 def test_undo_skips_already_restored(undo_env):
     qm, tmp_path = undo_env
+    initial_count = len(qm.list_all_tasks())
 
     res_list = client.get("/api/queue/archive", headers=OPERATOR_HEADERS)
     entries = res_list.json()["entries"]
@@ -171,7 +174,7 @@ def test_undo_skips_already_restored(undo_env):
         json={"archive_ids": [target_aid], "confirm": "UNDO"},
         headers=OPERATOR_HEADERS
     )
-    assert len(qm.list_all_tasks()) == 1
+    assert len(qm.list_all_tasks()) == initial_count + 1
 
     # Second undo on same archive_id
     res_second = client.post(
@@ -183,8 +186,8 @@ def test_undo_skips_already_restored(undo_env):
     data_second = res_second.json()
     assert target_aid not in data_second["restored"]
 
-    # Task count should remain 1
-    assert len(qm.list_all_tasks()) == 1
+    # Task count should remain initial_count + 1
+    assert len(qm.list_all_tasks()) == initial_count + 1
 
 
 def test_undo_filter_by_status(undo_env):
@@ -232,6 +235,7 @@ def test_undo_filter_by_search(undo_env):
 
 def test_undo_filter_returns_matched_count(undo_env):
     qm, tmp_path = undo_env
+    initial_count = len(qm.list_all_tasks())
 
     # Dry run should return matched count and entries without creating tasks
     res = client.post(
@@ -244,8 +248,8 @@ def test_undo_filter_returns_matched_count(undo_env):
     assert data["status"] == "success"
     assert data["matched"] == 3
     assert len(data["entries"]) == 3
-    # No tasks created in queue
-    assert len(qm.list_all_tasks()) == 0
+    # No new tasks created in queue
+    assert len(qm.list_all_tasks()) == initial_count
 
 
 def test_undo_requires_confirm(undo_env):

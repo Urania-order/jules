@@ -878,7 +878,6 @@
         <option value="AUTO">AUTO</option>
       </select>
       <button class="btn btn-secondary btn-sm" id="btn-sync">⟳ SYNC</button>
-      <button class="btn btn-danger btn-sm" id="btn-reset-queues">⚠ RESET QUEUES</button>
     </div>
     <nav>
       <button class="nav-btn active" data-view="dashboard">Control Room</button>
@@ -1747,11 +1746,6 @@
 
       const modal = document.getElementById('queue-reset-modal');
       if (modal) modal.style.display = 'flex';
-    }
-
-    const btnResetQueues = document.getElementById('btn-reset-queues');
-    if (btnResetQueues) {
-      btnResetQueues.addEventListener('click', () => openResetModal('all'));
     }
 
     function closeResetModal() {

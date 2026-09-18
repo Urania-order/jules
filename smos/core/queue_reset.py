@@ -303,8 +303,8 @@ class QueueResetManager:
                 cleared_counts["ready"] += 1
             total_moved += 1
 
-        # Update state.json by removing cleared tasks
-        if state_data:
+        # Update state.json pointers and history
+        if state_data is not None:
             if state_data.get("active_task") and isinstance(state_data["active_task"], dict):
                 if state_data["active_task"].get("id") in removed_task_ids:
                     state_data["active_task"] = None
@@ -315,17 +315,21 @@ class QueueResetManager:
                 if state_data["last_task"].get("id") in removed_task_ids:
                     state_data["last_task"] = None
 
-            if isinstance(state_data.get("history"), list):
-                state_data["history"] = [
-                    t for t in state_data["history"]
-                    if not (isinstance(t, dict) and t.get("id") in removed_task_ids)
-                ]
+            if not isinstance(state_data.get("history"), list):
+                state_data["history"] = []
 
             if isinstance(state_data.get("tasks"), list):
                 state_data["tasks"] = [
                     t for t in state_data["tasks"]
                     if not (isinstance(t, dict) and t.get("id") in removed_task_ids)
                 ]
+
+            state_data["history"].append({
+                "action": "reset",
+                "timestamp": reset_at_iso,
+                "scope": normalized_scope,
+                "moved": total_moved,
+            })
 
             self.state_file.parent.mkdir(parents=True, exist_ok=True)
             self.state_file.write_text(json.dumps(state_data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
