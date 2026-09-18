@@ -26,6 +26,7 @@ Known mistakes and rules to avoid them.
 
 ### Process / Orchestration
 
+- ERRATA-0027 — state.json history overwritten by Reset (HIGH)
 - ERRATA-0026 — Undo Selected in Undo tab — no checkboxes (MEDIUM)
 - ERRATA-0025 — [Invalid Date] in Queue + Recordings + layout (MEDIUM)
 - ERRATA-0024 — Full prompt in Stages + Control Room (MEDIUM)
