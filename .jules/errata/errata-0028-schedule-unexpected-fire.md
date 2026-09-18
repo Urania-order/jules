@@ -47,3 +47,28 @@ At 02:00:11 next night, the schedule actually fired:
 
 ## Status
 OPEN — needs Задача 11 (UX fix)
+
+---
+
+## Issue 3 — RESET QUEUES button in navbar (accidental data loss)
+
+### Symptom
+The navbar (top row) has a red "⚠ RESET QUEUES" button next to "⟳ SYNC".
+It is too easy to click accidentally. It triggers reset scope=all
+without a confirmation dialog. Users have wiped queues by mistake.
+
+### Cause
+The button was added for convenience but:
+1. No confirmation modal (unlike Undo, which requires "UNDO" text)
+2. Positioned next to SYNC (both are "action" buttons)
+3. Scope=all is the most destructive option
+
+### Fix (proposed)
+- REMOVE the RESET QUEUES button from the navbar entirely.
+- Keep RESET ALL QUEUES in Queue Management view (contextual, less accidental).
+- Keep Reset Center → Columns buttons (fine-grained control).
+- If a topbar shortcut is desired later, put it behind a menu with
+  confirmation ("Type RESET to confirm").
+
+### Status
+FIX via Задача 10 (backend history fix + navbar button removal combined)
