@@ -2,8 +2,11 @@
   "version": 1,
   "project": "jules-codespace",
   "agent": "jules",
-  "status": "ready",
-  "active_task": null,
+  "status": "running",
+  "active_task": {
+    "id": "task-20260918-040154",
+    "request": "Co-SMOS v1.1.2 — Truncate task.request in all views\n\nCONTEXT:\n- Repo: Urania-order/jules\n- File: frontend/index.html\n- ERRATA-0023 fixed Commands view (renderSequence, line ~2157/2167)\n- But other views still render full task.request:\n    * line ~2136 (Stages / Control Room)\n    * line ~2191 (Batch Tasks Selector)\n    * any other place with ${escapeHTML(task.request || task.title)}\n\nGOAL:\n1. Add shared JS helper:\n     function truncateTask(s, n=120) {\n       s = s || '';\n       return s.length > n ? s.substring(0, n) + '…' : s;\n     }\n\n2. Replace ALL occurrences of:\n     ${escapeHTML(task.request || task.title)}\n   with:\n     ${escapeHTML(truncateTask(task.title || task.request))}\n   AND add title= attribute for full text:\n     title=\"${escapeHTML(task.request || task.title || '')}\"\n\n3. Apply in:\n   - #view-stages       (Stage Tracking Panel)\n   - #view-control-room (Active Que e Execu  on)\n   - #view-batch        (Batch Tasks Selector)\n   - any other view with raw task.request\n\nREQUIREMENTS:\n- Only frontend/index.html\n- Do not break existing views\n- Add frontend contract test:\n    * truncateTask helper exists\n    * no raw ${escapeHTML(task.request || task.title)} in view code\n\nTESTS:\n- pytest tests/ + git diff --check\n- frontend contract test passes\n\nCONSTRAINTS:\n- Do not touch .co-smos/, .jules/tasks/, .jules/results/\n- Do not weaken existing tests\n\nREPORT FORMAT: AGENTS.md §14"
+  },
   "last_task": {
     "id": "task-20260918-032524",
     "status": "completed",
