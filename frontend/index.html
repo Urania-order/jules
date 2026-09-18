@@ -1434,6 +1434,7 @@
               <option value="verify-task">verify-task (./scripts/verify.sh --task &lt;args&gt;)</option>
               <option value="task">task (./scripts/jules-task.sh &lt;args&gt;)</option>
               <option value="complete">complete (./scripts/jules-complete.sh --task &lt;args&gt;)</option>
+              <option value="run-task">run-task (./scripts/run-task.sh &lt;args&gt;)</option>
               <option value="status">status (jules remote list --session)</option>
               <option value="git-log">git-log (git log --oneline -10)</option>
               <option value="git-status">git-status (git status --short)</option>
@@ -1442,10 +1443,19 @@
 
           <div class="form-group" style="flex: 1; min-width: 200px; margin-bottom: 0;">
             <label for="admin-args">Arguments</label>
-            <input type="text" id="admin-args" placeholder="args (optional)">
+            <input type="text" id="admin-args" placeholder="args: /path/to/file.txt [--verify N]">
           </div>
 
           <button id="admin-run" class="btn btn-primary" onclick="runCustomAdminCommand()">Run</button>
+        </div>
+
+        <div class="form-group" style="margin-top: 0.75rem;">
+          <label for="admin-upload-txt">Or upload .txt file</label>
+          <div style="display: flex; gap: 0.75rem;">
+            <input type="file" id="admin-upload-txt" accept=".txt">
+            <button class="btn btn-secondary" id="btn-admin-upload-run"
+                    onclick="adminUploadTxtRun()">📤 Upload &amp; Run</button>
+          </div>
         </div>
 
         <div style="margin-top: 1.5rem;">
@@ -3738,7 +3748,7 @@
         const data = await res.json();
 
         if (res.status === 400 && data.code === 'next_task_not_formed') {
-          showError("Наступне завдання не сформовано");
+          showError("No pending task. Please create one first.");
           const promptEl = document.getElementById('admin-new-task-prompt');
           if (promptEl) {
             promptEl.focus();
@@ -3766,6 +3776,51 @@
         if (outputEl) outputEl.textContent = `Run next failed: ${err.message}`;
       } finally {
         if (runBtn) runBtn.disabled = false;
+      }
+    }
+
+    async function adminUploadTxtRun() {
+      const fileInput = document.getElementById('admin-upload-txt');
+      const outputEl = document.getElementById('admin-output');
+      const uploadBtn = document.getElementById('btn-admin-upload-run');
+
+      if (!fileInput || !fileInput.files || fileInput.files.length === 0) {
+        showError("Please select a .txt file to upload.");
+        return;
+      }
+
+      const file = fileInput.files[0];
+      if (uploadBtn) uploadBtn.disabled = true;
+      if (outputEl) outputEl.textContent = 'Uploading file and dispatching task...';
+
+      try {
+        const text = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result);
+          reader.onerror = () => reject(new Error("Failed to read file"));
+          reader.readAsText(file);
+        });
+
+        if (!text || !text.trim()) {
+          showError("Uploaded file is empty.");
+          if (outputEl) outputEl.textContent = 'Uploaded file is empty.';
+          return;
+        }
+
+        const addRes = await fetchJSON(`${API_BASE}/admin/queue/add`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text, verify_task: null })
+        });
+
+        await adminRunNext();
+        renderAdminQueueStatus();
+        fileInput.value = '';
+      } catch (err) {
+        showError("Upload & run failed: " + err.message);
+        if (outputEl) outputEl.textContent = `Upload & run failed: ${err.message}`;
+      } finally {
+        if (uploadBtn) uploadBtn.disabled = false;
       }
     }
 

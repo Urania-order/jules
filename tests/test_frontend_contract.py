@@ -537,6 +537,14 @@ def test_frontend_contract_web_terminal_admin_elements():
     assert 'id="admin-run"' in content
     assert 'id="admin-output"' in content
 
+    # Whitelist option & placeholder & upload controls (v1.2.2)
+    assert '<option value="run-task">' in content
+    assert 'placeholder="args: /path/to/file.txt [--verify N]"' in content
+    assert 'id="admin-upload-txt"' in content
+    assert 'id="btn-admin-upload-run"' in content
+    assert 'adminUploadTxtRun' in content
+    assert 'No pending task. Please create one first.' in content
+
     # JS execution functions
     assert 'runAdminCommand' in content
     assert 'runCustomAdminCommand' in content

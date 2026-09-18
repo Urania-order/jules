@@ -31,6 +31,16 @@ def client(tmp_path, monkeypatch):
     return TestClient(app)
 
 
+def test_admin_whitelist_has_run_task(client):
+    """Verify 'run-task' is present in ADMIN_COMMAND_WHITELIST with expected timeout and script path."""
+    from smos.api.main import ADMIN_COMMAND_WHITELIST
+    assert "run-task" in ADMIN_COMMAND_WHITELIST
+    cfg = ADMIN_COMMAND_WHITELIST["run-task"]
+    assert cfg["exec"] == "./scripts/run-task.sh"
+    assert cfg["fixed_args"] == []
+    assert cfg["timeout"] == 1200
+
+
 def test_admin_run_whitelisted(client):
     """Verify whitelisted command execution succeeds for operator role."""
     res = client.post(

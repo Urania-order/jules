@@ -452,6 +452,11 @@ ADMIN_COMMAND_WHITELIST = {
         "fixed_args": ["--task"],
         "timeout": 60,
     },
+    "run-task": {
+        "exec": "./scripts/run-task.sh",
+        "fixed_args": [],
+        "timeout": 1200,
+    },
     "task": {
         "exec": "./scripts/jules-task.sh",
         "fixed_args": [],
