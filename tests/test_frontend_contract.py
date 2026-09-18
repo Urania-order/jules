@@ -569,3 +569,23 @@ def test_frontend_contract_admin_queue_submission_elements():
     assert 'adminAddToQueue' in content
     assert 'adminRunNext' in content
     assert 'renderAdminQueueStatus' in content
+
+
+def test_frontend_contract_stages_sorted():
+    """Verify renderStages sorts tasks oldest first via sortTasksByCreatedAt."""
+    content = INDEX_PATH.read_text()
+    assert 'function renderStages()' in content
+    assert 'sortTasksByCreatedAt(currentTasks, true)' in content
+
+
+def test_frontend_contract_async_admin_job_polling():
+    """Verify v1.2.3 async job polling, status output formatting (Running, DONE, FAILED), and localStorage persistence exist."""
+    content = INDEX_PATH.read_text()
+
+    assert 'pollAdminJob' in content
+    assert 'startAdminJobPolling' in content
+    assert 'cosmos_active_job_id' in content
+    assert '/admin/queue/jobs/' in content
+    assert 'Running... (' in content
+    assert 'DONE (' in content
+    assert 'FAILED - exit_code:' in content

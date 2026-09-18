@@ -2256,7 +2256,10 @@
         return;
       }
 
-      currentTasks.forEach(task => {
+      // Sort tasks oldest first
+      const sortedTasks = sortTasksByCreatedAt(currentTasks, true);
+
+      sortedTasks.forEach(task => {
         const card = document.createElement('div');
         card.className = 'stage-card';
         card.dataset.taskId = task.id;
@@ -3734,6 +3737,75 @@
       }
     }
 
+    let adminJobPollInterval = null;
+
+    async function pollAdminJob(jobId) {
+      const outputEl = document.getElementById('admin-output');
+      const metaEl = document.getElementById('admin-meta-info');
+      const runBtn = document.getElementById('btn-admin-run-next');
+
+      if (runBtn) runBtn.disabled = true;
+
+      try {
+        const headers = { 'Authorization': 'Bearer dev-operator-token' };
+        const res = await fetch(`${API_BASE}/admin/queue/jobs/${jobId}`, { headers });
+        if (!res.ok) {
+          if (res.status === 404) {
+            localStorage.removeItem('cosmos_active_job_id');
+            if (adminJobPollInterval) {
+              clearInterval(adminJobPollInterval);
+              adminJobPollInterval = null;
+            }
+            if (runBtn) runBtn.disabled = false;
+          }
+          return;
+        }
+
+        const data = await res.json();
+        const startTime = new Date(data.started_at).getTime();
+        const now = data.finished_at ? new Date(data.finished_at).getTime() : Date.now();
+        const elapsedSec = Math.max(0, Math.floor((now - startTime) / 1000));
+
+        if (data.status === 'running') {
+          if (outputEl) outputEl.textContent = `Running... (${elapsedSec}s elapsed)`;
+          if (metaEl) metaEl.textContent = `Job ID: ${jobId} | File: ${data.filename} | Status: Running (${elapsedSec}s)`;
+        } else if (data.status === 'completed') {
+          localStorage.removeItem('cosmos_active_job_id');
+          if (adminJobPollInterval) {
+            clearInterval(adminJobPollInterval);
+            adminJobPollInterval = null;
+          }
+          if (runBtn) runBtn.disabled = false;
+
+          const stdoutTail = data.stdout ? data.stdout.trim().split('\n').slice(-10).join('\n') : '';
+          if (outputEl) outputEl.textContent = `DONE (${elapsedSec}s) - task_id: ${data.task_id || 'N/A'}\n\n${stdoutTail}`;
+          if (metaEl) metaEl.textContent = `Duration: ${data.duration_ms}ms | Exit Code: 0 | Task ID: ${data.task_id || 'N/A'}`;
+          renderAdminQueueStatus();
+        } else if (data.status === 'failed') {
+          localStorage.removeItem('cosmos_active_job_id');
+          if (adminJobPollInterval) {
+            clearInterval(adminJobPollInterval);
+            adminJobPollInterval = null;
+          }
+          if (runBtn) runBtn.disabled = false;
+
+          const stderrTail = data.stderr ? data.stderr.trim().split('\n').slice(-10).join('\n') : '';
+          if (outputEl) outputEl.textContent = `FAILED - exit_code: ${data.exit_code}\n\n${stderrTail}`;
+          if (metaEl) metaEl.textContent = `Duration: ${data.duration_ms}ms | Exit Code: ${data.exit_code}`;
+          renderAdminQueueStatus();
+        }
+      } catch (err) {
+        showError("Polling job failed: " + err.message);
+      }
+    }
+
+    function startAdminJobPolling(jobId) {
+      if (adminJobPollInterval) clearInterval(adminJobPollInterval);
+      localStorage.setItem('cosmos_active_job_id', jobId);
+      pollAdminJob(jobId);
+      adminJobPollInterval = setInterval(() => pollAdminJob(jobId), 5000);
+    }
+
     async function adminRunNext() {
       const outputEl = document.getElementById('admin-output');
       const metaEl = document.getElementById('admin-meta-info');
@@ -3757,6 +3829,7 @@
           }
           if (outputEl) outputEl.textContent = 'No pending task files to run.';
           renderAdminQueueStatus();
+          if (runBtn) runBtn.disabled = false;
           return;
         }
 
@@ -3764,17 +3837,13 @@
           throw new Error(data.message || `HTTP ${res.status}`);
         }
 
-        if (outputEl) {
-          outputEl.textContent = `Dispatched task: ${data.filename}\nTask ID: ${data.task_id || 'N/A'}\nExit Code: ${data.exit_code}`;
-        }
-        if (metaEl) {
-          metaEl.textContent = `Duration: ${data.duration_ms}ms | Exit Code: ${data.exit_code}`;
+        if (data.started && data.job_id) {
+          startAdminJobPolling(data.job_id);
         }
         renderAdminQueueStatus();
       } catch (err) {
         showError("Run next failed: " + err.message);
         if (outputEl) outputEl.textContent = `Run next failed: ${err.message}`;
-      } finally {
         if (runBtn) runBtn.disabled = false;
       }
     }
@@ -3822,6 +3891,12 @@
       } finally {
         if (uploadBtn) uploadBtn.disabled = false;
       }
+    }
+
+    // Check saved job on page load and resume polling
+    const activeJobId = localStorage.getItem('cosmos_active_job_id');
+    if (activeJobId) {
+      startAdminJobPolling(activeJobId);
     }
 
     // Auto-refresh every 5 seconds

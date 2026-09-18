@@ -60,6 +60,7 @@ import re
 import shlex
 import shutil
 import subprocess
+import threading
 import time
 import uuid
 from pydantic import BaseModel, Field
@@ -436,6 +437,74 @@ class AdminQueueAddRequest(BaseModel):
     text: str
     verify_task: Optional[str] = None
 
+RUN_JOBS: Dict[str, Dict[str, Any]] = {}
+
+def _run_job_worker(job_id: str, filename: str, cmd: List[str], project_root: Path, running_txt: Path, running_meta: Path, meta_filename: str, role: str, t0: float):
+    completed_dir = project_root / ".jules" / "queue" / "completed"
+    queue_dir = project_root / ".jules" / "queue"
+
+    try:
+        res = subprocess.run(
+            cmd,
+            cwd=str(project_root),
+            capture_output=True,
+            text=True,
+            timeout=1200,
+            check=False
+        )
+        exit_code = res.returncode
+        stdout = res.stdout or ""
+        stderr = res.stderr or ""
+    except subprocess.TimeoutExpired as e:
+        exit_code = 124
+        stdout = e.stdout.decode() if isinstance(e.stdout, bytes) else (e.stdout or "")
+        stderr = (e.stderr.decode() if isinstance(e.stderr, bytes) else (e.stderr or "")) + "\nrun-task.sh timed out after 1200 seconds."
+    except Exception as e:
+        exit_code = 1
+        stdout = ""
+        stderr = str(e)
+
+    finished_at = datetime.now(timezone.utc).isoformat()
+    duration_ms = int((time.time() - t0) * 1000)
+
+    task_id = None
+    match = re.search(r"task-[0-9]{8}-[0-9]{6}", stdout)
+    if match:
+        task_id = match.group(0)
+
+    if exit_code == 0:
+        completed_txt = completed_dir / filename
+        shutil.move(str(running_txt), str(completed_txt))
+        if running_meta.exists():
+            completed_meta = completed_dir / meta_filename
+            shutil.move(str(running_meta), str(completed_meta))
+        job_status = "completed"
+    else:
+        runner_log = queue_dir / "runner.log"
+        log_entry = f"[{datetime.now(timezone.utc).isoformat()}] Task {filename} failed with exit code {exit_code}:\nSTDOUT: {stdout}\nSTDERR: {stderr}\n"
+        with open(runner_log, "a", encoding="utf-8") as f:
+            f.write(log_entry)
+        job_status = "failed"
+
+    write_admin_audit_entry(
+        command="queue/run-next",
+        args=filename,
+        exit_code=exit_code,
+        by=role,
+        duration_ms=duration_ms
+    )
+
+    if job_id in RUN_JOBS:
+        RUN_JOBS[job_id].update({
+            "status": job_status,
+            "finished_at": finished_at,
+            "task_id": task_id,
+            "exit_code": exit_code,
+            "stdout": stdout,
+            "stderr": stderr,
+            "duration_ms": duration_ms
+        })
+
 ADMIN_COMMAND_WHITELIST = {
     "test": {
         "exec": "./scripts/test.sh",
@@ -756,61 +825,47 @@ def admin_queue_run_next(role: str = Depends(require_operator)):
     if verify_task:
         cmd.extend(["--verify", str(verify_task)])
 
-    try:
-        res = subprocess.run(
-            cmd,
-            cwd=str(project_root),
-            capture_output=True,
-            text=True,
-            timeout=1200,
-            check=False
-        )
-        exit_code = res.returncode
-        stdout = res.stdout or ""
-        stderr = res.stderr or ""
-    except subprocess.TimeoutExpired as e:
-        exit_code = 124
-        stdout = e.stdout.decode() if isinstance(e.stdout, bytes) else (e.stdout or "")
-        stderr = (e.stderr.decode() if isinstance(e.stderr, bytes) else (e.stderr or "")) + "\nrun-task.sh timed out after 1200 seconds."
-    except Exception as e:
-        exit_code = 1
-        stdout = ""
-        stderr = str(e)
+    job_id = uuid.uuid4().hex[:8]
+    started_at = datetime.now(timezone.utc).isoformat()
 
-    duration_ms = int((time.time() - t0) * 1000)
+    job_record = {
+        "job_id": job_id,
+        "status": "running",
+        "filename": filename,
+        "started_at": started_at,
+        "finished_at": None,
+        "task_id": None,
+        "exit_code": None,
+        "stdout": "",
+        "stderr": "",
+        "duration_ms": None
+    }
+    RUN_JOBS[job_id] = job_record
 
-    task_id = None
-    match = re.search(r"task-[0-9]{8}-[0-9]{6}", stdout)
-    if match:
-        task_id = match.group(0)
-
-    if exit_code == 0:
-        completed_txt = completed_dir / filename
-        shutil.move(str(running_txt), str(completed_txt))
-        if running_meta.exists():
-            completed_meta = completed_dir / meta_filename
-            shutil.move(str(running_meta), str(completed_meta))
-    else:
-        runner_log = queue_dir / "runner.log"
-        log_entry = f"[{datetime.now(timezone.utc).isoformat()}] Task {filename} failed with exit code {exit_code}:\nSTDOUT: {stdout}\nSTDERR: {stderr}\n"
-        with open(runner_log, "a", encoding="utf-8") as f:
-            f.write(log_entry)
-
-    write_admin_audit_entry(
-        command="queue/run-next",
-        args=filename,
-        exit_code=exit_code,
-        by=role,
-        duration_ms=duration_ms
+    thread = threading.Thread(
+        target=_run_job_worker,
+        args=(job_id, filename, cmd, project_root, running_txt, running_meta, meta_filename, role, t0),
+        daemon=True
     )
+    thread.start()
 
     return {
-        "dispatched": True,
-        "filename": filename,
-        "task_id": task_id,
-        "exit_code": exit_code,
-        "duration_ms": duration_ms
+        "started": True,
+        "job_id": job_id,
+        "filename": filename
     }
+
+@app.get("/api/admin/queue/jobs/{job_id}", dependencies=[Depends(require_operator)])
+def get_admin_queue_job(job_id: str):
+    if job_id not in RUN_JOBS:
+        return _error_response(code="JOB_NOT_FOUND", message=f"Job '{job_id}' not found", status_code=404)
+    return RUN_JOBS[job_id]
+
+@app.get("/api/admin/queue/jobs", dependencies=[Depends(require_operator)])
+def list_admin_queue_jobs():
+    jobs_list = list(RUN_JOBS.values())
+    jobs_list.sort(key=lambda x: x.get("started_at") or "", reverse=True)
+    return {"jobs": jobs_list[:20]}
 
 @app.get("/api/admin/queue/list", dependencies=[Depends(require_operator)])
 def admin_queue_list():

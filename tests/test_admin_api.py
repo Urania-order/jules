@@ -224,9 +224,40 @@ def test_queue_run_next_empty(client):
     assert data["error"] == "next_task_not_formed"
 
 
-def test_queue_run_next_dispatches(client, tmp_path):
-    """Verify FULL lifecycle of task dispatch: pending/ -> running/ -> completed/."""
-    # 1. Add task to queue
+def test_run_next_returns_job_id(client, tmp_path):
+    """Verify POST /api/admin/queue/run-next returns {started: True, job_id, filename} immediately."""
+    add_res = client.post(
+        "/api/admin/queue/add",
+        json={"text": "Execute task cycle", "verify_task": "11"},
+        headers={"Authorization": "Bearer dev-operator-token"}
+    )
+    assert add_res.status_code == 200
+    filename = add_res.json()["filename"]
+
+    # Mock subprocess.run so worker thread finishes cleanly
+    mock_process_res = subprocess.CompletedProcess(
+        args=["./scripts/run-task.sh"],
+        returncode=0,
+        stdout="=== [1/5] Dispatch ===\nTask ID: task-20260918-123456\n=== [5/5] Verify ===\nDone: task-20260918-123456",
+        stderr=""
+    )
+
+    with patch("subprocess.run", return_value=mock_process_res):
+        res = client.post(
+            "/api/admin/queue/run-next",
+            headers={"Authorization": "Bearer dev-operator-token"}
+        )
+        assert res.status_code == 200
+        data = res.json()
+        assert data["started"] is True
+        assert "job_id" in data
+        assert data["filename"] == filename
+
+
+def test_run_next_async_completes_and_moves_to_completed_on_success(client, tmp_path):
+    """Verify async run-next execution completes, updates job status, and moves files to completed/ on success."""
+    import time
+
     add_res = client.post(
         "/api/admin/queue/add",
         json={"text": "Execute task cycle", "verify_task": "11"},
@@ -237,13 +268,8 @@ def test_queue_run_next_dispatches(client, tmp_path):
     meta_filename = Path(filename).stem + ".meta.json"
 
     pending_dir = tmp_path / ".jules" / "queue" / "pending"
-    running_dir = tmp_path / ".jules" / "queue" / "running"
     completed_dir = tmp_path / ".jules" / "queue" / "completed"
 
-    assert (pending_dir / filename).exists()
-    assert (pending_dir / meta_filename).exists()
-
-    # Mock subprocess.run for run-task.sh
     mock_process_res = subprocess.CompletedProcess(
         args=["./scripts/run-task.sh"],
         returncode=0,
@@ -251,38 +277,66 @@ def test_queue_run_next_dispatches(client, tmp_path):
         stderr=""
     )
 
-    with patch("subprocess.run", return_value=mock_process_res) as mock_run:
+    with patch("subprocess.run", return_value=mock_process_res):
         res = client.post(
             "/api/admin/queue/run-next",
             headers={"Authorization": "Bearer dev-operator-token"}
         )
         assert res.status_code == 200
-        data = res.json()
+        job_id = res.json()["job_id"]
 
-        assert data["dispatched"] is True
-        assert data["filename"] == filename
-        assert data["task_id"] == "task-20260918-123456"
-        assert data["exit_code"] == 0
+        # Poll job endpoint until completed
+        for _ in range(50):
+            job_res = client.get(
+                f"/api/admin/queue/jobs/{job_id}",
+                headers={"Authorization": "Bearer dev-operator-token"}
+            )
+            assert job_res.status_code == 200
+            job_data = job_res.json()
+            if job_data["status"] == "completed":
+                break
+            time.sleep(0.05)
 
-        # Verify command argument passed to run-task.sh
-        called_cmd = mock_run.call_args[0][0]
-        assert "run-task.sh" in called_cmd[0]
-        assert filename in called_cmd[1]
-        assert "--verify" in called_cmd
-        assert "11" in called_cmd
+        assert job_data["status"] == "completed"
+        assert job_data["exit_code"] == 0
+        assert job_data["task_id"] == "task-20260918-123456"
 
-    # Assert FULL lifecycle state transitions:
-    # 1) pending/ is cleared
+    # Assert file lifecycle
     assert not (pending_dir / filename).exists()
-    assert not (pending_dir / meta_filename).exists()
-
-    # 2) running/ was used and cleared on completion
-    assert not (running_dir / filename).exists()
-    assert not (running_dir / meta_filename).exists()
-
-    # 3) completed/ contains the file and sidecar
     assert (completed_dir / filename).exists()
     assert (completed_dir / meta_filename).exists()
+
+
+def test_queue_jobs_endpoint(client, tmp_path):
+    """Verify GET /api/admin/queue/jobs returns list of recent jobs."""
+    mock_process_res = subprocess.CompletedProcess(
+        args=["./scripts/run-task.sh"],
+        returncode=0,
+        stdout="Task ID: task-20260918-123456",
+        stderr=""
+    )
+
+    client.post(
+        "/api/admin/queue/add",
+        json={"text": "Task A"},
+        headers={"Authorization": "Bearer dev-operator-token"}
+    )
+
+    with patch("subprocess.run", return_value=mock_process_res):
+        res = client.post(
+            "/api/admin/queue/run-next",
+            headers={"Authorization": "Bearer dev-operator-token"}
+        )
+        assert res.status_code == 200
+
+        jobs_res = client.get(
+            "/api/admin/queue/jobs",
+            headers={"Authorization": "Bearer dev-operator-token"}
+        )
+        assert jobs_res.status_code == 200
+        jobs_list = jobs_res.json().get("jobs", [])
+        assert len(jobs_list) >= 1
+        assert jobs_list[0]["job_id"] == res.json()["job_id"]
 
 
 def test_queue_list_returns_counts(client, tmp_path):

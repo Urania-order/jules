@@ -186,11 +186,18 @@ fi
 echo ""
 
 # --- clean untracked files in forbidden paths (ERRATA-0015) ---
+# Preserve admin queue files and sidecars as legitimate queue items
 FORBIDDEN_UNTRACKED="$(git ls-files --others --exclude-standard 2>/dev/null \
   | grep -E '^\.(co-smos|jules/(tasks|results|queue))/' \
   | grep -v "^\.jules/tasks/${TASK_ID}\.md$" \
   | grep -v "^\.jules/results/${TASK_ID}\.log$" \
   | grep -v "^\.jules/results/post-complete-.*\.log$" \
+  | grep -v "^\.jules/queue/pending/admin-.*\.txt$" \
+  | grep -v "^\.jules/queue/running/admin-.*\.txt$" \
+  | grep -v "^\.jules/queue/completed/admin-.*\.txt$" \
+  | grep -v "^\.jules/queue/pending/.*\.meta\.json$" \
+  | grep -v "^\.jules/queue/running/.*\.meta\.json$" \
+  | grep -v "^\.jules/queue/completed/.*\.meta\.json$" \
   || true)"
 
 if [ -n "$FORBIDDEN_UNTRACKED" ]; then

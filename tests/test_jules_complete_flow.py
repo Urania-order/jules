@@ -256,3 +256,44 @@ def test_log_file_created(setup_complete_env):
     assert "step=[1/9]" in content
     assert "step=[7/9]" in content
     assert "step=[9/9]" in content
+
+
+def test_jules_complete_does_not_move_admin_queue_files(setup_complete_env):
+    """Verify jules-complete.sh untracked cleanup preserves admin-*.txt and *.meta.json files in pending, running, completed."""
+    queue_dir = setup_complete_env["root"] / ".jules" / "queue"
+    pending_txt = queue_dir / "pending" / "admin-123.txt"
+    pending_meta = queue_dir / "pending" / "admin-123.meta.json"
+    running_txt = queue_dir / "running" / "admin-456.txt"
+    running_meta = queue_dir / "running" / "admin-456.meta.json"
+    completed_txt = queue_dir / "completed" / "admin-789.txt"
+    completed_meta = queue_dir / "completed" / "admin-789.meta.json"
+
+    for d in ["pending", "running", "completed"]:
+        (queue_dir / d).mkdir(parents=True, exist_ok=True)
+
+    pending_txt.write_text("prompt 123")
+    pending_meta.write_text("{}")
+    running_txt.write_text("prompt 456")
+    running_meta.write_text("{}")
+    completed_txt.write_text("prompt 789")
+    completed_meta.write_text("{}")
+
+    res = run_complete_script(
+        setup_complete_env,
+        "--task", setup_complete_env["task_id"],
+        env_vars={"JULES_NO_PUSH": "1", "JULES_SKIP_CI": "1", "MOCK_PYTEST_EXIT": "0"}
+    )
+    assert res.returncode == 0
+
+    # Verify admin files were NOT moved to deferred/
+    assert pending_txt.exists()
+    assert pending_meta.exists()
+    assert running_txt.exists()
+    assert running_meta.exists()
+    assert completed_txt.exists()
+    assert completed_meta.exists()
+
+    deferred_dir = queue_dir / "deferred"
+    assert not (deferred_dir / "admin-123.txt").exists()
+    assert not (deferred_dir / "admin-456.txt").exists()
+    assert not (deferred_dir / "admin-789.txt").exists()
