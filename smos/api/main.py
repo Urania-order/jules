@@ -56,6 +56,9 @@ import hmac
 import json
 import logging
 import numpy as np
+import shlex
+import subprocess
+import time
 from pydantic import BaseModel, Field
 from typing import Optional, Dict, Any, List
 from datetime import datetime, timezone
@@ -421,6 +424,215 @@ class BatchRememberRequest(BaseModel):
     task_ids: List[str]
     concurrency: int = 3
     schedule: str = "now"
+
+class AdminRunRequest(BaseModel):
+    command: str
+    args: str = ""
+
+ADMIN_COMMAND_WHITELIST = {
+    "test": {
+        "exec": "./scripts/test.sh",
+        "fixed_args": [],
+        "timeout": 300,
+    },
+    "verify": {
+        "exec": "./scripts/verify.sh",
+        "fixed_args": ["--all"],
+        "timeout": 60,
+    },
+    "verify-task": {
+        "exec": "./scripts/verify.sh",
+        "fixed_args": ["--task"],
+        "timeout": 60,
+    },
+    "task": {
+        "exec": "./scripts/jules-task.sh",
+        "fixed_args": [],
+        "timeout": 60,
+    },
+    "complete": {
+        "exec": "./scripts/jules-complete.sh",
+        "fixed_args": ["--task"],
+        "timeout": 60,
+    },
+    "status": {
+        "exec": "jules",
+        "fixed_args": ["remote", "list", "--session"],
+        "timeout": 60,
+    },
+    "git-log": {
+        "exec": "git",
+        "fixed_args": ["log", "--oneline", "-10"],
+        "timeout": 60,
+    },
+    "git-status": {
+        "exec": "git",
+        "fixed_args": ["status", "--short"],
+        "timeout": 60,
+    },
+}
+
+def write_admin_audit_entry(command: str, args: str, exit_code: Optional[int], by: str, duration_ms: int):
+    project_root = Path(os.environ.get("JULES_PROJECT_ROOT", "."))
+    history_dir = project_root / ".jules" / "history"
+    history_dir.mkdir(parents=True, exist_ok=True)
+    audit_file = history_dir / "admin_audit.jsonl"
+    entry = {
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "command": command,
+        "args": args,
+        "exit_code": exit_code,
+        "by": by,
+        "duration_ms": duration_ms
+    }
+    with open(audit_file, "a", encoding="utf-8") as f:
+        f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+
+def get_admin_audit_entries(limit: int = 50) -> List[Dict[str, Any]]:
+    project_root = Path(os.environ.get("JULES_PROJECT_ROOT", "."))
+    audit_file = project_root / ".jules" / "history" / "admin_audit.jsonl"
+    if not audit_file.exists():
+        return []
+    entries = []
+    try:
+        with open(audit_file, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if line:
+                    entries.append(json.loads(line))
+    except Exception as e:
+        logger.error("Error reading admin audit log: %s", e)
+    entries.reverse()
+    return entries[:limit]
+
+@app.post("/api/admin/run", dependencies=[Depends(require_operator)])
+def run_admin_command(req: AdminRunRequest, role: str = Depends(require_operator)):
+    if req.command not in ADMIN_COMMAND_WHITELIST:
+        write_admin_audit_entry(
+            command=req.command,
+            args=req.args,
+            exit_code=400,
+            by=role,
+            duration_ms=0
+        )
+        return _error_response(
+            code="UNKNOWN_COMMAND",
+            message=f"Command '{req.command}' is not whitelisted",
+            status_code=400
+        )
+
+    cmd_cfg = ADMIN_COMMAND_WHITELIST[req.command]
+    executable = cmd_cfg["exec"]
+    fixed_args = cmd_cfg["fixed_args"]
+    timeout_sec = cmd_cfg["timeout"]
+
+    parsed_args = []
+    if req.args and req.args.strip():
+        try:
+            parsed_args = shlex.split(req.args.strip())
+        except ValueError as e:
+            write_admin_audit_entry(
+                command=req.command,
+                args=req.args,
+                exit_code=400,
+                by=role,
+                duration_ms=0
+            )
+            return _error_response(
+                code="INVALID_ARGS",
+                message=f"Failed to parse arguments: {e}",
+                status_code=400
+            )
+
+    project_root = Path(os.environ.get("JULES_PROJECT_ROOT", ".")).resolve()
+
+    if executable.startswith("./") or executable.startswith("scripts/"):
+        rel_path = executable.lstrip("./")
+        target_script = project_root / rel_path
+        if target_script.exists():
+            full_cmd = [str(target_script)] + fixed_args + parsed_args
+        else:
+            full_cmd = [executable] + fixed_args + parsed_args
+    else:
+        full_cmd = [executable] + fixed_args + parsed_args
+
+    t0 = time.time()
+    try:
+        res = subprocess.run(
+            full_cmd,
+            cwd=str(project_root),
+            capture_output=True,
+            text=True,
+            timeout=timeout_sec,
+            check=False
+        )
+        duration_ms = int((time.time() - t0) * 1000)
+        write_admin_audit_entry(
+            command=req.command,
+            args=req.args,
+            exit_code=res.returncode,
+            by=role,
+            duration_ms=duration_ms
+        )
+        return {
+            "stdout": res.stdout,
+            "stderr": res.stderr,
+            "exit_code": res.returncode,
+            "duration_ms": duration_ms
+        }
+    except subprocess.TimeoutExpired as e:
+        duration_ms = int((time.time() - t0) * 1000)
+        stdout = e.stdout.decode() if isinstance(e.stdout, bytes) else (e.stdout or "")
+        stderr = (e.stderr.decode() if isinstance(e.stderr, bytes) else (e.stderr or "")) + f"\nCommand '{req.command}' timed out after {timeout_sec} seconds."
+        exit_code = 124
+        write_admin_audit_entry(
+            command=req.command,
+            args=req.args,
+            exit_code=exit_code,
+            by=role,
+            duration_ms=duration_ms
+        )
+        return {
+            "stdout": stdout,
+            "stderr": stderr,
+            "exit_code": exit_code,
+            "duration_ms": duration_ms
+        }
+    except FileNotFoundError as e:
+        duration_ms = int((time.time() - t0) * 1000)
+        write_admin_audit_entry(
+            command=req.command,
+            args=req.args,
+            exit_code=127,
+            by=role,
+            duration_ms=duration_ms
+        )
+        return {
+            "stdout": "",
+            "stderr": f"Executable not found: {e}",
+            "exit_code": 127,
+            "duration_ms": duration_ms
+        }
+    except Exception as e:
+        duration_ms = int((time.time() - t0) * 1000)
+        write_admin_audit_entry(
+            command=req.command,
+            args=req.args,
+            exit_code=1,
+            by=role,
+            duration_ms=duration_ms
+        )
+        return {
+            "stdout": "",
+            "stderr": str(e),
+            "exit_code": 1,
+            "duration_ms": duration_ms
+        }
+
+@app.get("/api/admin/audit", dependencies=[Depends(require_operator)])
+def get_admin_audit(limit: int = 50):
+    entries = get_admin_audit_entries(limit=limit)
+    return {"entries": entries}
 
 @app.get("/")
 def read_root():

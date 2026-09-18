@@ -516,3 +516,27 @@ def test_frontend_contract_v1_1_7_task_explorer():
     assert '⚙ queue' in content
     assert '✨ consultant' in content
     assert '? unknown' in content
+
+
+def test_frontend_contract_web_terminal_admin_elements():
+    """Verify v1.2.0 Web Terminal Admin view frontend contract elements exist."""
+    content = INDEX_PATH.read_text()
+
+    # Nav button & View section
+    assert 'data-view="admin"' in content
+    assert 'id="view-admin"' in content
+
+    # Quick Action buttons
+    assert 'id="btn-admin-test"' in content
+    assert 'id="btn-admin-verify"' in content
+    assert 'id="btn-admin-status"' in content
+
+    # Custom Command inputs & output
+    assert 'id="admin-command"' in content
+    assert 'id="admin-args"' in content
+    assert 'id="admin-run"' in content
+    assert 'id="admin-output"' in content
+
+    # JS execution functions
+    assert 'runAdminCommand' in content
+    assert 'runCustomAdminCommand' in content

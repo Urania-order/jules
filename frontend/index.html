@@ -894,6 +894,7 @@
       <button class="nav-btn" data-view="events">Events</button>
       <button class="nav-btn" data-view="history">History</button>
       <button class="nav-btn" data-view="consult">Consult</button>
+      <button class="nav-btn" data-view="admin">Admin</button>
     </nav>
   </header>
 
@@ -1370,6 +1371,55 @@
       </div>
       <div id="export-toast" class="export-toast"></div>
       <div class="history-log" id="history-log"></div>
+    </section>
+
+    <!-- ADMIN WEB TERMINAL PANEL -->
+    <section id="view-admin" class="view">
+      <h2>Admin Web Terminal</h2>
+
+      <div class="card">
+        <h3>Quick Actions</h3>
+        <div style="display: flex; flex-wrap: wrap; gap: 0.75rem; margin-top: 1rem;">
+          <button class="btn btn-primary" id="btn-admin-test" onclick="runAdminCommand('test')">▶ Run Tests</button>
+          <button class="btn btn-secondary" id="btn-admin-verify" onclick="runAdminCommand('verify')">▶ Verify All</button>
+          <button class="btn btn-secondary" id="btn-admin-status" onclick="runAdminCommand('status')">▶ Status</button>
+          <button class="btn btn-secondary" id="btn-admin-git-log" onclick="runAdminCommand('git-log')">▶ Git Log</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Custom Command</h3>
+        <div style="display: flex; flex-wrap: wrap; gap: 1rem; align-items: flex-end; margin-top: 1rem;">
+          <div class="form-group" style="width: 220px; margin-bottom: 0;">
+            <label for="admin-command">Command</label>
+            <select id="admin-command">
+              <option value="test">test (./scripts/test.sh)</option>
+              <option value="verify">verify (./scripts/verify.sh --all)</option>
+              <option value="verify-task">verify-task (./scripts/verify.sh --task &lt;args&gt;)</option>
+              <option value="task">task (./scripts/jules-task.sh &lt;args&gt;)</option>
+              <option value="complete">complete (./scripts/jules-complete.sh --task &lt;args&gt;)</option>
+              <option value="status">status (jules remote list --session)</option>
+              <option value="git-log">git-log (git log --oneline -10)</option>
+              <option value="git-status">git-status (git status --short)</option>
+            </select>
+          </div>
+
+          <div class="form-group" style="flex: 1; min-width: 200px; margin-bottom: 0;">
+            <label for="admin-args">Arguments</label>
+            <input type="text" id="admin-args" placeholder="args (optional)">
+          </div>
+
+          <button id="admin-run" class="btn btn-primary" onclick="runCustomAdminCommand()">Run</button>
+        </div>
+
+        <div style="margin-top: 1.5rem;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+            <h4 style="color: var(--accent-blue); font-size: 0.95rem;">Command Output</h4>
+            <div id="admin-meta-info" style="font-size: 0.85rem; color: var(--text-secondary);">Duration: - | Exit Code: -</div>
+          </div>
+          <pre id="admin-output" style="background-color: var(--bg-primary); padding: 1rem; border-radius: 0.375rem; border: 1px solid var(--border-color); font-family: monospace; font-size: 0.85rem; color: var(--text-primary); max-height: 500px; overflow-y: auto; white-space: pre-wrap; word-break: break-all;">Awaiting command execution...</pre>
+        </div>
+      </div>
     </section>
 
     <!-- CONSULT ACCESS VIEW (READ-ONLY) -->
@@ -3553,6 +3603,46 @@
       } catch (err) {
         showExportToast(`Export failed: ${err.message}`, 'error');
       }
+    }
+
+    async function runAdminCommand(cmd, args = '') {
+      const outputEl = document.getElementById('admin-output');
+      const metaEl = document.getElementById('admin-meta-info');
+      const runBtn = document.getElementById('admin-run');
+      if (outputEl) outputEl.textContent = `Running '${cmd}'...`;
+      if (metaEl) metaEl.textContent = `Running...`;
+      if (runBtn) runBtn.disabled = true;
+
+      try {
+        const res = await fetchJSON(`${API_BASE}/admin/run`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ command: cmd, args: args })
+        });
+        const stdout = res.stdout || '';
+        const stderr = res.stderr || '';
+        let combined = '';
+        if (stdout) combined += stdout;
+        if (stderr) {
+          if (combined && !combined.endsWith('\n')) combined += '\n';
+          combined += `--- STDERR ---\n` + stderr;
+        }
+        if (!combined) combined = '(No output returned)';
+
+        if (outputEl) outputEl.textContent = combined;
+        if (metaEl) metaEl.textContent = `Duration: ${res.duration_ms}ms | Exit Code: ${res.exit_code}`;
+      } catch (err) {
+        if (outputEl) outputEl.textContent = `Error executing command: ${err.message}`;
+        if (metaEl) metaEl.textContent = `Error | Exit Code: -`;
+      } finally {
+        if (runBtn) runBtn.disabled = false;
+      }
+    }
+
+    function runCustomAdminCommand() {
+      const cmd = document.getElementById('admin-command')?.value || 'test';
+      const args = document.getElementById('admin-args')?.value || '';
+      runAdminCommand(cmd, args);
     }
 
     // Auto-refresh every 5 seconds
