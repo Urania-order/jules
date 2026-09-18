@@ -26,6 +26,7 @@ Known mistakes and rules to avoid them.
 
 ### Process / Orchestration
 
+- ERRATA-0025 — [Invalid Date] in Queue + Recordings + layout (MEDIUM)
 - ERRATA-0024 — Full prompt in Stages + Control Room (MEDIUM)
 - ERRATA-0023 — Sequence vs Sequences UX + 2 bugs (MEDIUM)
 - ERRATA-0022 — Co-SMOS v1.1 Reset Center summary (INFO)
