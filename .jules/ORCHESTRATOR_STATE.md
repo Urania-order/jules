@@ -7,47 +7,58 @@ Updated: 2026-09-18
 - Co-SMOS v1.1.1 — Sequence UX fix (Задача 6) ✅
 - Co-SMOS v1.1.2 — Truncate all views (Задача 7) ✅
 - Co-SMOS v1.1.3 — safeDate + layout (Задача 8) ✅
-- ERRATA 0019-0028 ✅
+- Co-SMOS v1.1.4 — Fix history overwrite + navbar RESET (Задача 10) ✅
+- ERRATA 0019-0029 ✅
 
 ## In Progress
-- Задача 10: task-20260918-055754
-    * smos/core/queue_reset.py:318-320 — history append-only
-    * frontend/index.html — remove navbar RESET QUEUES button
-  - Log: .jules/results/task-20260918-055754.log
-  - After Completed: ./scripts/jules-complete.sh --task task-20260918-055754
+- Задача 9: Fix Undo tab buttons (Option C — ERRATA-0026)
+  - task ID: TBD
+  - Remove "Undo Selected" from Undo tab
+  - Rename "Undo All Matched" → "Undo Filtered"
+  - After Completed: ./scripts/jules-complete.sh --task <ID>
 
-## Pending (after Задача 10)
-- Задача 9:  Fix Undo Selected in Undo tab (ERRATA-0026)
-- Задача 11: Schedule UX safety (ERRATA-0028)
+## Pending (after Задача 9)
+- Задача 11: Schedule UX safety (ERRATA-0028 Issue 1-2)
+  * enabled: false by default
+  * next_run preview
+  * warning banner
 
 ## Schedule state
-- "Nightly Reset" — ✅ DISABLED (fired 02:00:11, then disabled)
+- "Nightly Reset" — ✅ DISABLED
+
+## Scripts
+- scripts/test.sh                   pytest + auto .venv
+- scripts/verify.sh                 universal (--task N / --all / --tests)
+
+## verify.sh — 35/35 passed (Задачі 1-8, 10)
 
 ## Last commits (main)
-- 0a6ddb1 chore: record task-20260918-055754 dispatch (history fix + navbar)
-- 9b84ad2 docs: extend ERRATA-0028 — navbar RESET button removed (#60)
-- 3f52126 docs: add ERRATA-0028 — Schedule fired unexpectedly (#59)
-- 77d09ee docs: add ERRATA-0027 — state.json history overwritten (#58)
+- 28d12a6 chore: add universal scripts/verify.sh
+- 0e1f43b docs: add ERRATA-0029 — FIXED 0027 + 0028 Issue 3 (#61)
+- 35f7759 chore: record Co-SMOS artifacts for task-20260918-055754
+- 076f8ea feat: apply Jules result for task-20260918-055754 (history fix + navbar)
 
 ## Tests
-235 passed (before Задача 10)
+~240 passed (after Задача 10)
 
 ## ERRATA
 - 0019 (FIXED)
-- 0020 (OPEN)
+- 0020 (OPEN — task-level reset)
 - 0021 (FIXED)
 - 0022 (INFO)
 - 0023 (FIXED via Задача 6)
 - 0024 (FIXED via Задача 7)
 - 0025 (FIXED via Задача 8)
-- 0026 (FIX via Задача 9 - pending)
-- 0027 (FIX via Задача 10 - in progress)
-- 0028 (FIX via Задача 10/11 - in progress)
+- 0026 (FIX via Задача 9 — Option C)
+- 0027 (FIXED via Задача 10)
+- 0028 (PARTIAL — Issue 3 fixed; Issue 1-2 via Задача 11)
+- 0029 (INFO — fix log)
 
 ## Next options
-A. v1.2 — Web Terminal (task + post-complete + tests from UI)
-B. v1.2 — Task-level Reset (ERRATA-0020)
-C. Stop — v1.1.3 done
+A. Задача 11 — Schedule UX safety (ERRATA-0028 Issue 1-2)
+B. v1.2 — Web Terminal (task + post-complete + tests from UI)
+C. v1.2 — Task-level Reset (ERRATA-0020)
+D. Stop — v1.1.4 done
 
 ## Environment
 - Project venv: ~/jules/.venv  (source .venv/bin/activate)
