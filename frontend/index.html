@@ -322,6 +322,11 @@
       margin-bottom: 0.5rem;
       position: relative;
       user-select: none;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      justify-content: space-between;
+      align-items: center;
     }
 
     .task-card-hover {
@@ -1877,7 +1882,7 @@
       const priorityBadgeText = `P${task.priority || 3}`;
 
       el.innerHTML = `
-        <div class="task-info">
+        <div class="task-info" style="flex: 1 1 100%;">
           <div style="display: flex; align-items: center; gap: 0.5rem;">
             <div class="led ${ledClass}"></div>
             <div class="task-title" title="${escapeHTML(task.request || task.title || '')}">${escapeHTML(truncateTask(task.title || task.request))}</div>
@@ -1885,10 +1890,10 @@
           <div class="task-meta">
             <span>ID: ${task.id}</span>
             <span class="task-priority-badge">${priorityBadgeText}</span>
-            <span>Created: ${new Date(task.created_at).toLocaleTimeString()}</span>
+            <span>Created: ${safeDate(task.created_at)}</span>
           </div>
         </div>
-        <div style="display: flex; gap: 0.5rem; align-items: center;">
+        <div class="task-card-actions" style="display: flex; gap: 0.5rem; align-items: center; justify-content: flex-end; width: 100%; margin-top: 0.25rem;">
           <span class="badge badge-${task.status}">${task.status}</span>
           <button class="btn btn-secondary btn-sm" onclick="viewTaskDetail('${task.id}')">View</button>
         </div>
@@ -2803,6 +2808,12 @@
       return s.length > n ? s.substring(0, n) + '…' : s;
     }
 
+    function safeDate(s) {
+      if (!s) return 'N/A';
+      const d = new Date(s);
+      return isNaN(d) ? String(s) : d.toLocaleString();
+    }
+
     function escapeHTML(str) {
       return str ? str.replace(/[&<>'"]/g, 
         tag => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[tag] || tag)
@@ -2903,7 +2914,7 @@
                 <div class="task-meta" style="margin-top: 0.25rem;">
                   <span>ID: ${seq.id}</span>
                   <span>Tasks: ${taskCount}</span>
-                  <span>Created: ${new Date(seq.created_at).toLocaleTimeString()}</span>
+                  <span>Created: ${safeDate(seq.created_at)}</span>
                 </div>
               </div>
             </div>

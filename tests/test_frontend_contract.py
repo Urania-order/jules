@@ -447,3 +447,27 @@ def test_frontend_contract_truncate_task():
 
     # Ensure no raw ${escapeHTML(task.request || task.title)} remains in frontend/index.html
     assert '${escapeHTML(task.request || task.title)}' not in content
+
+
+def test_frontend_contract_safe_date_and_queue_layout():
+    """Verify safeDate helper function exists, raw Date calls are replaced, and Queue card layout prevents badge overlap."""
+    content = INDEX_PATH.read_text()
+
+    # 1. safeDate helper exists
+    assert 'function safeDate(s)' in content
+    assert "return 'N/A';" in content or "return 'N/A'" in content
+    assert 'isNaN(d)' in content
+
+    # 2. No raw new Date(task.created_at).toLocale* in view code
+    assert 'new Date(task.created_at).toLocale' not in content
+
+    # 3. No raw new Date(seq.created_at).toLocale* in view code
+    assert 'new Date(seq.created_at).toLocale' not in content
+
+    # 4. safeDate usage in Queue card and Recordings view
+    assert '${safeDate(task.created_at)}' in content
+    assert '${safeDate(seq.created_at)}' in content
+
+    # 5. COMPLETED card layout (flex-wrap, task-card-actions, no text overlap)
+    assert 'task-card-actions' in content
+    assert 'flex-wrap: wrap' in content or 'flex-wrap:wrap' in content
