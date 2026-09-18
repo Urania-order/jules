@@ -417,3 +417,19 @@ def test_frontend_contract_reset_center_elements():
     assert 'id="audit-list"' in content
     assert 'audit-row' in content
     assert 'id="btn-refresh-audit"' in content
+
+
+def test_frontend_contract_v1_1_1_sequence_ux():
+    """Verify navbar labels, renderSequence date fallback, and prompt truncation logic."""
+    content = INDEX_PATH.read_text()
+
+    # Navbar labels and data-view values
+    assert '<button class="nav-btn" data-view="sequence">Commands</button>' in content
+    assert '<button class="nav-btn" data-view="sequences">Recordings</button>' in content
+
+    # renderSequence truncation logic
+    assert '.substring(0, 120)' in content
+    assert 'title="' in content
+
+    # date fallback logic
+    assert 'isNaN(parsed)' in content

@@ -880,11 +880,11 @@
       <button class="nav-btn" data-view="command-intake">Command Intake</button>
       <button class="nav-btn" data-view="reset-center">♻️ Reset Center</button>
       <button class="nav-btn" data-view="stages">Stages</button>
-      <button class="nav-btn" data-view="sequence">Sequence</button>
+      <button class="nav-btn" data-view="sequence">Commands</button>
       <button class="nav-btn" data-view="cycles">Cycles</button>
       <button class="nav-btn" data-view="queue">Queue</button>
       <button class="nav-btn" data-view="batch">Batch</button>
-      <button class="nav-btn" data-view="sequences">Sequences</button>
+      <button class="nav-btn" data-view="sequences">Recordings</button>
       <button class="nav-btn" data-view="templates">Templates</button>
       <button class="nav-btn" data-view="proposals">Proposals</button>
       <button class="nav-btn" data-view="events">Events</button>
@@ -2154,7 +2154,9 @@
         const li = document.createElement('li');
         li.className = 'sequence-item';
         li.dataset.taskId = task.id;
-        const timeStr = new Date(task.created_at).toLocaleTimeString();
+        const rawDate = task.created_at;
+        const parsed = rawDate ? new Date(rawDate) : null;
+        const timeStr = (parsed && !isNaN(parsed)) ? parsed.toLocaleTimeString() : (rawDate || 'N/A');
         let seqState = task.status.toLowerCase();
         if (seqState === 'pending') seqState = 'submitted';
         if (seqState === 'completed') seqState = 'done';
@@ -2164,7 +2166,7 @@
           <span class="seq-id">${task.id}</span>
           <span class="seq-state">${seqState}</span>
           <span class="seq-priority">P${task.priority || 3}</span>
-          <span style="color: var(--text-secondary); margin-left: auto;">${escapeHTML(task.request || task.title)}</span>
+          <span style="color: var(--text-secondary); margin-left: auto;" title="${escapeHTML(task.request || task.title || '')}">${escapeHTML((task.title || task.request || '').substring(0, 120))}${(task.title || task.request || '').length > 120 ? '…' : ''}</span>
         `;
         list.appendChild(li);
       });
