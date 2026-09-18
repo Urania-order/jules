@@ -112,8 +112,10 @@ verify_task_8() {
 }
 
 verify_task_9() {
-  echo "[Task 9] ${TASK_NAMES[9]} — pending"
-  echo "    ⚠ Not yet applied (ERRATA-0026)"
+  echo "[Task 9] ${TASK_NAMES[9]}"
+  check_grep    "Undo Filtered button"     frontend/index.html  "Undo Filtered"
+  check_no_grep "no btn-undo-selected"     frontend/index.html  'id="btn-undo-selected"'
+  check_grep    "Archive Undo Selected"    frontend/index.html  'id="btn-undo-selected-archive"'
 }
 
 verify_task_10() {
