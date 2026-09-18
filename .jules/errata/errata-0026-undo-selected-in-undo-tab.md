@@ -6,56 +6,47 @@ In Reset Center → Undo tab:
 - Click "↩️ Undo Selected"  → error "No archive tasks selected for undo." ❌
 - Click "↩️ Undo All Matched" → works ✅
 
-## Exact locations
-Line 985:  Archive tab  → <button id="btn-undo-selected-archive" onclick="triggerUndoSelected()">
-Line 1061: Undo tab     → <button id="btn-undo-selected"         onclick="triggerUndoSelected()">
-Line 1062: Undo tab     → <button id="btn-undo-all-matched"      onclick="triggerUndoAllMatched()">
+## Root cause
+`triggerUndoSelected()` reads `.archive-select:checked` (checkboxes).
+But `.archive-select` checkboxes exist ONLY in **Archive tab**.
 
-Line 3339: function triggerUndoSelected() {
-             const selected = document.querySelectorAll('.archive-select:checked');
-             if (selected.length === 0) {
-               showError('No archive tasks selected for undo.');
-               return;
-             }
-             ...
-           }
+In **Undo tab** there are NO checkboxes → selected.length === 0 → error.
 
-## Cause
-`.archive-select` checkboxes exist ONLY in Archive tab.
-In Undo tab there are NO checkboxes → selected.length === 0 → error.
+## Correct semantics
+- **Archive tab**: user selects checkboxes → "Undo Selected"
+- **Undo tab**: user filters → "Undo Filtered" (undo those matching filter)
 
-"Undo Selected" in Undo tab is conceptually wrong:
-"Selected" implies checkboxes (Archive tab).
+Currently Undo tab has "Undo Selected" — which cannot work.
 
-User expects "Undo Selected" in Undo tab to mean
-"Undo the tasks matched by the filter".
+## Fix (Option C — chosen)
 
-## Fix (proposed)
+### Undo tab
+- REMOVE button "↩️ Undo Selected" (id="btn-undo-selected", line ~1061)
+- RENAME "↩️ Undo All Matched" → "↩️ Undo Filtered" (id stays "btn-undo-all-matched")
+- Same handler (triggerUndoAllMatched — calls undo-filter endpoint)
+- Rationale: "Filtered" is clearer than "All Matched"
 
-### Option A — Remove "Undo Selected" from Undo tab
-Delete line 1061 button. Keep only "↩️ Undo All Matched".
+### Archive tab
+- KEEP "↩️ Undo Selected" (id="btn-undo-selected-archive", line ~985)
+- Works with checkboxes ✓
 
-### Option B — Rename + repurpose
-Line 1061:
-BEFORE: <button ... onclick="triggerUndoSelected()">↩️ Undo Selected</button>
-AFTER:  <button ... onclick="triggerUndoAllMatched()">↩️ Undo Filtered</button>
+## UX result
+| Tab | Button | Action |
+|-----|--------|--------|
+| Archive | Undo Selected | Undo checked items |
+| Undo | Undo Filtered | Undo items matching filter |
 
-Line 1062:
-KEEP:   <button ... onclick="triggerUndoAllMatched()">↩️ Undo All Matched</button>
+Both work, no confusion.
 
-But then both buttons do the same. So Option A is cleaner.
-
-### Option C — New handler for Undo tab
-Add `triggerUndoFiltered()` that calls `/api/queue/archive/undo-filter`
-with current filter values.
-
-## Recommended
-Option A:
-- Archive tab: [↩️ Undo Selected]  (uses checkboxes)
-- Undo tab:    [↩️ Undo All Matched]  (uses filter)
-
-Remove line 1061.
+## Rejected alternatives
+- **Option A** (just remove "Undo Selected" from Undo tab, keep "Undo All Matched"):
+  Leaves confusing name "All Matched". Renaming is better.
+- **Option B** (keep both, rename one): duplicate functionality. Bad.
 
 ## Related
 - Задача 3 (Undo implementation)
 - ERRATA-0023/0024/0025 (frontend bugs)
+- Задача 9 (fix)
+
+## Status
+OPEN — fix via Задача 9 (Option C)
