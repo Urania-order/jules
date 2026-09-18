@@ -37,3 +37,5 @@ __pycache__/
 .jules/reset_schedules.json
 .jules/history/reset_audit.jsonl
 .co-smos/state.json.bak
+.jules/history/admin_audit.jsonl
+.jules/history/*.jsonl
