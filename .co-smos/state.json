@@ -2,8 +2,19 @@
   "version": 1,
   "project": "jules-codespace",
   "agent": "jules",
-  "status": "ready",
-  "active_task": null,
+  "status": "running",
+  "active_task": {
+    "id": "task-20260918-200100",
+    "request": "Co-SMOS v1.1.7 — Task Explorer: sort + filter by author + search\n\nCONTEXT:\n- Repo: Urania-order/jules\n- File: frontend/index.html\n- v1.1.6 (just applied) populated task.created_at and task.proposed_by\n  in state.json → API /api/tasks now returns these fields.\n\nGOAL:\n\n1. Add shared JS helpers in frontend/index.html:\n\n   function sortTasksByCreatedAt(tasks, desc = true) {\n     const key = (t) => t.created_at || '';\n     return [...tasks].sort((a, b) => {\n       const ka = key(a), kb = key(b);\n       if (!ka && !kb) return 0;\n       if (!ka) return 1;\n       if (!kb) return -1;\n       return desc ? kb.localeCompare(ka) : ka.localeCompare(kb);\n     });\n   }\n\n   function filterTasksByAuthor(tasks, author) {\n     if (!author || author === 'all') return tasks;\n     return tasks.filter(t => (t.proposed_by || 'unknown') === author);\n   }\n\n   function searchTasks(tasks, q) {\n     if (!q) return tasks;\n     const needle = q.toLowerCase();\n     return tasks.filter(t => {\n       const hay = [t.id, t.title, t.request, t.proposed_by]\n         .filter(Boolean).join(' ').toLowerCase();\n       return hay.includes(needle);\n     });\n   }\n\n   function applyTaskFilters(tasks) {\n     const author = document.getElementById('task-filter-author')?.value || 'all';\n     const q = document.getElementById('task-filter-search')?.value || '';\n     const order = document.getElementById('task-sort-order')?.value || 'desc';\n     let out = tasks;\n     out = filterTasksByAuthor(out, author);\n     out = searchTasks(out, q);\n     out = sortTasksByCreatedAt(out, order === 'desc');\n     return out;\n   }\n\n2. Apply in Queue (renderQueue):\n   - Wrap currentTasks with applyTaskFilters before rendering\n3. Apply in Commands (renderSequence):\n   - Same applyTaskFilters\n4. Apply in Batch (renderBatchTasks):\n   - Same applyTaskFilters\n\n5. Add UI controls in Queue header:\n   - <select id=\"task-filter-author\">\n       <option value=\"all\">All authors</option>\n       <option value=\"operator\">🧑 operator</option>\n       <option value=\"queue\">⚙ queue</option>\n       <option value=\"consultant\">✨ consultant</option>\n       <option value=\"unknown\">? unknown</option>\n     </select>\n   - <select id=\"task-sort-order\">\n       <option value=\"desc\">↓ Newest</option>\n       <option value=\"asc\">↑ Oldest</option>\n     </select>\n   - <input id=\"task-filter-search\" type=\"text\"\n            placeholder=\"Search id / title / request / author\">\n\n6. Persist in localStorage:\n   - cosmos_task_author_filter\n   - cosmos_task_sort_order\n   - cosmos_task_search_q\n\n7. Show author badge on task cards:\n   - 🧑 operator\n   - ⚙ queue\n   - ✨ consultant\n   - ? unknown\n\nREQUIREMENTS:\n- Only frontend/index.html + tests/test_frontend_contract.py\n- Add frontend contract tests:\n    * sortTasksByCreatedAt helper exists\n    * filterTasksByAuthor helper exists\n    * searchTasks helper exists\n    * applyTaskFilters helper exists\n    * UI: task-filter-author, task-sort-order, task-filter-search\n- No backend changes\n\nTESTS:\n- pytest tests/ + git diff --check\n\nCONSTRAINTS:\n- Do not touch .co-smos/, .jules/tasks/, .jules/results/\n- Do not change backend API\n- Do not weaken existing tests\n\nREPORT FORMAT: AGENTS.md §14\n\nFINAL REPORT:\n1. what already existed and was reused\n2. what was added\n3. what was deliberately not changed\n4. tests/results\n5. remaining gaps",
+    "title": "Co-SMOS v1.1.7 — Task Explorer: sort + filter by author + search",
+    "status": "RUNNING",
+    "priority": 5,
+    "created_at": "2026-09-18T17:01:00.905918+00:00",
+    "started_at": "2026-09-18T17:01:00.905918+00:00",
+    "proposed_by": "operator",
+    "source_task": null,
+    "branch": "main"
+  },
   "last_task": {
     "id": "task-20260918-193738",
     "status": "completed",
