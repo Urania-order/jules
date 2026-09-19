@@ -1929,7 +1929,8 @@
         container.innerHTML = '<div class="empty-state">No tasks in queue</div>';
         return;
       }
-      currentTasks.slice(0, 5).forEach(task => {
+      const sortedTasks = sortTasksByCreatedAt(currentTasks, true);
+      sortedTasks.slice(0, 5).forEach(task => {
         container.appendChild(createTaskCard(task));
       });
     }
@@ -2256,7 +2257,7 @@
         return;
       }
 
-      // Sort tasks oldest first
+      // Sort tasks newest first
       const sortedTasks = sortTasksByCreatedAt(currentTasks, true);
 
       sortedTasks.forEach(task => {

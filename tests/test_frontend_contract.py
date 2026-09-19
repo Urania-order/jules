@@ -578,6 +578,14 @@ def test_frontend_contract_stages_sorted():
     assert 'sortTasksByCreatedAt(currentTasks, true)' in content
 
 
+def test_frontend_contract_recent_tasks_sorted():
+    """Verify renderRecentTasks sorts tasks newest first via sortTasksByCreatedAt."""
+    content = INDEX_PATH.read_text()
+    assert 'function renderRecentTasks()' in content
+    assert 'const sortedTasks = sortTasksByCreatedAt(currentTasks, true);' in content
+    assert '// Sort tasks newest first' in content
+
+
 def test_frontend_contract_async_admin_job_polling():
     """Verify v1.2.3 async job polling, status output formatting (Running, DONE, FAILED), and localStorage persistence exist."""
     content = INDEX_PATH.read_text()
