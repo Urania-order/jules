@@ -1,6 +1,7 @@
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, JSON, Float, Boolean
 from sqlalchemy.sql import func
 from smos.core.database import Base
+from smos.models.models import EpistemicStatus
 
 class EpistemicLayer(Base):
     __tablename__ = "epistemic_layers"

@@ -67,6 +67,16 @@ class KnowledgeLifecycleState(str, enum.Enum):
     IMPROVED_KNOWLEDGE = "Improved Knowledge"
 
 class EpistemicStatus(str, enum.Enum):
+    # Canonical 7 statuses
+    OBSERVED = "OBSERVED"
+    INFERRED = "INFERRED"
+    HYPOTHESIZED = "HYPOTHESIZED"
+    PREDICTED = "PREDICTED"
+    UNVALIDATED = "UNVALIDATED"
+    CONTESTED = "CONTESTED"
+    REFUTED = "REFUTED"
+
+    # Legacy statuses preserved for backward compatibility
     VERIFIED = "Verified"
     HYPOTHESIS = "Hypothesis"
     COUNTERFACTUAL = "Counterfactual"
@@ -74,6 +84,60 @@ class EpistemicStatus(str, enum.Enum):
     SPECULATIVE = "Speculative"
     BEYOND_ALL_CONSENSUS = "Beyond All Consensus"
     UNVERIFIED = "Unverified"
+
+    @classmethod
+    def _missing_(cls, value):
+        if isinstance(value, str):
+            val_upper = value.strip().upper()
+            for member in cls:
+                if member.name.upper() == val_upper or member.value.upper() == val_upper:
+                    return member
+        return None
+
+    @classmethod
+    def from_str(cls, value: str) -> "EpistemicStatus":
+        """Parse string value into EpistemicStatus (case-insensitive)."""
+        if isinstance(value, cls):
+            return value
+        try:
+            return cls(value)
+        except ValueError:
+            raise ValueError(f"Invalid EpistemicStatus: {value}")
+
+    def to_canonical(self) -> "EpistemicStatus":
+        """Map legacy statuses to closest canonical equivalent if needed, or return self if already canonical."""
+        canonical_map = {
+            EpistemicStatus.VERIFIED: EpistemicStatus.OBSERVED,
+            EpistemicStatus.HYPOTHESIS: EpistemicStatus.HYPOTHESIZED,
+            EpistemicStatus.COUNTERFACTUAL: EpistemicStatus.HYPOTHESIZED,
+            EpistemicStatus.HISTORICAL_RECONSTRUCTION: EpistemicStatus.INFERRED,
+            EpistemicStatus.SPECULATIVE: EpistemicStatus.HYPOTHESIZED,
+            EpistemicStatus.BEYOND_ALL_CONSENSUS: EpistemicStatus.CONTESTED,
+            EpistemicStatus.UNVERIFIED: EpistemicStatus.UNVALIDATED,
+        }
+        return canonical_map.get(self, self)
+
+    @property
+    def is_canonical(self) -> bool:
+        """Check if this status is one of the 7 canonical statuses."""
+        return self in {
+            EpistemicStatus.OBSERVED,
+            EpistemicStatus.INFERRED,
+            EpistemicStatus.HYPOTHESIZED,
+            EpistemicStatus.PREDICTED,
+            EpistemicStatus.UNVALIDATED,
+            EpistemicStatus.CONTESTED,
+            EpistemicStatus.REFUTED,
+        }
+
+    def serialize(self) -> str:
+        """Serialize status for storage/transmission."""
+        return self.value
+
+    @classmethod
+    def deserialize(cls, value: str) -> "EpistemicStatus":
+        """Deserialize status from string representation."""
+        return cls.from_str(value)
 
 class RelationType(str, enum.Enum):
     RELATED_TO = "RELATED_TO"

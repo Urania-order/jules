@@ -1883,6 +1883,37 @@ def create_epistemic_layer(name: str, confidence: float, evidence_type: str, db:
     svc = EpistemicService(db)
     return svc.create_layer(name, confidence, evidence_type)
 
+@app.get("/epistemic/statuses")
+def list_epistemic_statuses():
+    """Returns available epistemic statuses including canonical and legacy statuses."""
+    from smos.models.models import EpistemicStatus
+    canonical = [s.value for s in EpistemicStatus if s.is_canonical]
+    legacy = [s.value for s in EpistemicStatus if not s.is_canonical]
+    return {
+        "status": "success",
+        "canonical": canonical,
+        "legacy": legacy,
+        "all": [s.value for s in EpistemicStatus]
+    }
+
+@app.post("/epistemic/node/{node_id}/status")
+def update_node_epistemic_status(node_id: int, status: str, db: Session = Depends(get_db)):
+    """Updates the epistemic status of a node."""
+    from smos.models.models import EpistemicStatus
+    svc = EpistemicService(db)
+    try:
+        ep_status = EpistemicStatus.from_str(status)
+    except ValueError:
+        raise HTTPException(status_code=400, detail=f"Invalid epistemic status: {status}")
+    node = svc.update_node_status(node_id, ep_status)
+    if not node:
+        raise HTTPException(status_code=404, detail="Node not found")
+    return {
+        "status": "success",
+        "node_id": node.id,
+        "epistemic_status": node.epistemic_status.value
+    }
+
 @app.post("/cluster")
 def create_intellectual_cluster(req: CreateClusterRequest, db: Session = Depends(get_db)):
     svc = DiscoveryService(db)
