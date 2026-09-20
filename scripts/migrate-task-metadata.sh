@@ -59,11 +59,10 @@ def process_task(task):
 
     changed = False
 
-    if not task.get("created_at"):
-        parsed_dt = id_to_iso(task.get("id"))
-        if parsed_dt:
-            task["created_at"] = parsed_dt
-            changed = True
+    parsed_dt = id_to_iso(task.get("id"))
+    if parsed_dt and task.get("created_at") != parsed_dt:
+        task["created_at"] = parsed_dt
+        changed = True
 
     if task.get("proposed_by") is None:
         task["proposed_by"] = "unknown"

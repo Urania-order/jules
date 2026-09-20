@@ -25,7 +25,7 @@ if [ -z "$TASK" ]; then
     exit 1
 fi
 
-TIMESTAMP="$(date '+%Y%m%d-%H%M%S')"
+TIMESTAMP="$(date -u '+%Y%m%d-%H%M%S')"
 TASK_ID="task-${TIMESTAMP}"
 
 TASK_FILE=".jules/tasks/${TASK_ID}.md"
@@ -39,9 +39,11 @@ echo "=========================================="
 echo " Jules Co-SMOS Task"
 echo "=========================================="
 echo ""
-echo "Task ID:    $TASK_ID"
-echo "Branch:     $CURRENT_BRANCH"
-echo "Repository: $REPOSITORY"
+echo "Task ID:        $TASK_ID"
+echo "Created (UTC):   $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+echo "Created (local): $(date +%Y-%m-%dT%H:%M:%S%z)"
+echo "Branch:         $CURRENT_BRANCH"
+echo "Repository:     $REPOSITORY"
 echo ""
 echo "Task:"
 echo "$TASK"

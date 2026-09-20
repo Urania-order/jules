@@ -39,21 +39,73 @@ if ! git diff --cached --quiet; then
 fi
 
 echo ""
-echo "=== [3/5] Wait for Completed (max 15 min) ==="
+echo "=== [3/5] Wait for Completed ==="
+MAX_WAIT_SEC="${JULES_MAX_WAIT_SEC:-900}"
+POLL_INTERVAL="${JULES_POLL_INTERVAL:-30}"
 ELAPSED=0
-while [ "$ELAPSED" -lt 900 ]; do
-  LINE=$(jules remote list --session 2>/dev/null | head -3 | grep -E "Completed|In Progress|Planning|Failed" | head -1)
-  STATUS=$(echo "$LINE" | awk '{print $NF}')
+TASK_MATCH=$(echo "$TASK_ID" | sed 's/^task-//')
+STATUS=""
+
+while [ "$ELAPSED" -lt "$MAX_WAIT_SEC" ]; do
+  SESSION_LINE=$(jules remote list --session 2>/dev/null | grep -F "$TASK_MATCH" | head -1)
+  if [ -z "$SESSION_LINE" ]; then
+      DESC=$(head -c 40 "$TASK_FILE" | tr -d '\n')
+      SESSION_LINE=$(jules remote list --session 2>/dev/null | grep -F "$DESC" | head -1)
+  fi
+  STATUS=$(echo "$SESSION_LINE" | awk '{print $NF}')
+
+  if [ "$STATUS" = "Completed" ]; then
+      echo "  ✅ Completed"
+      break
+  fi
+  if [ "$STATUS" = "Failed" ]; then
+      echo "  ❌ Failed"
+      exit 2
+  fi
+
   echo "  [+${ELAPSED}s] ${STATUS:-unknown}"
-  [ "$STATUS" = "Completed" ] && break
-  [ "$STATUS" = "Failed" ] && exit 2
-  sleep 30
-  ELAPSED=$((ELAPSED + 30))
+  sleep "$POLL_INTERVAL"
+  ELAPSED=$((ELAPSED + POLL_INTERVAL))
 done
+
+if [ "$STATUS" != "Completed" ]; then
+  echo "  ⚠ Timeout after ${MAX_WAIT_SEC}s — session still ${STATUS:-unknown}"
+  echo "  Run manually: ./scripts/jules-complete.sh --task $TASK_ID"
+  exit 3
+fi
 
 echo ""
 echo "=== [4/5] Complete ==="
 ./scripts/jules-complete.sh --task "$TASK_ID"
+
+RESULT=$(python3 -c "
+import json
+try:
+    s = json.load(open('.co-smos/state.json'))
+    lt = s.get('last_task') or {}
+    print(lt.get('result', 'unknown'))
+except Exception:
+    print('unknown')
+" 2>/dev/null)
+
+case "$RESULT" in
+    applied)
+        echo "✅ APPLIED: $TASK_ID"
+        ;;
+    no-op)
+        echo "⚠️  NO-OP: Jules may still be running or returned empty diff"
+        echo "   Check: jules remote list --session"
+        exit 4
+        ;;
+    error)
+        echo "❌ ERROR: check post-complete log"
+        exit 5
+        ;;
+    *)
+        echo "❓ UNKNOWN result: $RESULT"
+        exit 6
+        ;;
+esac
 
 echo ""
 echo "=== [5/5] Verify ==="
