@@ -297,3 +297,74 @@ def test_jules_complete_does_not_move_admin_queue_files(setup_complete_env):
     assert not (deferred_dir / "admin-123.txt").exists()
     assert not (deferred_dir / "admin-456.txt").exists()
     assert not (deferred_dir / "admin-789.txt").exists()
+
+
+def test_jules_complete_no_op_allows_retry(setup_complete_env):
+    """Verify jules-complete.sh allows retry when previous result was no-op (ERRATA-0036)."""
+    state_file = setup_complete_env["root"] / ".co-smos" / "state.json"
+    state = json.loads(state_file.read_text())
+    task_id = setup_complete_env["task_id"]
+    state["history"].append({
+        "id": task_id,
+        "status": "completed",
+        "result": "no-op"
+    })
+    state["last_task"] = {
+        "id": task_id,
+        "status": "completed",
+        "result": "no-op"
+    }
+    state_file.write_text(json.dumps(state, indent=2))
+
+    res = run_complete_script(
+        setup_complete_env,
+        "--task", task_id,
+        env_vars={"JULES_NO_PUSH": "1", "JULES_SKIP_CI": "1", "MOCK_PYTEST_EXIT": "0"}
+    )
+    assert res.returncode == 0
+    assert "Task " + task_id + " is already completed and applied." not in res.stdout
+
+
+def test_jules_complete_force_flag(setup_complete_env):
+    """Verify jules-complete.sh --force and FORCE=1 skip idempotency check even if result was applied."""
+    state_file = setup_complete_env["root"] / ".co-smos" / "state.json"
+    state = json.loads(state_file.read_text())
+    task_id = setup_complete_env["task_id"]
+    state["history"].append({
+        "id": task_id,
+        "status": "completed",
+        "result": "applied"
+    })
+    state["last_task"] = {
+        "id": task_id,
+        "status": "completed",
+        "result": "applied"
+    }
+    state_file.write_text(json.dumps(state, indent=2))
+
+    # Test without force: should skip
+    res_noforce = run_complete_script(
+        setup_complete_env,
+        "--task", task_id,
+        env_vars={"JULES_NO_PUSH": "1", "JULES_SKIP_CI": "1", "MOCK_PYTEST_EXIT": "0"}
+    )
+    assert res_noforce.returncode == 0
+    assert "Task " + task_id + " is already completed and applied." in res_noforce.stdout
+
+    # Test with --force argument: should execute
+    res_force_arg = run_complete_script(
+        setup_complete_env,
+        "--task", task_id, "--force",
+        env_vars={"JULES_NO_PUSH": "1", "JULES_SKIP_CI": "1", "MOCK_PYTEST_EXIT": "0"}
+    )
+    assert res_force_arg.returncode == 0
+    assert "Task " + task_id + " is already completed and applied." not in res_force_arg.stdout
+
+    # Test with FORCE=1 env: should execute
+    res_force_env = run_complete_script(
+        setup_complete_env,
+        "--task", task_id,
+        env_vars={"FORCE": "1", "JULES_NO_PUSH": "1", "JULES_SKIP_CI": "1", "MOCK_PYTEST_EXIT": "0"}
+    )
+    assert res_force_env.returncode == 0
+    assert "Task " + task_id + " is already completed and applied." not in res_force_env.stdout

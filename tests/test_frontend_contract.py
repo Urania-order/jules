@@ -20,14 +20,16 @@ def test_frontend_contract_priority_normalization():
     assert 'Priority (1-10)' not in content
 
 
-def test_frontend_contract_sync_button():
-    """Verify SYNC button and sync click handler exist."""
+def test_frontend_contract_navbar_cleanup():
+    """Verify v1.2.7 navbar cleanup: NO btn-sync, NO btn-nav-refresh, NO navbar-clock, navbar-queue-led has onclick="refreshData()"."""
     content = INDEX_PATH.read_text()
 
-    assert 'id="btn-sync"' in content
-    assert 'SYNC' in content
-    assert "btn-sync" in content
-    assert "refreshData()" in content
+    assert 'id="btn-sync"' not in content
+    assert 'id="btn-nav-refresh"' not in content
+    assert 'id="nav-refresh-time"' not in content
+    assert 'id="navbar-clock"' not in content
+    assert 'onclick="refreshData()"' in content
+    assert '<span id="navbar-queue-led"' in content
 
 
 def test_frontend_contract_queue_view_columns():
@@ -609,26 +611,21 @@ def test_frontend_contract_skips_cancelled():
 
 
 def test_frontend_contract_v1_2_6_refresh_and_led():
-    """Verify v1.2.6 frontend contract elements: Refresh button, Queue LED, LED CSS classes, and NO auto-refresh interval."""
+    """Verify v1.2.6/v1.2.7 Queue LED indicator, LED CSS classes, and NO auto-refresh interval."""
     content = INDEX_PATH.read_text()
 
-    # 1. Refresh button & last refresh time
-    assert 'id="btn-nav-refresh"' in content
-    assert '⟳ Refresh' in content
-    assert 'id="nav-refresh-time"' in content
-
-    # 2. Queue LED indicator & functions
+    # 1. Queue LED indicator & functions
     assert 'id="navbar-queue-led"' in content
     assert 'updateQueueLed' in content
     assert 'pollQueueLed' in content
     assert '/queue/status' in content
 
-    # 3. CSS classes for queue status LED
+    # 2. CSS classes for queue status LED
     assert '.queue-led' in content
     assert '.queue-led-green' in content
     assert '.queue-led-blue' in content
     assert '.queue-led-yellow' in content
     assert '.queue-led-red' in content
 
-    # 4. Strict check: NO auto-refresh setInterval(refreshData, ...)
+    # 3. Strict check: NO auto-refresh setInterval(refreshData, ...)
     assert 'setInterval(refreshData' not in content

@@ -863,7 +863,8 @@
       color: var(--accent-red);
     }
 
-    .queue-led { width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin-right: 6px; vertical-align: middle; cursor: pointer; }
+    .queue-led { width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin-right: 6px; vertical-align: middle; cursor: pointer; transition: transform 0.15s; }
+    .queue-led:hover { transform: scale(1.3); }
     .queue-led-green { background-color: #22c55e; }
     .queue-led-blue { background-color: #3b82f6; }
     .queue-led-yellow { background-color: #eab308; animation: pulse 1.5s infinite; }
@@ -876,16 +877,13 @@
     <div class="logo-container">
       <div class="logo">Co-SMOS Control Room v0.9</div>
       <div class="system-status-badge" id="system-status">
-        <span id="navbar-queue-led" class="queue-led queue-led-green" title="Pending: 0 | Running: 0 | Blocked: 0 | Deferred: 0" onclick="document.querySelector('nav .nav-btn[data-view=\'queue\']')?.click()"></span><div class="led led-green"></div> ONLINE
+        <span id="navbar-queue-led" class="queue-led queue-led-green" title="Pending: 0 | Running: 0 | Blocked: 0 | Deferred: 0" onclick="refreshData()"></span><div class="led led-green"></div> ONLINE
       </div>
       <select id="autonomy-select" class="btn btn-secondary btn-sm" style="background-color: var(--bg-card); color: var(--text-primary); border: 1px solid var(--border-color); padding: 0.25rem 0.5rem; border-radius: 0.375rem;">
         <option value="MANUAL">MANUAL</option>
         <option value="ASSISTED">ASSISTED</option>
         <option value="AUTO">AUTO</option>
       </select>
-      <button class="btn btn-secondary btn-sm" id="btn-sync">⟳ SYNC</button>
-      <button class="btn btn-secondary btn-sm" id="btn-nav-refresh" onclick="refreshData()">⟳ Refresh</button>
-      <span id="nav-refresh-time" style="font-size: 0.8rem; color: var(--text-secondary); margin-left: 4px;"></span>
     </div>
     <nav>
       <button class="nav-btn active" data-view="dashboard">Control Room</button>
@@ -1795,7 +1793,7 @@
         if (banner.innerHTML.includes('backend unavailable')) {
           banner.style.display = 'none';
         }
-        document.getElementById('system-status').innerHTML = `<span id="navbar-queue-led" class="queue-led queue-led-green" title="Pending: 0 | Running: 0 | Blocked: 0 | Deferred: 0" onclick="document.querySelector('nav .nav-btn[data-view=\\'queue\\']')?.click()"></span><div class="led led-green"></div> ${status.status.toUpperCase()}`;
+        document.getElementById('system-status').innerHTML = `<span id="navbar-queue-led" class="queue-led queue-led-green" title="Pending: 0 | Running: 0 | Blocked: 0 | Deferred: 0" onclick="refreshData()"></span><div class="led led-green"></div> ${status.status.toUpperCase()}`;
         document.getElementById('stat-total-tasks').textContent = status.tasks_summary.total;
         document.getElementById('stat-pending-tasks').textContent = (status.tasks_summary.by_status.PENDING || 0) + (status.tasks_summary.by_status.READY || 0);
         document.getElementById('stat-completed-tasks').textContent = status.tasks_summary.by_status.COMPLETED || 0;
@@ -1821,10 +1819,6 @@
         renderResetCenter();
         renderAdminQueueStatus();
 
-        const timeEl = document.getElementById('nav-refresh-time');
-        if (timeEl) {
-          timeEl.textContent = new Date().toLocaleTimeString();
-        }
         pollQueueLed();
       } catch (e) {
         console.error('Refresh error:', e);
@@ -1832,18 +1826,6 @@
       }
     }
 
-    document.getElementById('btn-sync').addEventListener('click', async () => {
-      const btn = document.getElementById('btn-sync');
-      btn.textContent = '⟳ SYNCING...';
-      try {
-        await refreshData();
-        btn.textContent = '✓ SYNCED';
-        setTimeout(() => { btn.textContent = '⟳ SYNC'; }, 1500);
-      } catch (err) {
-        btn.textContent = '⟳ SYNC';
-        showOffline();
-      }
-    });
 
     // Reset Queues Button & Modal Logic
     let currentResetTargetScope = 'all';

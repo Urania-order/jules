@@ -540,3 +540,39 @@ def test_jules_complete_copies_proposed_by_from_active(tmp_path, monkeypatch):
     last = state_data.get("last_task")
     assert last is not None
     assert last["proposed_by"] == "consultant"
+
+
+def test_task_from_dict_fallback_title_over_id(tmp_path, monkeypatch):
+    """Verify QueueManager._task_from_dict fallback order: title -> request -> id."""
+    monkeypatch.setenv("JULES_PROJECT_ROOT", str(tmp_path))
+    qm = QueueManager(queue_dir=tmp_path / ".jules" / "queue")
+
+    # Case 1: title present and request present -> uses title
+    data1 = {"id": "task-1", "title": "Co-SMOS v1.2.6 — Feature", "request": "Full request string"}
+    t1 = qm._task_from_dict(data1, TaskStatus.PENDING)
+    assert t1.title == "Co-SMOS v1.2.6 — Feature"
+    assert t1.request == "Full request string"
+
+    # Case 2: title equal to id, request present -> fallback title to request
+    data2 = {"id": "task-20260920-055407", "title": "task-20260920-055407", "request": "Co-SMOS v1.2.6 — Navbar cleanup"}
+    t2 = qm._task_from_dict(data2, TaskStatus.PENDING)
+    assert t2.title == "Co-SMOS v1.2.6 — Navbar cleanup"
+    assert t2.request == "Co-SMOS v1.2.6 — Navbar cleanup"
+
+    # Case 3: title null, request present -> fallback title to request[:80]
+    data3 = {"id": "task-3", "title": None, "request": "My task description"}
+    t3 = qm._task_from_dict(data3, TaskStatus.PENDING)
+    assert t3.title == "My task description"
+    assert t3.request == "My task description"
+
+    # Case 4: title present, request null -> request uses title
+    data4 = {"id": "task-4", "title": "Title only", "request": None}
+    t4 = qm._task_from_dict(data4, TaskStatus.PENDING)
+    assert t4.title == "Title only"
+    assert t4.request == "Title only"
+
+    # Case 5: both null -> fallback to id
+    data5 = {"id": "task-20260920-999999", "title": None, "request": None}
+    t5 = qm._task_from_dict(data5, TaskStatus.PENDING)
+    assert t5.title == "task-20260920-999999"
+    assert t5.request == "task-20260920-999999"

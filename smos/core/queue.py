@@ -57,11 +57,20 @@ class QueueManager:
                     status_enum = default_status
 
         tid = data.get("id", "unknown-task")
-        req = data.get("request") or data.get("description") or data.get("title")
-        if not req:
-            req = tid if tid.startswith("task-") else "Unnamed task"
+        raw_title = data.get("title")
+        raw_req = data.get("request") or data.get("description")
 
-        title = data.get("title") or req.split("\n")[0][:80]
+        req = raw_req or raw_title or (tid if tid.startswith("task-") else "Unnamed task")
+
+        if raw_title and raw_title != tid:
+            title = raw_title
+        elif raw_req and raw_req != tid:
+            title = raw_req.split("\n")[0][:80]
+        elif raw_title:
+            title = raw_title
+        else:
+            title = req.split("\n")[0][:80] if req else tid
+
         created_at = data.get("created_at") or self._iso_from_task_id(tid) or ""
         proposed_by = data.get("proposed_by") or "unknown"
 

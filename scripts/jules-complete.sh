@@ -13,23 +13,84 @@ RESULTS_DIR=".jules/results"
 
 SESSION_ID=""
 TASK_ID=""
+FORCE="${FORCE:-0}"
 
 if [ $# -eq 0 ]; then
   echo "Usage: ./scripts/jules-complete.sh <SESSION_ID>"
-  echo "       ./scripts/jules-complete.sh --task <TASK_ID>"
+  echo "       ./scripts/jules-complete.sh --task <TASK_ID> [--force]"
   exit 1
 fi
 
-if [ "$1" = "--task" ]; then
-  [ -z "${2:-}" ] && { echo "ERROR: --task requires TASK_ID"; exit 1; }
-  TASK_ID="$2"
-elif [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
-  echo "Usage: ./scripts/jules-complete.sh <SESSION_ID>"
-  echo "       ./scripts/jules-complete.sh --task <TASK_ID>"
-  exit 0
-else
-  SESSION_ID="$1"
+POSITIONAL_ARGS=()
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --force)
+      FORCE=1
+      shift
+      ;;
+    --task)
+      [ -z "${2:-}" ] && { echo "ERROR: --task requires TASK_ID"; exit 1; }
+      TASK_ID="$2"
+      shift 2
+      ;;
+    -h|--help)
+      echo "Usage: ./scripts/jules-complete.sh <SESSION_ID>"
+      echo "       ./scripts/jules-complete.sh --task <TASK_ID> [--force]"
+      exit 0
+      ;;
+    *)
+      POSITIONAL_ARGS+=("$1")
+      shift
+      ;;
+  esac
+done
+
+if [ -z "$SESSION_ID" ] && [ ${#POSITIONAL_ARGS[@]} -gt 0 ]; then
+  SESSION_ID="${POSITIONAL_ARGS[0]}"
 fi
+
+# Normalize stale history entries in .co-smos/state.json (idempotent)
+python3 - <<'PY'
+import json, os
+from pathlib import Path
+
+state_file = Path(".co-smos/state.json")
+if state_file.exists():
+    try:
+        data = json.loads(state_file.read_text(encoding="utf-8"))
+        modified = False
+
+        def normalize_task(t):
+            if not isinstance(t, dict):
+                return False
+            tid = t.get("id")
+            title = t.get("title")
+            req = t.get("request") or t.get("description")
+
+            new_title = None
+            if not title:
+                new_title = (req.split("\n")[0][:80] if req else tid)
+            elif tid and title == tid and req and req != tid:
+                new_title = req.split("\n")[0][:80]
+
+            if new_title and new_title != title:
+                t["title"] = new_title
+                return True
+            return False
+
+        for h in data.get("history", []):
+            if normalize_task(h):
+                modified = True
+        if normalize_task(data.get("active_task")):
+            modified = True
+        if normalize_task(data.get("last_task")):
+            modified = True
+
+        if modified:
+            state_file.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    except Exception:
+        pass
+PY
 
 # Setup logging
 mkdir -p "$RESULTS_DIR"
@@ -96,26 +157,28 @@ fi
 
 echo " Resolved TASK_ID: $TASK_ID"
 
-# --- idempotency check (ERRATA-0016) ---
-if python3 -c "
+# --- idempotency check (ERRATA-0016, ERRATA-0036) ---
+if [ "${FORCE:-0}" != "1" ]; then
+  if python3 -c "
 import json, sys
 try:
     s = json.load(open('$STATE_FILE'))
     for h in s.get('history', []):
-        if h.get('id') == '$TASK_ID' and h.get('result') in ('applied', 'no-op'):
+        if h.get('id') == '$TASK_ID' and h.get('result') == 'applied':
             sys.exit(0)
     lt = s.get('last_task') or {}
-    if lt.get('id') == '$TASK_ID' and lt.get('result') in ('applied', 'no-op'):
+    if lt.get('id') == '$TASK_ID' and lt.get('result') == 'applied':
         sys.exit(0)
     sys.exit(1)
 except Exception:
     sys.exit(1)
 "; then
-  echo ""
-  echo "Task $TASK_ID is already completed and applied."
-  echo "Skipping to avoid a duplicate pull."
-  echo ""
-  exit 0
+    echo ""
+    echo "Task $TASK_ID is already completed and applied."
+    echo "Skipping to avoid a duplicate pull."
+    echo ""
+    exit 0
+  fi
 fi
 # --- end idempotency check ---
 
@@ -255,13 +318,21 @@ state.setdefault("history", [])
 active = state.get("active_task") or {}
 now = datetime.now(timezone.utc).isoformat()
 
+req = active.get("request") or active.get("description")
+title = active.get("title")
+if not title or title == task_id:
+    if req and req != task_id:
+        title = req.split("\n")[0][:80]
+    else:
+        title = active.get("title") or req or task_id
+
 completed = {
     "id": task_id,
     "status": "completed",
     "session_id": session_id or active.get("session_id"),
     "branch": active.get("branch") or state.get("branch"),
-    "request": active.get("request"),
-    "title": active.get("title"),
+    "request": req,
+    "title": title,
     "priority": active.get("priority", 5),
     "created_at": active.get("created_at"),
     "proposed_by": active.get("proposed_by"),
