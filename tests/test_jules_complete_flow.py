@@ -368,3 +368,61 @@ def test_jules_complete_force_flag(setup_complete_env):
     )
     assert res_force_env.returncode == 0
     assert "Task " + task_id + " is already completed and applied." not in res_force_env.stdout
+
+
+def test_jules_complete_preserves_title_from_task_file(setup_complete_env):
+    """Verify scripts/jules-complete.sh preserves title from task .md file when active_task is missing or title is empty/equal to task_id."""
+    state_file = setup_complete_env["root"] / ".co-smos" / "state.json"
+    task_id = setup_complete_env["task_id"]
+
+    # Set active_task to None or empty dictionary without title/request
+    state = json.loads(state_file.read_text())
+    state["active_task"] = None
+    state_file.write_text(json.dumps(state, indent=2))
+
+    # Write a task markdown file with ## Request section
+    task_md = setup_complete_env["root"] / ".jules" / "tasks" / f"{task_id}.md"
+    task_md.write_text(
+        f"# Jules Task\n\n## Task ID\n\n{task_id}\n\n## Request\n\nCo-SMOS v1.2.8 — Feature title from task card\n\n## Status\n\nstarted\n"
+    )
+
+    res = run_complete_script(
+        setup_complete_env,
+        "--task", task_id,
+        env_vars={"JULES_NO_PUSH": "1", "JULES_SKIP_CI": "1", "MOCK_PYTEST_EXIT": "0"}
+    )
+    assert res.returncode == 0, f"Stdout: {res.stdout}\nStderr: {res.stderr}"
+
+    updated_state = json.loads(state_file.read_text())
+    last = updated_state.get("last_task")
+    assert last is not None
+    assert last["title"] == "Co-SMOS v1.2.8 — Feature title from task card"
+    assert last["request"] == "Co-SMOS v1.2.8 — Feature title from task card"
+
+
+def test_jules_complete_fallback_request_from_title(setup_complete_env):
+    """Verify scripts/jules-complete.sh populates request from title when request is missing."""
+    state_file = setup_complete_env["root"] / ".co-smos" / "state.json"
+    task_id = setup_complete_env["task_id"]
+
+    state = json.loads(state_file.read_text())
+    state["active_task"] = {
+        "id": task_id,
+        "title": "Title present but request missing",
+        "request": None,
+        "session_id": setup_complete_env["session_id"]
+    }
+    state_file.write_text(json.dumps(state, indent=2))
+
+    res = run_complete_script(
+        setup_complete_env,
+        "--task", task_id,
+        env_vars={"JULES_NO_PUSH": "1", "JULES_SKIP_CI": "1", "MOCK_PYTEST_EXIT": "0"}
+    )
+    assert res.returncode == 0, f"Stdout: {res.stdout}\nStderr: {res.stderr}"
+
+    updated_state = json.loads(state_file.read_text())
+    last = updated_state.get("last_task")
+    assert last is not None
+    assert last["title"] == "Title present but request missing"
+    assert last["request"] == "Title present but request missing"

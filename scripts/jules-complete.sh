@@ -320,11 +320,6 @@ now = datetime.now(timezone.utc).isoformat()
 
 req = active.get("request") or active.get("description")
 title = active.get("title")
-if not title or title == task_id:
-    if req and req != task_id:
-        title = req.split("\n")[0][:80]
-    else:
-        title = active.get("title") or req or task_id
 
 completed = {
     "id": task_id,
@@ -341,6 +336,38 @@ completed = {
     "finished_at": now,
     "result": pull_result,
 }
+
+if not completed.get("title") or completed.get("title") == task_id:
+    mdfile = Path(f".jules/tasks/{task_id}.md")
+    if mdfile.exists():
+        content = mdfile.read_text(encoding="utf-8")
+        lines = content.split("\n")
+        # Try "## Request" section first
+        in_req = False
+        for line in lines:
+            line_stripped = line.strip()
+            if line_stripped.startswith("## Request"):
+                in_req = True
+                continue
+            if in_req and line_stripped and not line_stripped.startswith("#"):
+                completed["title"] = line_stripped[:120]
+                break
+        # Fallback: first heading (not "Jules Task")
+        if not completed.get("title") or completed.get("title") == task_id:
+            for line in lines:
+                line_stripped = line.strip()
+                if line_stripped.startswith("# ") and "Jules Task" not in line_stripped:
+                    completed["title"] = line_stripped[2:120]
+                    break
+
+if not completed.get("title") or completed.get("title") == task_id:
+    if completed.get("request") and completed.get("request") != task_id:
+        completed["title"] = completed["request"].split("\n")[0][:120]
+    else:
+        completed["title"] = task_id
+
+if not completed.get("request"):
+    completed["request"] = completed.get("title")
 
 state["last_task"] = completed
 state["active_task"] = None
