@@ -862,6 +862,12 @@
       border-color: var(--accent-red);
       color: var(--accent-red);
     }
+
+    .queue-led { width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin-right: 6px; vertical-align: middle; cursor: pointer; }
+    .queue-led-green { background-color: #22c55e; }
+    .queue-led-blue { background-color: #3b82f6; }
+    .queue-led-yellow { background-color: #eab308; animation: pulse 1.5s infinite; }
+    .queue-led-red { background-color: #ef4444; }
   </style>
 </head>
 <body>
@@ -870,7 +876,7 @@
     <div class="logo-container">
       <div class="logo">Co-SMOS Control Room v0.9</div>
       <div class="system-status-badge" id="system-status">
-        <div class="led led-green"></div> ONLINE
+        <span id="navbar-queue-led" class="queue-led queue-led-green" title="Pending: 0 | Running: 0 | Blocked: 0 | Deferred: 0" onclick="document.querySelector('nav .nav-btn[data-view=\'queue\']')?.click()"></span><div class="led led-green"></div> ONLINE
       </div>
       <select id="autonomy-select" class="btn btn-secondary btn-sm" style="background-color: var(--bg-card); color: var(--text-primary); border: 1px solid var(--border-color); padding: 0.25rem 0.5rem; border-radius: 0.375rem;">
         <option value="MANUAL">MANUAL</option>
@@ -878,6 +884,8 @@
         <option value="AUTO">AUTO</option>
       </select>
       <button class="btn btn-secondary btn-sm" id="btn-sync">⟳ SYNC</button>
+      <button class="btn btn-secondary btn-sm" id="btn-nav-refresh" onclick="refreshData()">⟳ Refresh</button>
+      <span id="nav-refresh-time" style="font-size: 0.8rem; color: var(--text-secondary); margin-left: 4px;"></span>
     </div>
     <nav>
       <button class="nav-btn active" data-view="dashboard">Control Room</button>
@@ -1787,7 +1795,7 @@
         if (banner.innerHTML.includes('backend unavailable')) {
           banner.style.display = 'none';
         }
-        document.getElementById('system-status').innerHTML = `<div class="led led-green"></div> ${status.status.toUpperCase()}`;
+        document.getElementById('system-status').innerHTML = `<span id="navbar-queue-led" class="queue-led queue-led-green" title="Pending: 0 | Running: 0 | Blocked: 0 | Deferred: 0" onclick="document.querySelector('nav .nav-btn[data-view=\\'queue\\']')?.click()"></span><div class="led led-green"></div> ${status.status.toUpperCase()}`;
         document.getElementById('stat-total-tasks').textContent = status.tasks_summary.total;
         document.getElementById('stat-pending-tasks').textContent = (status.tasks_summary.by_status.PENDING || 0) + (status.tasks_summary.by_status.READY || 0);
         document.getElementById('stat-completed-tasks').textContent = status.tasks_summary.by_status.COMPLETED || 0;
@@ -1812,6 +1820,12 @@
         renderConsultView();
         renderResetCenter();
         renderAdminQueueStatus();
+
+        const timeEl = document.getElementById('nav-refresh-time');
+        if (timeEl) {
+          timeEl.textContent = new Date().toLocaleTimeString();
+        }
+        pollQueueLed();
       } catch (e) {
         console.error('Refresh error:', e);
         showOffline();
@@ -3946,14 +3960,52 @@
       }
     }
 
+    let lastQueueStatus = null;
+
+    function updateQueueLed(s) {
+      if (s) lastQueueStatus = s;
+      const data = s || lastQueueStatus;
+      const led = document.getElementById('navbar-queue-led');
+      if (!led || !data) return;
+
+      const pending = data.pending || 0;
+      const running = data.running || 0;
+      const blocked = data.blocked || 0;
+      const deferred = data.deferred || 0;
+
+      led.title = `Pending: ${pending} | Running: ${running} | Blocked: ${blocked} | Deferred: ${deferred}`;
+
+      let colorClass = 'queue-led-green';
+      if (deferred > 0) {
+        colorClass = 'queue-led-red';
+      } else if (running > 0) {
+        colorClass = 'queue-led-yellow';
+      } else if (pending > 0) {
+        colorClass = 'queue-led-blue';
+      }
+
+      led.className = `queue-led ${colorClass}`;
+    }
+
+    async function pollQueueLed() {
+      try {
+        const s = await fetchJSON(API_BASE + '/queue/status');
+        updateQueueLed(s);
+      } catch (e) {}
+    }
+
     // Check saved job on page load and resume polling
     const activeJobId = localStorage.getItem('cosmos_active_job_id');
     if (activeJobId) {
       startAdminJobPolling(activeJobId);
     }
 
-    // Auto-refresh every 10 seconds
-    setInterval(refreshData, 10000);
+    // LED polling (LED ONLY — no full page refresh)
+    setInterval(pollQueueLed, 10000);
+    pollQueueLed();
+
+    // (removed — not requested, caused UI flicker)
+    // Manual refresh via SYNC / Refresh button only
     refreshData();
   </script>
 </body>

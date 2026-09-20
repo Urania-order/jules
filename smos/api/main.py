@@ -974,6 +974,24 @@ def admin_queue_kill_job(job_id: str, role: str = Depends(require_operator)):
     rec.pop("proc", None)
     return rec
 
+@app.get("/api/queue/status", dependencies=[Depends(require_operator)])
+def get_queue_status():
+    project_root = Path(os.environ.get("JULES_PROJECT_ROOT", ".")).resolve()
+    queue_dir = project_root / ".jules" / "queue"
+
+    def _count_txt(folder_name: str) -> int:
+        folder = queue_dir / folder_name
+        if not folder.exists():
+            return 0
+        return len([f for f in folder.glob("*.txt") if f.is_file()])
+
+    return {
+        "pending": _count_txt("pending"),
+        "running": _count_txt("running"),
+        "blocked": _count_txt("blocked"),
+        "deferred": _count_txt("deferred"),
+    }
+
 @app.get("/api/queue/files", dependencies=[Depends(require_operator)])
 def list_queue_files():
     project_root = Path(os.environ.get("JULES_PROJECT_ROOT", ".")).resolve()

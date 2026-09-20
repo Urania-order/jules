@@ -385,3 +385,43 @@ def test_queue_audit_logged(client):
     assert latest["command"] == "queue/add"
     assert latest["by"] == "operator"
     assert latest["exit_code"] == 0
+
+
+def test_queue_status_endpoint(client, tmp_path):
+    """Verify GET /api/queue/status returns .txt counts for pending, running, blocked, deferred and enforces role authorization."""
+    # 1. Unauthenticated -> 401
+    res_no_auth = client.get("/api/queue/status")
+    assert res_no_auth.status_code == 401
+
+    # 2. Consultant role -> 403
+    res_consultant = client.get(
+        "/api/queue/status",
+        headers={"Authorization": "Bearer dev-consultant-token"}
+    )
+    assert res_consultant.status_code == 403
+
+    # 3. Populate dummy files in queue folders
+    queue_dir = tmp_path / ".jules" / "queue"
+    (queue_dir / "pending" / "task1.txt").write_text("pending 1", encoding="utf-8")
+    (queue_dir / "pending" / "task2.txt").write_text("pending 2", encoding="utf-8")
+    (queue_dir / "running" / "task3.txt").write_text("running 1", encoding="utf-8")
+    (queue_dir / "deferred" / "task4.txt").write_text("deferred 1", encoding="utf-8")
+
+    # 4. Operator role -> 200 with accurate counts
+    res_operator = client.get(
+        "/api/queue/status",
+        headers={"Authorization": "Bearer dev-operator-token"}
+    )
+    assert res_operator.status_code == 200
+    data = res_operator.json()
+    assert data["pending"] == 2
+    assert data["running"] == 1
+    assert data["blocked"] == 0
+    assert data["deferred"] == 1
+
+    # 5. Admin role -> 200
+    res_admin = client.get(
+        "/api/queue/status",
+        headers={"Authorization": "Bearer dev-admin-token"}
+    )
+    assert res_admin.status_code == 200

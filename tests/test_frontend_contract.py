@@ -606,3 +606,29 @@ def test_frontend_contract_skips_cancelled():
     content = INDEX_PATH.read_text()
 
     assert "t.status !== 'CANCELLED'" in content
+
+
+def test_frontend_contract_v1_2_6_refresh_and_led():
+    """Verify v1.2.6 frontend contract elements: Refresh button, Queue LED, LED CSS classes, and NO auto-refresh interval."""
+    content = INDEX_PATH.read_text()
+
+    # 1. Refresh button & last refresh time
+    assert 'id="btn-nav-refresh"' in content
+    assert '⟳ Refresh' in content
+    assert 'id="nav-refresh-time"' in content
+
+    # 2. Queue LED indicator & functions
+    assert 'id="navbar-queue-led"' in content
+    assert 'updateQueueLed' in content
+    assert 'pollQueueLed' in content
+    assert '/queue/status' in content
+
+    # 3. CSS classes for queue status LED
+    assert '.queue-led' in content
+    assert '.queue-led-green' in content
+    assert '.queue-led-blue' in content
+    assert '.queue-led-yellow' in content
+    assert '.queue-led-red' in content
+
+    # 4. Strict check: NO auto-refresh setInterval(refreshData, ...)
+    assert 'setInterval(refreshData' not in content
