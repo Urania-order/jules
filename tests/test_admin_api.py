@@ -235,14 +235,14 @@ def test_run_next_returns_job_id(client, tmp_path):
     filename = add_res.json()["filename"]
 
     # Mock subprocess.run so worker thread finishes cleanly
-    mock_process_res = subprocess.CompletedProcess(
-        args=["./scripts/run-task.sh"],
-        returncode=0,
-        stdout="=== [1/5] Dispatch ===\nTask ID: task-20260918-123456\n=== [5/5] Verify ===\nDone: task-20260918-123456",
-        stderr=""
+    mock_proc = MagicMock()
+    mock_proc.communicate.return_value = (
+        "=== [1/5] Dispatch ===\nTask ID: task-20260918-123456\n=== [5/5] Verify ===\nDone: task-20260918-123456",
+        ""
     )
+    mock_proc.returncode = 0
 
-    with patch("subprocess.run", return_value=mock_process_res):
+    with patch("subprocess.Popen", return_value=mock_proc):
         res = client.post(
             "/api/admin/queue/run-next",
             headers={"Authorization": "Bearer dev-operator-token"}
@@ -270,14 +270,14 @@ def test_run_next_async_completes_and_moves_to_completed_on_success(client, tmp_
     pending_dir = tmp_path / ".jules" / "queue" / "pending"
     completed_dir = tmp_path / ".jules" / "queue" / "completed"
 
-    mock_process_res = subprocess.CompletedProcess(
-        args=["./scripts/run-task.sh"],
-        returncode=0,
-        stdout="=== [1/5] Dispatch ===\nTask ID: task-20260918-123456\n=== [5/5] Verify ===\nDone: task-20260918-123456",
-        stderr=""
+    mock_proc = MagicMock()
+    mock_proc.communicate.return_value = (
+        "=== [1/5] Dispatch ===\nTask ID: task-20260918-123456\n=== [5/5] Verify ===\nDone: task-20260918-123456",
+        ""
     )
+    mock_proc.returncode = 0
 
-    with patch("subprocess.run", return_value=mock_process_res):
+    with patch("subprocess.Popen", return_value=mock_proc):
         res = client.post(
             "/api/admin/queue/run-next",
             headers={"Authorization": "Bearer dev-operator-token"}
@@ -309,12 +309,9 @@ def test_run_next_async_completes_and_moves_to_completed_on_success(client, tmp_
 
 def test_queue_jobs_endpoint(client, tmp_path):
     """Verify GET /api/admin/queue/jobs returns list of recent jobs."""
-    mock_process_res = subprocess.CompletedProcess(
-        args=["./scripts/run-task.sh"],
-        returncode=0,
-        stdout="Task ID: task-20260918-123456",
-        stderr=""
-    )
+    mock_proc = MagicMock()
+    mock_proc.communicate.return_value = ("Task ID: task-20260918-123456", "")
+    mock_proc.returncode = 0
 
     client.post(
         "/api/admin/queue/add",
@@ -322,7 +319,7 @@ def test_queue_jobs_endpoint(client, tmp_path):
         headers={"Authorization": "Bearer dev-operator-token"}
     )
 
-    with patch("subprocess.run", return_value=mock_process_res):
+    with patch("subprocess.Popen", return_value=mock_proc):
         res = client.post(
             "/api/admin/queue/run-next",
             headers={"Authorization": "Bearer dev-operator-token"}

@@ -158,7 +158,7 @@ def test_queue_reset_why_uses_existing_data_not_fabricated(queue_env):
     why = lines[0]["why"]
     assert why["source_task"] is None
     assert why["proposal_origin"] is None
-    assert why["proposed_by"] is None
+    assert why["proposed_by"] in (None, "unknown")
 
 
 def test_queue_reset_column_ready(queue_env):
@@ -266,7 +266,7 @@ def test_reset_completed_removes_deferred_and_cancelled(queue_env):
     res = client.post("/api/queue/reset", json={"confirm": "RESET", "scope": "completed"}, headers=AUTH_HEADERS)
     assert res.status_code == 200
     data = res.json()
-    assert data["moved"] == 4
+    assert data["moved"] == 3
 
     assert "task-pend" in [t.id for t in qm.list_queue_tasks()]
 

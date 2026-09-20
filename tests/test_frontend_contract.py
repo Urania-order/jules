@@ -31,18 +31,21 @@ def test_frontend_contract_sync_button():
 
 
 def test_frontend_contract_queue_view_columns():
-    """Verify queue presentation has 5 status columns and .queue-columns grid class."""
+    """Verify queue presentation has status columns and .queue-columns grid class."""
     content = INDEX_PATH.read_text()
 
     assert '.queue-columns' in content
     assert '.queue-column' in content
 
-    for status_col in ["READY", "RUNNING", "REVIEW", "BLOCKED", "COMPLETED"]:
+    for status_col in ["PENDING", "RUNNING", "BLOCKED", "COMPLETED"]:
         assert status_col in content, f"Column status header {status_col} missing in queue view"
 
-    # Verify PENDING is mapped into READY column
-    assert "PENDING" in content
-    assert "queue-list-ready" in content
+    assert "queue-list-pending" in content
+    assert "queue-list-running-files" in content
+    assert "queue-list-blocked-files" in content
+    assert "btn-file-cancel" in content
+    assert "btn-file-kill" in content
+    assert "btn-file-delete" in content
 
 
 def test_frontend_contract_proposal_modify_ui():
@@ -240,9 +243,8 @@ def test_frontend_contract_v1_1_elements():
     assert '⚠ RESET QUEUES' not in content
 
     # 2. Queue Management view and Reset Center buttons & Modal
-    assert 'id="btn-reset-ready"' in content
+    assert 'id="btn-reset-pending"' in content
     assert 'id="btn-reset-running"' in content
-    assert 'id="btn-reset-review"' in content
     assert 'id="btn-reset-blocked"' in content
     assert 'id="btn-reset-completed"' in content
     assert 'id="btn-reset-all"' in content
@@ -597,3 +599,10 @@ def test_frontend_contract_async_admin_job_polling():
     assert 'Running... (' in content
     assert 'DONE (' in content
     assert 'FAILED - exit_code:' in content
+
+
+def test_frontend_contract_skips_cancelled():
+    """Verify renderQueueTasks, renderRecentTasks, and Control Room filter out CANCELLED tasks."""
+    content = INDEX_PATH.read_text()
+
+    assert "t.status !== 'CANCELLED'" in content

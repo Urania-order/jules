@@ -1214,32 +1214,27 @@
         <input id="task-filter-search" type="text" placeholder="Search id / title / request / author" style="padding: 0.35rem 0.6rem; font-size: 0.85rem; flex: 1; min-width: 200px;">
       </div>
       <div class="queue-columns">
-        <div class="queue-column" id="col-ready">
+        <div class="queue-column" id="col-pending">
           <div class="queue-column-header">
-            <h3>READY</h3>
-            <button class="queue-reset-btn" id="btn-reset-ready" onclick="openResetModal('ready')">Reset</button>
+            <h3>PENDING</h3>
+            <button class="queue-reset-btn" id="btn-reset-pending" onclick="openResetModal('pending')">Reset</button>
           </div>
-          <div id="queue-list-ready" class="task-list"></div>
+          <div id="queue-list-pending" class="task-list"></div>
         </div>
         <div class="queue-column" id="col-running">
           <div class="queue-column-header">
             <h3>RUNNING</h3>
             <button class="queue-reset-btn" id="btn-reset-running" onclick="openResetModal('running')">Reset</button>
           </div>
+          <div id="queue-list-running-files" class="task-list"></div>
           <div id="queue-list-running" class="task-list"></div>
-        </div>
-        <div class="queue-column" id="col-review">
-          <div class="queue-column-header">
-            <h3>REVIEW</h3>
-            <button class="queue-reset-btn" id="btn-reset-review" onclick="openResetModal('review')">Reset</button>
-          </div>
-          <div id="queue-list-review" class="task-list"></div>
         </div>
         <div class="queue-column" id="col-blocked">
           <div class="queue-column-header">
             <h3>BLOCKED</h3>
             <button class="queue-reset-btn" id="btn-reset-blocked" onclick="openResetModal('blocked')">Reset</button>
           </div>
+          <div id="queue-list-blocked-files" class="task-list"></div>
           <div id="queue-list-blocked" class="task-list"></div>
         </div>
         <div class="queue-column" id="col-completed">
@@ -1905,31 +1900,15 @@
       });
     }
 
-    // Attach single dragover listener to READY queue container
-    const readyContainer = document.getElementById('queue-list-ready');
-    if (readyContainer) {
-      readyContainer.addEventListener('dragover', e => {
-        e.preventDefault();
-        const afterElement = getDragAfterElement(readyContainer, e.clientY);
-        const dragging = document.querySelector('.dragging');
-        if (dragging) {
-          if (afterElement == null) {
-            readyContainer.appendChild(dragging);
-          } else {
-            readyContainer.insertBefore(dragging, afterElement);
-          }
-        }
-      });
-    }
-
     function renderRecentTasks() {
       const container = document.getElementById('recent-tasks-list');
       container.innerHTML = '';
-      if (currentTasks.length === 0) {
+      const validTasks = currentTasks.filter(t => t.status !== 'CANCELLED');
+      if (validTasks.length === 0) {
         container.innerHTML = '<div class="empty-state">No tasks in queue</div>';
         return;
       }
-      const sortedTasks = sortTasksByCreatedAt(currentTasks, true);
+      const sortedTasks = sortTasksByCreatedAt(validTasks, true);
       sortedTasks.slice(0, 5).forEach(task => {
         container.appendChild(createTaskCard(task));
       });
@@ -2162,88 +2141,161 @@
       });
     }
 
-    function renderQueueTasks() {
-      const lists = {
-        READY: document.getElementById('queue-list-ready'),
-        RUNNING: document.getElementById('queue-list-running'),
-        REVIEW: document.getElementById('queue-list-review'),
-        BLOCKED: document.getElementById('queue-list-blocked'),
-        COMPLETED: document.getElementById('queue-list-completed')
-      };
+    async function renderQueueTasks() {
+      const pendingList = document.getElementById('queue-list-pending');
+      const runningFilesList = document.getElementById('queue-list-running-files');
+      const runningTaskList = document.getElementById('queue-list-running');
+      const blockedFilesList = document.getElementById('queue-list-blocked-files');
+      const blockedTaskList = document.getElementById('queue-list-blocked');
+      const completedTaskList = document.getElementById('queue-list-completed');
 
-      Object.values(lists).forEach(el => { if (el) el.innerHTML = ''; });
+      if (pendingList) pendingList.innerHTML = '';
+      if (runningFilesList) runningFilesList.innerHTML = '';
+      if (runningTaskList) runningTaskList.innerHTML = '';
+      if (blockedFilesList) blockedFilesList.innerHTML = '';
+      if (blockedTaskList) blockedTaskList.innerHTML = '';
+      if (completedTaskList) completedTaskList.innerHTML = '';
 
-      const filtered = applyTaskFilters(currentTasks);
+      // Render File Cards from GET /api/queue/files
+      try {
+        const filesData = await fetchJSON(`${API_BASE}/queue/files`);
+
+        // PENDING file cards
+        (filesData.pending || []).forEach(f => {
+          if (pendingList) {
+            const el = createFileCard(f, 'pending');
+            pendingList.appendChild(el);
+          }
+        });
+
+        // RUNNING file cards
+        (filesData.running || []).forEach(f => {
+          if (runningFilesList) {
+            const el = createFileCard(f, 'running');
+            runningFilesList.appendChild(el);
+          }
+        });
+
+        // BLOCKED file cards
+        (filesData.blocked || []).forEach(f => {
+          if (blockedFilesList) {
+            const el = createFileCard(f, 'blocked');
+            blockedFilesList.appendChild(el);
+          }
+        });
+      } catch (e) {
+        console.error('Failed to load queue files:', e);
+      }
+
+      // Render Task Cards (skipping CANCELLED)
+      const filtered = applyTaskFilters(currentTasks).filter(t => t.status !== 'CANCELLED');
 
       filtered.forEach(task => {
         const card = createTaskCard(task);
-        let targetList = lists.READY;
+        card.draggable = false;
 
-        if (task.status === 'PENDING' || task.status === 'READY') {
-          targetList = lists.READY;
-          card.draggable = true;
-          card.dataset.id = task.id;
-
-          card.addEventListener('dragstart', () => card.classList.add('dragging'));
-          card.addEventListener('dragend', () => {
-            card.classList.remove('dragging');
-            saveQueueOrder();
-          });
-        } else if (task.status === 'RUNNING') {
-          targetList = lists.RUNNING;
-          card.draggable = false;
-        } else if (task.status === 'REVIEW') {
-          targetList = lists.REVIEW;
-          card.draggable = false;
-        } else if (task.status === 'BLOCKED' || task.status === 'FAILED' || task.status === 'CANCELLED') {
-          targetList = lists.BLOCKED;
-          card.draggable = false;
+        if (task.status === 'RUNNING') {
+          if (runningTaskList) runningTaskList.appendChild(card);
+        } else if (task.status === 'BLOCKED' || task.status === 'FAILED') {
+          if (blockedTaskList) blockedTaskList.appendChild(card);
         } else if (task.status === 'COMPLETED') {
-          targetList = lists.COMPLETED;
-          card.draggable = false;
-        } else {
-          targetList = lists.BLOCKED;
-          card.draggable = false;
-        }
-
-        if (targetList) {
-          targetList.appendChild(card);
+          if (completedTaskList) completedTaskList.appendChild(card);
         }
       });
 
-      if (lists.READY && lists.READY.children.length === 0) {
-        lists.READY.innerHTML = '<div class="empty-state">No ready tasks</div>';
+      if (pendingList && pendingList.children.length === 0) {
+        pendingList.innerHTML = '<div class="empty-state">No pending files</div>';
+      }
+      if (runningFilesList && runningTaskList && (runningFilesList.children.length + runningTaskList.children.length) === 0) {
+        runningTaskList.innerHTML = '<div class="empty-state">No running items</div>';
+      }
+      if (blockedFilesList && blockedTaskList && (blockedFilesList.children.length + blockedTaskList.children.length) === 0) {
+        blockedTaskList.innerHTML = '<div class="empty-state">No blocked items</div>';
+      }
+      if (completedTaskList && completedTaskList.children.length === 0) {
+        completedTaskList.innerHTML = '<div class="empty-state">No completed tasks</div>';
+      }
+    }
+
+    function createFileCard(file, folder) {
+      const card = document.createElement('div');
+      card.className = 'task-item task-card';
+      card.style.borderColor = 'var(--border-color)';
+
+      let actionsHTML = '';
+
+      if (folder === 'pending') {
+        actionsHTML = `
+          <button class="btn btn-primary btn-sm btn-file-run-next" onclick="adminRunNext()">▶ Run Next</button>
+          <button class="btn btn-danger btn-sm btn-file-delete" onclick="deleteQueueFile('${folder}', '${escapeHTML(file.filename)}')">🗑 Delete</button>
+        `;
+      } else if (folder === 'running') {
+        const jid = file.job_id || '';
+        actionsHTML = `
+          <button class="btn btn-secondary btn-sm btn-file-cancel" onclick="cancelQueueJob('${jid}')">🛑 Cancel</button>
+          <button class="btn btn-danger btn-sm btn-file-kill" onclick="killQueueJob('${jid}')">☠ Kill</button>
+        `;
+      } else if (folder === 'blocked') {
+        const jid = file.job_id || '';
+        actionsHTML = `
+          <button class="btn btn-secondary btn-sm btn-file-cancel" onclick="cancelQueueJob('${jid}')">🛑 Cancel</button>
+          <button class="btn btn-danger btn-sm btn-file-kill" onclick="killQueueJob('${jid}')">☠ Kill</button>
+          <button class="btn btn-danger btn-sm btn-file-delete" onclick="deleteQueueFile('${folder}', '${escapeHTML(file.filename)}')">🗑 Delete</button>
+        `;
       }
 
-      Object.entries(lists).forEach(([status, el]) => {
-        if (status !== 'READY' && el && el.children.length === 0) {
-          el.innerHTML = '<div class="empty-state">No tasks</div>';
-        }
-      });
+      const elapsed = file.elapsed_sec != null ? ` | ${file.elapsed_sec}s elapsed` : '';
+
+      card.innerHTML = `
+        <div class="task-info" style="flex: 1 1 100%;">
+          <div style="font-weight: 600; color: var(--accent-blue); font-size: 0.95rem;">
+            📄 ${escapeHTML(file.header || file.filename)}
+          </div>
+          <div class="task-meta">
+            <span>${escapeHTML(file.filename)}</span>
+            <span>Created: ${safeDate(file.ctime)}${elapsed}</span>
+          </div>
+        </div>
+        <div class="task-card-actions" style="display: flex; gap: 0.4rem; align-items: center; justify-content: flex-end; width: 100%; margin-top: 0.25rem;">
+          ${actionsHTML}
+        </div>
+      `;
+
+      return card;
     }
 
-    function getDragAfterElement(container, y) {
-      const draggableElements = [...container.querySelectorAll('.task-item:not(.dragging)')];
-      return draggableElements.reduce((closest, child) => {
-        const box = child.getBoundingClientRect();
-        const offset = y - box.top - box.height / 2;
-        if (offset < 0 && offset > closest.offset) {
-          return { offset: offset, element: child };
-        } else {
-          return closest;
-        }
-      }, { offset: Number.NEGATIVE_INFINITY }).element;
-    }
-
-    async function saveQueueOrder() {
-      const ids = [...document.querySelectorAll('#queue-list-ready .task-item')].map(el => el.dataset.id).filter(Boolean);
-      if (ids.length > 0) {
-        await fetchJSON(`${API_BASE}/queue/reorder`, {
-          method: 'POST',
-          headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({ task_ids: ids })
-        });
+    async function deleteQueueFile(folder, filename) {
+      try {
+        await fetchJSON(`${API_BASE}/queue/files/${folder}/${filename}`, { method: 'DELETE' });
         refreshData();
+      } catch (e) {
+        showError('Failed to delete queue file: ' + e.message);
+      }
+    }
+
+    async function cancelQueueJob(jobId) {
+      if (!jobId) {
+        showError('No active job ID associated with file');
+        return;
+      }
+      try {
+        await fetchJSON(`${API_BASE}/admin/queue/cancel/${jobId}`, { method: 'POST' });
+        refreshData();
+      } catch (e) {
+        showError('Failed to cancel job: ' + e.message);
+      }
+    }
+
+    async function killQueueJob(jobId) {
+      if (!jobId) {
+        showError('No active job ID associated with file');
+        return;
+      }
+      try {
+        await fetchJSON(`${API_BASE}/admin/queue/kill/${jobId}`, { method: 'POST' });
+        refreshData();
+      } catch (e) {
+        showError('Failed to kill job: ' + e.message);
       }
     }
 
@@ -3900,8 +3952,8 @@
       startAdminJobPolling(activeJobId);
     }
 
-    // Auto-refresh every 5 seconds
-    setInterval(refreshData, 5000);
+    // Auto-refresh every 10 seconds
+    setInterval(refreshData, 10000);
     refreshData();
   </script>
 </body>

@@ -19,12 +19,30 @@ class QueueManager:
         self.state_file = self.project_root / ".co-smos" / "state.json"
         self.pending_dir = self.queue_dir / "pending"
         self.running_dir = self.queue_dir / "running"
+        self.blocked_dir = self.queue_dir / "blocked"
         self.completed_dir = self.queue_dir / "completed"
         self.proposed_dir = self.queue_dir / "proposed"
         self.deferred_dir = self.queue_dir / "deferred"
 
-        for d in [self.pending_dir, self.running_dir, self.completed_dir, self.proposed_dir, self.deferred_dir]:
+        for d in [self.pending_dir, self.running_dir, self.blocked_dir, self.completed_dir, self.proposed_dir, self.deferred_dir]:
             d.mkdir(parents=True, exist_ok=True)
+
+    def _iso_from_task_id(self, tid: Optional[str]) -> Optional[str]:
+        import re
+        from datetime import datetime, timezone
+        if not tid or not tid.startswith("task-"):
+            return None
+        m = re.match(r"^task-(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})", tid)
+        if not m:
+            return None
+        try:
+            return datetime(
+                int(m.group(1)), int(m.group(2)), int(m.group(3)),
+                int(m.group(4)), int(m.group(5)), int(m.group(6)),
+                tzinfo=timezone.utc
+            ).isoformat()
+        except ValueError:
+            return None
 
     def _task_from_dict(self, data: Dict[str, Any], default_status: TaskStatus) -> Task:
         raw_status = data.get("status")
@@ -38,18 +56,26 @@ class QueueManager:
                 except KeyError:
                     status_enum = default_status
 
-        req = data.get("request") or data.get("description") or data.get("title") or "Unnamed task"
+        tid = data.get("id", "unknown-task")
+        req = data.get("request") or data.get("description") or data.get("title")
+        if not req:
+            req = tid if tid.startswith("task-") else "Unnamed task"
+
+        title = data.get("title") or req.split("\n")[0][:80]
+        created_at = data.get("created_at") or self._iso_from_task_id(tid) or ""
+        proposed_by = data.get("proposed_by") or "unknown"
+
         return Task(
-            id=data.get("id", "unknown-task"),
+            id=tid,
             request=req,
-            title=data.get("title") or req[:50],
+            title=title,
             description=data.get("description"),
             status=status_enum,
             priority=int(data.get("priority", 5)),
-            created_at=data.get("created_at") or "",
+            created_at=created_at,
             started_at=data.get("started_at"),
             finished_at=data.get("finished_at"),
-            proposed_by=data.get("proposed_by"),
+            proposed_by=proposed_by,
             source_task=data.get("source_task"),
             session_id=data.get("session_id"),
             jules_task_id=data.get("jules_task_id"),
@@ -68,7 +94,7 @@ class QueueManager:
 
     def list_all_tasks(self) -> List[Task]:
         tasks = []
-        seen_ids = set()
+        by_id: Dict[str, Dict[str, Any]] = {}
 
         # Primary source: state.json
         if self.state_file.exists():
@@ -88,11 +114,19 @@ class QueueManager:
                     if not isinstance(item, dict):
                         continue
                     tid = item.get("id")
-                    if tid and tid not in seen_ids:
-                        tasks.append(self._task_from_dict(item, TaskStatus.PENDING))
-                        seen_ids.add(tid)
+                    if not tid:
+                        continue
+                    raw_status = (item.get("status") or "").upper()
+                    if raw_status == "CANCELLED":
+                        continue
+                    by_id[tid] = item  # last wins
+
+                for tid, item in by_id.items():
+                    tasks.append(self._task_from_dict(item, TaskStatus.PENDING))
             except Exception:
                 pass
+
+        seen_ids = set(by_id.keys())
 
         # Legacy file source: .jules/queue/*.json
         directories = [
@@ -106,6 +140,9 @@ class QueueManager:
                 try:
                     data = json.loads(p.read_text(encoding="utf-8"))
                     tid = data.get("id") or p.stem
+                    raw_status = (data.get("status") or "").upper()
+                    if raw_status == "CANCELLED":
+                        continue
                     if tid not in seen_ids:
                         tasks.append(self._task_from_dict(data, default_status))
                         seen_ids.add(tid)
@@ -126,10 +163,42 @@ class QueueManager:
         return [t for t in self.list_all_tasks() if t.status in queue_statuses]
 
     def get_task(self, task_id: str) -> Optional[Task]:
-        all_tasks = self.list_all_tasks()
-        for t in all_tasks:
-            if t.id == task_id:
-                return t
+        if self.state_file.exists():
+            try:
+                state_data = json.loads(self.state_file.read_text(encoding="utf-8"))
+                candidates = []
+                if isinstance(state_data.get("tasks"), list):
+                    candidates.extend(state_data["tasks"])
+                if isinstance(state_data.get("history"), list):
+                    candidates.extend(state_data["history"])
+                if isinstance(state_data.get("active_task"), dict):
+                    candidates.append(state_data["active_task"])
+                if isinstance(state_data.get("last_task"), dict):
+                    candidates.append(state_data["last_task"])
+
+                for item in reversed(candidates):
+                    if isinstance(item, dict) and item.get("id") == task_id:
+                        return self._task_from_dict(item, TaskStatus.PENDING)
+            except Exception:
+                pass
+
+        # Legacy file source: .jules/queue/*.json
+        directories = [
+            (self.pending_dir, TaskStatus.PENDING),
+            (self.running_dir, TaskStatus.RUNNING),
+            (self.completed_dir, TaskStatus.COMPLETED),
+            (self.deferred_dir, TaskStatus.DEFERRED),
+        ]
+        for folder, default_status in directories:
+            for p in folder.glob("*.json"):
+                try:
+                    data = json.loads(p.read_text(encoding="utf-8"))
+                    tid = data.get("id") or p.stem
+                    if tid == task_id:
+                        return self._task_from_dict(data, default_status)
+                except Exception:
+                    continue
+
         return None
 
     def save_task(self, task: Task) -> None:

@@ -439,26 +439,18 @@ class AdminQueueAddRequest(BaseModel):
 
 RUN_JOBS: Dict[str, Dict[str, Any]] = {}
 
-def _run_job_worker(job_id: str, filename: str, cmd: List[str], project_root: Path, running_txt: Path, running_meta: Path, meta_filename: str, role: str, t0: float):
+def _run_job_worker(job_id: str, filename: str, proc: subprocess.Popen, project_root: Path, running_txt: Path, running_meta: Path, meta_filename: str, role: str, t0: float):
     completed_dir = project_root / ".jules" / "queue" / "completed"
     queue_dir = project_root / ".jules" / "queue"
 
     try:
-        res = subprocess.run(
-            cmd,
-            cwd=str(project_root),
-            capture_output=True,
-            text=True,
-            timeout=1200,
-            check=False
-        )
-        exit_code = res.returncode
-        stdout = res.stdout or ""
-        stderr = res.stderr or ""
-    except subprocess.TimeoutExpired as e:
+        stdout, stderr = proc.communicate(timeout=1200)
+        exit_code = proc.returncode
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        stdout, stderr = proc.communicate()
         exit_code = 124
-        stdout = e.stdout.decode() if isinstance(e.stdout, bytes) else (e.stdout or "")
-        stderr = (e.stderr.decode() if isinstance(e.stderr, bytes) else (e.stderr or "")) + "\nrun-task.sh timed out after 1200 seconds."
+        stderr = (stderr or "") + "\nrun-task.sh timed out after 1200 seconds."
     except Exception as e:
         exit_code = 1
         stdout = ""
@@ -468,13 +460,19 @@ def _run_job_worker(job_id: str, filename: str, cmd: List[str], project_root: Pa
     duration_ms = int((time.time() - t0) * 1000)
 
     task_id = None
-    match = re.search(r"task-[0-9]{8}-[0-9]{6}", stdout)
-    if match:
-        task_id = match.group(0)
+    if stdout:
+        match = re.search(r"task-[0-9]{8}-[0-9]{6}", stdout)
+        if match:
+            task_id = match.group(0)
+
+    if job_id in RUN_JOBS:
+        if RUN_JOBS[job_id].get("status") in ("cancelled", "killed"):
+            return
 
     if exit_code == 0:
         completed_txt = completed_dir / filename
-        shutil.move(str(running_txt), str(completed_txt))
+        if running_txt.exists():
+            shutil.move(str(running_txt), str(completed_txt))
         if running_meta.exists():
             completed_meta = completed_dir / meta_filename
             shutil.move(str(running_meta), str(completed_meta))
@@ -500,10 +498,28 @@ def _run_job_worker(job_id: str, filename: str, cmd: List[str], project_root: Pa
             "finished_at": finished_at,
             "task_id": task_id,
             "exit_code": exit_code,
-            "stdout": stdout,
-            "stderr": stderr,
+            "stdout": stdout or "",
+            "stderr": stderr or "",
             "duration_ms": duration_ms
         })
+
+def _move_job_file_to_deferred(project_root: Path, filename: str):
+    queue_dir = project_root / ".jules" / "queue"
+    deferred_dir = queue_dir / "deferred"
+    deferred_dir.mkdir(parents=True, exist_ok=True)
+
+    meta_filename = Path(filename).stem + ".meta.json"
+
+    for src_folder in ["running", "blocked", "pending"]:
+        src_dir = queue_dir / src_folder
+        txt_path = src_dir / filename
+        if txt_path.exists():
+            dest_path = deferred_dir / filename
+            shutil.move(str(txt_path), str(dest_path))
+        meta_path = src_dir / meta_filename
+        if meta_path.exists():
+            dest_meta = deferred_dir / meta_filename
+            shutil.move(str(meta_path), str(dest_meta))
 
 ADMIN_COMMAND_WHITELIST = {
     "test": {
@@ -800,7 +816,11 @@ def admin_queue_run_next(role: str = Depends(require_operator)):
             }
         )
 
-    pending_files.sort(key=lambda f: f.stat().st_mtime)
+    def _ctime(f: Path):
+        st = f.stat()
+        return getattr(st, "st_birthtime", st.st_mtime)
+
+    pending_files.sort(key=_ctime)
     oldest_txt = pending_files[0]
     filename = oldest_txt.name
 
@@ -828,6 +848,14 @@ def admin_queue_run_next(role: str = Depends(require_operator)):
     job_id = uuid.uuid4().hex[:8]
     started_at = datetime.now(timezone.utc).isoformat()
 
+    proc = subprocess.Popen(
+        cmd,
+        cwd=str(project_root),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True
+    )
+
     job_record = {
         "job_id": job_id,
         "status": "running",
@@ -838,13 +866,14 @@ def admin_queue_run_next(role: str = Depends(require_operator)):
         "exit_code": None,
         "stdout": "",
         "stderr": "",
-        "duration_ms": None
+        "duration_ms": None,
+        "proc": proc
     }
     RUN_JOBS[job_id] = job_record
 
     thread = threading.Thread(
         target=_run_job_worker,
-        args=(job_id, filename, cmd, project_root, running_txt, running_meta, meta_filename, role, t0),
+        args=(job_id, filename, proc, project_root, running_txt, running_meta, meta_filename, role, t0),
         daemon=True
     )
     thread.start()
@@ -859,13 +888,198 @@ def admin_queue_run_next(role: str = Depends(require_operator)):
 def get_admin_queue_job(job_id: str):
     if job_id not in RUN_JOBS:
         return _error_response(code="JOB_NOT_FOUND", message=f"Job '{job_id}' not found", status_code=404)
-    return RUN_JOBS[job_id]
+    rec = dict(RUN_JOBS[job_id])
+    rec.pop("proc", None)
+    return rec
 
 @app.get("/api/admin/queue/jobs", dependencies=[Depends(require_operator)])
 def list_admin_queue_jobs():
-    jobs_list = list(RUN_JOBS.values())
+    jobs_list = []
+    for j in RUN_JOBS.values():
+        rec = dict(j)
+        rec.pop("proc", None)
+        jobs_list.append(rec)
     jobs_list.sort(key=lambda x: x.get("started_at") or "", reverse=True)
     return {"jobs": jobs_list[:20]}
+
+@app.post("/api/admin/queue/cancel/{job_id}", dependencies=[Depends(require_operator)])
+def admin_queue_cancel_job(job_id: str, role: str = Depends(require_operator)):
+    if job_id not in RUN_JOBS:
+        return _error_response(code="JOB_NOT_FOUND", message=f"Job '{job_id}' not found", status_code=404)
+
+    job = RUN_JOBS[job_id]
+    proc: Optional[subprocess.Popen] = job.get("proc")
+    if proc and proc.poll() is None:
+        try:
+            proc.terminate()
+            try:
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.wait()
+        except Exception as e:
+            logger.error("Error terminating process for job %s: %s", job_id, e)
+
+    job["status"] = "cancelled"
+    job["finished_at"] = datetime.now(timezone.utc).isoformat()
+
+    project_root = Path(os.environ.get("JULES_PROJECT_ROOT", ".")).resolve()
+    filename = job.get("filename")
+    if filename:
+        _move_job_file_to_deferred(project_root, filename)
+
+    write_admin_audit_entry(
+        command="queue/cancel",
+        args=job_id,
+        exit_code=0,
+        by=role,
+        duration_ms=0
+    )
+
+    rec = dict(job)
+    rec.pop("proc", None)
+    return rec
+
+@app.post("/api/admin/queue/kill/{job_id}", dependencies=[Depends(require_operator)])
+def admin_queue_kill_job(job_id: str, role: str = Depends(require_operator)):
+    if job_id not in RUN_JOBS:
+        return _error_response(code="JOB_NOT_FOUND", message=f"Job '{job_id}' not found", status_code=404)
+
+    job = RUN_JOBS[job_id]
+    proc: Optional[subprocess.Popen] = job.get("proc")
+    if proc and proc.poll() is None:
+        try:
+            proc.kill()
+            proc.wait()
+        except Exception as e:
+            logger.error("Error killing process for job %s: %s", job_id, e)
+
+    job["status"] = "killed"
+    job["finished_at"] = datetime.now(timezone.utc).isoformat()
+
+    project_root = Path(os.environ.get("JULES_PROJECT_ROOT", ".")).resolve()
+    filename = job.get("filename")
+    if filename:
+        _move_job_file_to_deferred(project_root, filename)
+
+    write_admin_audit_entry(
+        command="queue/kill",
+        args=job_id,
+        exit_code=0,
+        by=role,
+        duration_ms=0
+    )
+
+    rec = dict(job)
+    rec.pop("proc", None)
+    return rec
+
+@app.get("/api/queue/files", dependencies=[Depends(require_operator)])
+def list_queue_files():
+    project_root = Path(os.environ.get("JULES_PROJECT_ROOT", ".")).resolve()
+    queue_dir = project_root / ".jules" / "queue"
+
+    active_jobs_by_file = {}
+    for jid, job in RUN_JOBS.items():
+        fname = job.get("filename")
+        if fname and job.get("status") == "running":
+            active_jobs_by_file[fname] = job
+
+    def _get_file_cards(directory: Path):
+        if not directory.exists():
+            return []
+        res = []
+
+        def _ctime(f: Path):
+            st = f.stat()
+            return getattr(st, "st_birthtime", st.st_mtime)
+
+        files = [f for f in directory.glob("*.txt") if f.is_file()]
+        files.sort(key=_ctime)
+
+        for f in files:
+            stat = f.stat()
+            ctime_val = getattr(stat, "st_birthtime", stat.st_mtime)
+            ctime_iso = datetime.fromtimestamp(ctime_val, tz=timezone.utc).isoformat()
+
+            try:
+                content = f.read_text(encoding="utf-8")
+                header = content.strip().split("\n")[0][:80]
+            except Exception:
+                header = f.name
+
+            item = {
+                "filename": f.name,
+                "size": stat.st_size,
+                "header": header,
+                "ctime": ctime_iso
+            }
+
+            if f.name in active_jobs_by_file:
+                job = active_jobs_by_file[f.name]
+                item["job_id"] = job["job_id"]
+                st_time = job.get("started_at")
+                if st_time:
+                    try:
+                        st_dt = datetime.fromisoformat(st_time)
+                        now_dt = datetime.now(timezone.utc)
+                        item["elapsed_sec"] = max(0, int((now_dt - st_dt).total_seconds()))
+                    except Exception:
+                        pass
+                proc = job.get("proc")
+                if proc and hasattr(proc, "pid"):
+                    item["pid"] = proc.pid
+
+            res.append(item)
+        return res
+
+    return {
+        "pending": _get_file_cards(queue_dir / "pending"),
+        "running": _get_file_cards(queue_dir / "running"),
+        "blocked": _get_file_cards(queue_dir / "blocked"),
+        "completed": _get_file_cards(queue_dir / "completed"),
+        "deferred": _get_file_cards(queue_dir / "deferred"),
+    }
+
+@app.delete("/api/queue/files/{folder}/{filename}", dependencies=[Depends(require_operator)])
+def delete_queue_file(folder: str, filename: str, role: str = Depends(require_operator)):
+    if folder not in ("pending", "running", "blocked", "completed"):
+        return _error_response(code="INVALID_FOLDER", message=f"Invalid folder '{folder}'", status_code=400)
+
+    if ".." in filename or "/" in filename or "\\" in filename:
+        return _error_response(code="INVALID_FILENAME", message="Path traversal characters not allowed", status_code=400)
+
+    project_root = Path(os.environ.get("JULES_PROJECT_ROOT", ".")).resolve()
+    queue_dir = project_root / ".jules" / "queue"
+    src_dir = (queue_dir / folder).resolve()
+    deferred_dir = (queue_dir / "deferred").resolve()
+    deferred_dir.mkdir(parents=True, exist_ok=True)
+
+    file_path = (src_dir / filename).resolve()
+    if not str(file_path).startswith(str(src_dir)):
+        return _error_response(code="INVALID_FILENAME", message="Path traversal prohibited", status_code=400)
+
+    if not file_path.exists() or not file_path.is_file():
+        return _error_response(code="FILE_NOT_FOUND", message=f"File '{filename}' not found in folder '{folder}'", status_code=404)
+
+    target_txt = deferred_dir / filename
+    shutil.move(str(file_path), str(target_txt))
+
+    meta_filename = file_path.stem + ".meta.json"
+    meta_path = src_dir / meta_filename
+    if meta_path.exists() and meta_path.is_file():
+        target_meta = deferred_dir / meta_filename
+        shutil.move(str(meta_path), str(target_meta))
+
+    write_admin_audit_entry(
+        command="queue/file-delete",
+        args=f"{folder}/{filename}",
+        exit_code=0,
+        by=role,
+        duration_ms=0
+    )
+
+    return {"deleted": True, "filename": filename, "folder": folder, "moved_to": "deferred"}
 
 @app.get("/api/admin/queue/list", dependencies=[Depends(require_operator)])
 def admin_queue_list():
