@@ -114,6 +114,35 @@ def test_admin_run_requires_operator(client):
     assert res_admin.status_code == 200
 
 
+def test_queue_status_includes_running_tasks(client, tmp_path, monkeypatch):
+    """Verify GET /api/queue/status counts both running .txt files and state.json RUNNING tasks."""
+    monkeypatch.setenv("JULES_PROJECT_ROOT", str(tmp_path))
+    queue_dir = tmp_path / ".jules" / "queue"
+    (queue_dir / "running").mkdir(parents=True, exist_ok=True)
+    (queue_dir / "running" / "task1.txt").write_text("running 1", encoding="utf-8")
+
+    state_dir = tmp_path / ".co-smos"
+    state_dir.mkdir(parents=True, exist_ok=True)
+    state_file = state_dir / "state.json"
+    state_file.write_text(json.dumps({
+        "active_task": {
+            "id": "task-20260920-120000",
+            "status": "RUNNING",
+            "title": "Running Task"
+        }
+    }), encoding="utf-8")
+
+    res = client.get(
+        "/api/queue/status",
+        headers={"Authorization": "Bearer dev-operator-token"}
+    )
+    assert res.status_code == 200
+    data = res.json()
+    assert data["running_files"] == 1
+    assert data["running_tasks"] == 1
+    assert data["running"] == 2
+
+
 def test_admin_run_logs_audit(client, tmp_path):
     """Verify admin command executions write entries to .jules/history/admin_audit.jsonl and API audit endpoint."""
     res = client.post(

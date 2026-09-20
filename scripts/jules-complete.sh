@@ -376,6 +376,37 @@ state["history"].append(completed)
 
 state_file.write_text(json.dumps(state, indent=2, ensure_ascii=False) + "\n")
 print(f"      state.json updated: {task_id} -> completed (result={pull_result})")
+
+import re
+normalized_count = 0
+
+def _norm_entry(entry):
+    if not isinstance(entry, dict):
+        return False
+    tid = entry.get("id")
+    if not tid or not isinstance(tid, str):
+        return False
+    m = re.match(r"^task-(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})", tid)
+    if not m:
+        return False
+    iso_val = f"{m.group(1)}-{m.group(2)}-{m.group(3)}T{m.group(4)}:{m.group(5)}:{m.group(6)}+00:00"
+    if entry.get("created_at") != iso_val:
+        entry["created_at"] = iso_val
+        return True
+    return False
+
+for h in state.get("history", []):
+    if _norm_entry(h):
+        normalized_count += 1
+if _norm_entry(state.get("active_task")):
+    normalized_count += 1
+if _norm_entry(state.get("last_task")):
+    normalized_count += 1
+
+if normalized_count > 0:
+    state_file.write_text(json.dumps(state, indent=2, ensure_ascii=False) + "\n")
+
+print(f"normalized created_at for {normalized_count} task(s)")
 PY
 log_step "[5/9]" "OK" 0
 

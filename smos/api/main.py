@@ -36,7 +36,7 @@ from smos.services.observatory_service import ObservatoryService
 from smos.services.commons_service import CommonsService
 
 # Core & Adapters
-from smos.core.state import StateManager
+from smos.core.state import StateManager, normalize_created_at_state
 from smos.core.queue import QueueManager
 from smos.core.proposals import ProposalManager, Proposal
 from smos.core.events import EventTracker
@@ -88,6 +88,10 @@ async def background_scheduler_loop():
 @contextlib.asynccontextmanager
 async def lifespan(app: FastAPI):
     log_default_token_warning_once()
+    try:
+        normalize_created_at_state(".co-smos/state.json")
+    except Exception as e:
+        logger.warning(f"normalize_created_at failed: {e}")
     scheduler_task = asyncio.create_task(background_scheduler_loop())
     yield
     scheduler_task.cancel()
@@ -985,9 +989,16 @@ def get_queue_status():
             return 0
         return len([f for f in folder.glob("*.txt") if f.is_file()])
 
+    qm = QueueManager()
+    tasks = qm.list_all_tasks()
+    running_tasks = sum(1 for t in tasks if t.status == TaskStatus.RUNNING)
+
+    running_files = _count_txt("running")
     return {
         "pending": _count_txt("pending"),
-        "running": _count_txt("running"),
+        "running": running_files + running_tasks,
+        "running_files": running_files,
+        "running_tasks": running_tasks,
         "blocked": _count_txt("blocked"),
         "deferred": _count_txt("deferred"),
     }

@@ -629,3 +629,11 @@ def test_frontend_contract_v1_2_6_refresh_and_led():
 
     # 3. Strict check: NO auto-refresh setInterval(refreshData, ...)
     assert 'setInterval(refreshData' not in content
+
+
+def test_frontend_contract_sort_uses_id_fallback():
+    """Verify sortTasksByCreatedAt in index.html parses task ID timestamp when created_at is missing."""
+    content = INDEX_PATH.read_text()
+
+    assert 'function sortTasksByCreatedAt(' in content
+    assert 'id.match(/^task-(\\d{4})(\\d{2})(\\d{2})-(\\d{2})(\\d{2})(\\d{2})/' in content

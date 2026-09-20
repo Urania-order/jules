@@ -308,3 +308,50 @@ def test_queue_runner_sorts_by_created_at(isolated_env):
 
     # Selected task should be task-222 because created_at is earlier ("2026-09-18T10:00:00Z" < "2026-09-18T20:00:00Z")
     assert "Selected task for execution: task-222" in res.stdout
+
+
+def test_normalize_created_at_from_id(tmp_path):
+    """Verify normalize_created_at_state converts task-YYYYMMDD-HHMMSS to ISO created_at."""
+    from smos.core.state import normalize_created_at_state
+
+    state_file = tmp_path / "state.json"
+    state_file.write_text(json.dumps({
+        "history": [
+            {
+                "id": "task-20260920-155505",
+                "created_at": "2026-09-20T12:00:00.000000",
+                "title": "Task 1"
+            }
+        ],
+        "active_task": {
+            "id": "task-20260920-160000",
+            "created_at": None,
+            "title": "Task 2"
+        }
+    }), encoding="utf-8")
+
+    count = normalize_created_at_state(state_file)
+    assert count == 2
+
+    data = json.loads(state_file.read_text(encoding="utf-8"))
+    assert data["history"][0]["created_at"] == "2026-09-20T15:55:05+00:00"
+    assert data["active_task"]["created_at"] == "2026-09-20T16:00:00+00:00"
+
+
+def test_normalize_created_at_idempotent(tmp_path):
+    """Verify normalize_created_at_state is idempotent and returns 0 when already normalized."""
+    from smos.core.state import normalize_created_at_state
+
+    state_file = tmp_path / "state.json"
+    state_file.write_text(json.dumps({
+        "history": [
+            {
+                "id": "task-20260920-155505",
+                "created_at": "2026-09-20T15:55:05+00:00",
+                "title": "Task 1"
+            }
+        ]
+    }), encoding="utf-8")
+
+    count = normalize_created_at_state(state_file)
+    assert count == 0

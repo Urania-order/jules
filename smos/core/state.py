@@ -2,10 +2,64 @@
 
 import json
 import os
+import re
 from pathlib import Path
-from typing import Dict, Any
+from typing import Dict, Any, Union
 from smos.core.queue import QueueManager
 from smos.core.proposals import ProposalManager
+
+
+def normalize_created_at_state(state_path: Union[str, Path] = ".co-smos/state.json") -> int:
+    state_file = Path(state_path)
+    if not state_file.exists():
+        return 0
+
+    try:
+        data = json.loads(state_file.read_text(encoding="utf-8"))
+    except Exception:
+        return 0
+
+    if not isinstance(data, dict):
+        return 0
+
+    normalized_count = 0
+
+    def _normalize_entry(entry: Any) -> bool:
+        if not isinstance(entry, dict):
+            return False
+        tid = entry.get("id")
+        if not tid or not isinstance(tid, str):
+            return False
+        m = re.match(r"^task-(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})", tid)
+        if not m:
+            return False
+
+        iso_from_id = f"{m.group(1)}-{m.group(2)}-{m.group(3)}T{m.group(4)}:{m.group(5)}:{m.group(6)}+00:00"
+        if entry.get("created_at") != iso_from_id:
+            entry["created_at"] = iso_from_id
+            return True
+        return False
+
+    for h in data.get("history", []):
+        if _normalize_entry(h):
+            normalized_count += 1
+
+    tasks = data.get("tasks", [])
+    if isinstance(tasks, list):
+        for t in tasks:
+            if _normalize_entry(t):
+                normalized_count += 1
+
+    if _normalize_entry(data.get("active_task")):
+        normalized_count += 1
+
+    if _normalize_entry(data.get("last_task")):
+        normalized_count += 1
+
+    if normalized_count > 0:
+        state_file.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+
+    return normalized_count
 
 
 class StateManager:
