@@ -26,6 +26,7 @@ Known mistakes and rules to avoid them.
 
 ### Process / Orchestration
 
+- ERRATA-0038 — git index.lock race in jules-complete.sh (MEDIUM)
 - ERRATA-0033 — state.json patch conflict (FIXED fa39ad7)
 - ERRATA-0029 — FIXED: 0027 + 0028 Issue 3 (INFO)
 - ERRATA-0028 — Schedule fired unexpectedly (MEDIUM)
