@@ -26,6 +26,7 @@ Known mistakes and rules to avoid them.
 
 ### Process / Orchestration
 
+- ERRATA-0040 — Jules writes non-working bash mock tests (MEDIUM)
 - ERRATA-0039 — run-task.sh reports unknown for valid session (MEDIUM)
 - ERRATA-0038 — git index.lock race in jules-complete.sh (MEDIUM)
 - ERRATA-0033 — state.json patch conflict (FIXED fa39ad7)
