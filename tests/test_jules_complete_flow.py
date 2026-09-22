@@ -61,6 +61,7 @@ def setup_complete_env(tmp_path, monkeypatch):
 
     # Initial code commit
     (tmp_path / "README.md").write_text("# Test Repo\n")
+    (tmp_path / ".gitignore").write_text("mock_bin/\n")
     subprocess.run(["git", "add", "."], cwd=tmp_path, check=True)
     subprocess.run(["git", "commit", "-m", "initial commit"], cwd=tmp_path, check=True)
 
@@ -426,3 +427,76 @@ def test_jules_complete_fallback_request_from_title(setup_complete_env):
     assert last is not None
     assert last["title"] == "Title present but request missing"
     assert last["request"] == "Title present but request missing"
+
+
+def test_jules_complete_removes_stale_lock(setup_complete_env):
+    """Verify scripts/jules-complete.sh removes stale .git/index.lock when no git commit process is active."""
+    tmp_path = setup_complete_env["root"]
+    lock_file = tmp_path / ".git" / "index.lock"
+    lock_file.write_text("stale lock")
+
+    # Update mock jules binary to create a file during pull step
+    mock_jules = setup_complete_env["mock_bin"] / "jules"
+    mock_jules.write_text("""#!/usr/bin/env bash
+if [ "$1" = "remote" ] && [ "$2" = "pull" ]; then
+    mkdir -p smos
+    echo "# Pulled change" > smos/stale_lock_test.py
+    echo "Pulled remote changes successfully."
+    exit 0
+fi
+exit 0
+""")
+    mock_jules.chmod(0o755)
+
+    res = run_complete_script(
+        setup_complete_env,
+        "--task", setup_complete_env["task_id"],
+        env_vars={"JULES_NO_PUSH": "1", "JULES_SKIP_CI": "1", "MOCK_PYTEST_EXIT": "0"}
+    )
+    assert res.returncode == 0, f"Stdout: {res.stdout}\nStderr: {res.stderr}"
+    assert "code commit done" in res.stdout
+    assert not lock_file.exists()
+
+
+def test_jules_complete_retries_on_lock(setup_complete_env):
+    """Verify scripts/jules-complete.sh retries commit and succeeds after lock is released/cleared."""
+    tmp_path = setup_complete_env["root"]
+
+    # Update mock jules binary to create a file during pull step
+    mock_jules = setup_complete_env["mock_bin"] / "jules"
+    mock_jules.write_text("""#!/usr/bin/env bash
+if [ "$1" = "remote" ] && [ "$2" = "pull" ]; then
+    mkdir -p smos
+    echo "# Pulled change" > smos/retry_lock_test.py
+    echo "Pulled remote changes successfully."
+    exit 0
+fi
+exit 0
+""")
+    mock_jules.chmod(0o755)
+
+    # Create a wrapper for git in mock_bin that simulates lock collision on first commit
+    mock_bin = setup_complete_env["mock_bin"]
+    real_git = "/usr/bin/git"
+    mock_git = mock_bin / "git"
+
+    mock_git.write_text(f"""#!/usr/bin/env bash
+if [ "$1" = "commit" ] && [ ! -f "{tmp_path}/.lock_simulated" ]; then
+    touch "{tmp_path}/.lock_simulated"
+    touch "{tmp_path}/.git/index.lock"
+    echo "Fatal: Unable to create index.lock" >&2
+    exit 128
+fi
+exec {real_git} "$@"
+""")
+    mock_git.chmod(0o755)
+
+    res = run_complete_script(
+        setup_complete_env,
+        "--task", setup_complete_env["task_id"],
+        env_vars={"JULES_NO_PUSH": "1", "JULES_SKIP_CI": "1", "MOCK_PYTEST_EXIT": "0"}
+    )
+    assert res.returncode == 0, f"Stdout: {res.stdout}\nStderr: {res.stderr}"
+    assert "commit attempt 1 failed" in res.stdout or "code commit done" in res.stdout
+    assert "code commit done" in res.stdout
+    assert (tmp_path / ".lock_simulated").exists()

@@ -185,6 +185,10 @@ fi
 echo ""
 
 # STEP [1/9]
+if [ -f .git/index.lock ] && ! pgrep -f "git" > /dev/null; then
+  rm -f .git/index.lock
+fi
+
 STASHED=0
 if ! git diff --quiet || ! git diff --cached --quiet || [ -n "$(git ls-files --others --exclude-standard)" ]; then
   echo "[1/9] Stashing local changes..."
@@ -469,6 +473,29 @@ fi
 # STEP [8/9]
 echo "[8/9] Committing and pushing..."
 
+safe_git_commit() {
+  local msg="$1"
+  for attempt in 1 2 3; do
+    if [ -f .git/index.lock ] && ! pgrep -f "git commit" > /dev/null; then
+      rm -f .git/index.lock
+    fi
+    if git commit -m "$msg"; then return 0; fi
+    echo "⚠ commit attempt $attempt failed — retry in 3s"
+    sleep 3
+    rm -f .git/index.lock
+  done
+  return 1
+}
+
+safe_git_push() {
+  local branch="${1:-main}"
+  for attempt in 1 2 3; do
+    if git push origin "$branch"; then return 0; fi
+    sleep 5
+  done
+  return 1
+}
+
 CODE_PATHS=()
 for p in frontend smos tests docs scripts Dockerfile .devcontainer .gitignore; do
   [ -e "$p" ] && CODE_PATHS+=("$p")
@@ -477,11 +504,14 @@ done
 if [ ${#CODE_PATHS[@]} -gt 0 ]; then
   git add "${CODE_PATHS[@]}" 2>/dev/null || true
   if ! git diff --cached --quiet; then
-    git commit -m "feat: apply Jules result for $TASK_ID
+    if safe_git_commit "feat: apply Jules result for $TASK_ID
 
 Session: $SESSION_ID
-Pull result: $PULL_RESULT"
-    echo "      -> code commit done"
+Pull result: $PULL_RESULT"; then
+      echo "      -> code commit done"
+    else
+      echo "      -> code commit failed"
+    fi
   else
     echo "      -> no code changes to commit"
   fi
@@ -492,11 +522,14 @@ for p in "${ART_PATHS[@]}"; do
   [ -e "$p" ] && git add "$p" 2>/dev/null || true
 done
 if ! git diff --cached --quiet; then
-  git commit -m "chore: record Co-SMOS artifacts for $TASK_ID
+  if safe_git_commit "chore: record Co-SMOS artifacts for $TASK_ID
 
 Session: $SESSION_ID
-Pull result: $PULL_RESULT"
-  echo "      -> artifacts commit done"
+Pull result: $PULL_RESULT"; then
+    echo "      -> artifacts commit done"
+  else
+    echo "      -> artifacts commit failed"
+  fi
 else
   echo "      -> no artifacts to commit"
 fi
@@ -508,7 +541,11 @@ else
   CURRENT_BRANCH="$(git rev-parse --abbrev-ref HEAD)"
   if git remote get-url origin >/dev/null 2>&1; then
     echo "      pushing $CURRENT_BRANCH -> origin..."
-    git push origin "$CURRENT_BRANCH" || echo "      WARNING: push failed"
+    if safe_git_push "$CURRENT_BRANCH"; then
+      echo "      -> push done"
+    else
+      echo "      WARNING: push failed"
+    fi
   fi
   log_step "[8/9]" "OK" 0
 fi
