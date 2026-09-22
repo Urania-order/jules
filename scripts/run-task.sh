@@ -45,13 +45,56 @@ POLL_INTERVAL="${JULES_POLL_INTERVAL:-30}"
 ELAPSED=0
 TASK_MATCH=$(echo "$TASK_ID" | sed 's/^task-//')
 STATUS=""
+WARN_PRINTED=0
 
 while [ "$ELAPSED" -lt "$MAX_WAIT_SEC" ]; do
-  SESSION_LINE=$(jules remote list --session 2>/dev/null | grep -F "$TASK_MATCH" | head -1)
-  if [ -z "$SESSION_LINE" ]; then
-      DESC=$(head -c 40 "$TASK_FILE" | tr -d '\n')
-      SESSION_LINE=$(jules remote list --session 2>/dev/null | grep -F "$DESC" | head -1)
+  SESSION_LINE=""
+  REMOTE_LIST=$(jules remote list --session 2>/dev/null || true)
+
+  if [ -n "$REMOTE_LIST" ]; then
+    # a) First: extract session_id from task log (.jules/results/<TASK_ID>.log)
+    SESSION_ID=$(grep -oE 'ID: [0-9]+' ".jules/results/${TASK_ID}.log" 2>/dev/null | head -1 | awk '{print $2}' || true)
+    if [ -n "${SESSION_ID:-}" ]; then
+      SESSION_LINE=$(echo "$REMOTE_LIST" | grep -F "$SESSION_ID" | head -1 || true)
+    fi
+
+    # b) Second: TASK_MATCH (date part) — current
+    if [ -z "$SESSION_LINE" ] && [ -n "${TASK_MATCH:-}" ]; then
+      SESSION_LINE=$(echo "$REMOTE_LIST" | grep -F "$TASK_MATCH" | head -1 || true)
+    fi
+
+    # c) Third: DESC from ## Request section of task file
+    if [ -z "$SESSION_LINE" ]; then
+      DESC=""
+      if [ -f "$TASK_FILE" ]; then
+        DESC=$(awk '/^## Request/{flag=1;next}/^## /{flag=0}flag' "$TASK_FILE" 2>/dev/null | grep -v '^[[:space:]]*$' | head -1 | tr -d '\r\n' | head -c 40 || true)
+      fi
+      if [ -z "$DESC" ] && [ -f ".jules/tasks/${TASK_ID}.md" ]; then
+        DESC=$(awk '/^## Request/{flag=1;next}/^## /{flag=0}flag' ".jules/tasks/${TASK_ID}.md" 2>/dev/null | grep -v '^[[:space:]]*$' | head -1 | tr -d '\r\n' | head -c 40 || true)
+      fi
+      if [ -n "${DESC:-}" ]; then
+        SESSION_LINE=$(echo "$REMOTE_LIST" | grep -F "$DESC" | head -1 || true)
+      fi
+    fi
+
+    # d) Fourth: DESC from anywhere in task file (last resort)
+    if [ -z "$SESSION_LINE" ]; then
+      DESC_ANY=""
+      if [ -f "$TASK_FILE" ]; then
+        DESC_ANY=$(grep -v '^#' "$TASK_FILE" 2>/dev/null | grep -v '^[[:space:]]*$' | head -1 | tr -d '\r\n' | head -c 40 || true)
+        if [ -z "$DESC_ANY" ]; then
+          DESC_ANY=$(grep -v '^[[:space:]]*$' "$TASK_FILE" 2>/dev/null | head -1 | tr -d '\r\n' | head -c 40 || true)
+        fi
+      fi
+      if [ -z "$DESC_ANY" ] && [ -f ".jules/tasks/${TASK_ID}.md" ]; then
+        DESC_ANY=$(grep -v '^#' ".jules/tasks/${TASK_ID}.md" 2>/dev/null | grep -v '^[[:space:]]*$' | head -1 | tr -d '\r\n' | head -c 40 || true)
+      fi
+      if [ -n "${DESC_ANY:-}" ]; then
+        SESSION_LINE=$(echo "$REMOTE_LIST" | grep -F "$DESC_ANY" | head -1 || true)
+      fi
+    fi
   fi
+
   STATUS=$(echo "$SESSION_LINE" | awk '{print $NF}')
 
   if [ "$STATUS" = "Completed" ]; then
@@ -63,7 +106,15 @@ while [ "$ELAPSED" -lt "$MAX_WAIT_SEC" ]; do
       exit 2
   fi
 
-  echo "  [+${ELAPSED}s] ${STATUS:-unknown}"
+  if [ -z "$STATUS" ] || [ "$STATUS" = "unknown" ]; then
+      STATUS="unknown"
+      if [ "$ELAPSED" -ge 60 ] && [ "$WARN_PRINTED" -eq 0 ]; then
+          echo "  ⚠️ Warning: Session status still unknown after ${ELAPSED}s"
+          WARN_PRINTED=1
+      fi
+  fi
+
+  echo "  [+${ELAPSED}s] ${STATUS}"
   sleep "$POLL_INTERVAL"
   ELAPSED=$((ELAPSED + POLL_INTERVAL))
 done
