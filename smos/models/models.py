@@ -160,6 +160,20 @@ class RelationType(str, enum.Enum):
     MERGED_INTO = "MERGED_INTO"
     INSPIRED_BY = "INSPIRED_BY"
     SIMULATES = "SIMULATES"
+    # New 13 relation types added in TASK 06
+    SUPPORTS = "SUPPORTS"
+    BLOCKS = "BLOCKS"
+    ENABLES = "ENABLES"
+    AMPLIFIES = "AMPLIFIES"
+    SUPPRESSES = "SUPPRESSES"
+    TRANSFORMS = "TRANSFORMS"
+    CREATES_CONTEXT = "CREATES_CONTEXT"
+    CHANGES_CONTEXT = "CHANGES_CONTEXT"
+    EMERGES_FROM = "EMERGES_FROM"
+    RESONATES_WITH = "RESONATES_WITH"
+    CORRELATES_WITH = "CORRELATES_WITH"
+    REQUIRES = "REQUIRES"
+    PREVENTS = "PREVENTS"
 
 class User(Base):
     __tablename__ = "users"
@@ -210,11 +224,25 @@ class MemoryNode(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 class Relation(Base):
+    """SQLAlchemy model for Relation entities.
+
+    PROVENANCE DECISION (Option B):
+    Relation receives provenance = Column(JSON, default=dict) as the canonical
+    provenance representation for domain relations, matching the pattern used in
+    Phenomenon, Context, Constraint, and PotentialPhenomenon.
+    ProvenanceRecord remains unchanged in ecology.py as canonical for memory_nodes/ecology.
+    """
     __tablename__ = "relations"
     id = Column(Integer, primary_key=True, index=True)
     from_node_id = Column(Integer, ForeignKey("memory_nodes.id"))
     to_node_id = Column(Integer, ForeignKey("memory_nodes.id"))
     type = Column(Enum(RelationType))
+    provenance = Column(JSON, default=dict)
+    epistemic_status = Column(Enum(EpistemicStatus), nullable=True)
+    evidence = Column(JSON, default=list)
+    confidence = Column(Float, nullable=True)
+    observer = Column(String, nullable=True)
+    context = Column(String, nullable=True)
 
 class Stream(Base):
     __tablename__ = "streams"
