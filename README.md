@@ -53,6 +53,26 @@ Navigate to `http://localhost:8080` to access the Control Room UI.
 5. `./scripts/jules-task.sh "Add a new service for ..."` — dispatch task
 6. `./scripts/jules-complete.sh <task-id> <session-id> feat/my-feature` — finalize
 
+## Local Development Setup
+
+### First time
+```bash
+git clone <repo-url> jules
+cd jules
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env
+python3 -m smos.core.init_db
+uvicorn smos.api.main:app --host 0.0.0.0 --port 8080
+```
+
+init_db is also called automatically on startup (idempotent).
+
+### PostgreSQL (production)
+Edit .env: `DATABASE_URL=postgresql://postgres:postgres@localhost:5432/smos`
+Ensure PostgreSQL is running; run: `createdb smos`
+
 ## Task Queue
 
 The task queue allows autonomous processing of tasks by the Codespace agent.
