@@ -38,3 +38,5 @@ __pycache__/
 .co-smos/state.json.bak
 .jules/history/admin_audit.jsonl
 .jules/history/*.jsonl
+.env
+smos.db
