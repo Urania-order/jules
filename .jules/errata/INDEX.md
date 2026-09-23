@@ -26,6 +26,7 @@ Known mistakes and rules to avoid them.
 
 ### Process / Orchestration
 
+- ERRATA-0043 — Jules writes tests that fail on own code (MEDIUM)
 - ERRATA-0042 — init_db() not called on startup (MEDIUM)
 - ERRATA-0040 — Jules writes non-working bash mock tests (MEDIUM)
 - ERRATA-0039 — run-task.sh reports unknown for valid session (MEDIUM)
