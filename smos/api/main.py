@@ -89,6 +89,12 @@ async def background_scheduler_loop():
 async def lifespan(app: FastAPI):
     log_default_token_warning_once()
     try:
+        from smos.core.init_db import init_db
+        init_db()
+        logger.info("Database tables initialized (idempotent).")
+    except Exception as e:
+        logger.warning(f"init_db failed: {e}")
+    try:
         normalize_created_at_state(".co-smos/state.json")
     except Exception as e:
         logger.warning(f"normalize_created_at failed: {e}")
