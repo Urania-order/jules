@@ -9,6 +9,7 @@ from smos.models.experience import Recipe, Reconstruction, CausalRelation, Recip
 from smos.models.epistemic import EpistemicLayer, IntellectualCluster, ClusterRelation
 from smos.models.phenomenon import Phenomenon
 from smos.models.context import Context, ContextRelation
+from smos.models.constraint import Constraint, ConstraintType, ConstraintStatus
 from smos.models.discovery import LostKnowledge, Hypothesis, DiscoveryRecovery
 from smos.models.coevolution import UnderstandingValidation, ComprehensionTest
 from smos.models.entities import BehaviorProfile, LLMProfile
