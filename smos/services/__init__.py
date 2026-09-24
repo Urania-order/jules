@@ -10,6 +10,10 @@ from smos.services.role_projection_service import (
     ConstraintPerspective,
 )
 from smos.services.context_exposure_service import ContextExposureService
+from smos.services.convergent_resonance_service import (
+    ConvergentResonanceService,
+    ResonanceCandidate,
+)
 
 __all__ = [
     "PhenomenonService",
@@ -22,4 +26,6 @@ __all__ = [
     "ContextPerspective",
     "ConstraintPerspective",
     "ContextExposureService",
+    "ConvergentResonanceService",
+    "ResonanceCandidate",
 ]
