@@ -30,7 +30,9 @@ def setup_complete_env(tmp_path, monkeypatch):
     scripts_dir.mkdir(parents=True, exist_ok=True)
     mock_bin.mkdir(parents=True, exist_ok=True)
 
-    # Copy jules-complete.sh
+    # Copy jules-complete.sh and safe-git.sh
+    shutil.copy(PROJECT_ROOT / "scripts" / "safe-git.sh", scripts_dir / "safe-git.sh")
+    (scripts_dir / "safe-git.sh").chmod(0o755)
     shutil.copy(PROJECT_ROOT / "scripts" / "jules-complete.sh", scripts_dir / "jules-complete.sh")
     (scripts_dir / "jules-complete.sh").chmod(0o755)
 
@@ -455,6 +457,31 @@ exit 0
     )
     assert res.returncode == 0, f"Stdout: {res.stdout}\nStderr: {res.stderr}"
     assert "code commit done" in res.stdout
+    assert not lock_file.exists()
+
+
+def test_jules_complete_removes_stale_lock_narrow_pattern(setup_complete_env):
+    """Verify scripts/jules-complete.sh removes lock even if an unrelated git process (e.g. git log / git status) is running."""
+    tmp_path = setup_complete_env["root"]
+    lock_file = tmp_path / ".git" / "index.lock"
+    lock_file.write_text("stale lock")
+
+    mock_pgrep = setup_complete_env["mock_bin"] / "pgrep"
+    # pgrep mock returns 0 for "git" broad match, but returns 1 for narrow pattern git commit|push|checkout|...
+    mock_pgrep.write_text("""#!/usr/bin/env bash
+if [[ "$*" =~ (commit|push|rebase|merge|checkout|pull|stash) ]]; then
+    exit 1
+fi
+exit 0
+""")
+    mock_pgrep.chmod(0o755)
+
+    res = run_complete_script(
+        setup_complete_env,
+        "--task", setup_complete_env["task_id"],
+        env_vars={"JULES_NO_PUSH": "1", "JULES_SKIP_CI": "1", "MOCK_PYTEST_EXIT": "0"}
+    )
+    assert res.returncode == 0, f"Stdout: {res.stdout}\nStderr: {res.stderr}"
     assert not lock_file.exists()
 
 

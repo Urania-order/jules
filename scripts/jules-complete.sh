@@ -7,6 +7,10 @@ set -euo pipefail
 PROJECT_ROOT="${JULES_PROJECT_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || echo "$PWD")}"
 cd "$PROJECT_ROOT"
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=scripts/safe-git.sh
+source "$SCRIPT_DIR/safe-git.sh"
+
 STATE_FILE=".co-smos/state.json"
 TASKS_DIR=".jules/tasks"
 RESULTS_DIR=".jules/results"
@@ -185,14 +189,12 @@ fi
 echo ""
 
 # STEP [1/9]
-if [ -f .git/index.lock ] && ! pgrep -f "git" > /dev/null; then
-  rm -f .git/index.lock
-fi
+remove_stale_git_lock
 
 STASHED=0
 if ! git diff --quiet || ! git diff --cached --quiet || [ -n "$(git ls-files --others --exclude-standard)" ]; then
   echo "[1/9] Stashing local changes..."
-  git stash push -u -m "jules-complete: pre-pull stash for $TASK_ID" >/dev/null
+  safe_git_stash_push -u -m "jules-complete: pre-pull stash for $TASK_ID" >/dev/null
   STASHED=1
 else
   echo "[1/9] No local changes to stash."
@@ -218,7 +220,7 @@ log_step "[2/9]" "$PULL_RESULT" 0
 # STEP [3/9]
 if [ "$STASHED" -eq 1 ]; then
   echo "[3/9] Restoring local changes..."
-  if ! git stash pop >/dev/null 2>&1; then
+  if ! safe_git_stash_pop >/dev/null 2>&1; then
     echo "      WARNING: stash pop reported conflicts. Resolve manually."
   fi
 else
@@ -476,13 +478,11 @@ echo "[8/9] Committing and pushing..."
 safe_git_commit() {
   local msg="$1"
   for attempt in 1 2 3; do
-    if [ -f .git/index.lock ] && ! pgrep -f "git commit" > /dev/null; then
-      rm -f .git/index.lock
-    fi
+    remove_stale_git_lock
     if git commit -m "$msg"; then return 0; fi
     echo "⚠ commit attempt $attempt failed — retry in 3s"
     sleep 3
-    rm -f .git/index.lock
+    remove_stale_git_lock
   done
   return 1
 }
