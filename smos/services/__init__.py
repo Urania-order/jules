@@ -9,6 +9,7 @@ from smos.services.role_projection_service import (
     ContextPerspective,
     ConstraintPerspective,
 )
+from smos.services.context_exposure_service import ContextExposureService
 
 __all__ = [
     "PhenomenonService",
@@ -20,4 +21,5 @@ __all__ = [
     "PhenomenonPerspective",
     "ContextPerspective",
     "ConstraintPerspective",
+    "ContextExposureService",
 ]
