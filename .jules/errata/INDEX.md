@@ -26,6 +26,7 @@ Known mistakes and rules to avoid them.
 
 ### Process / Orchestration
 
+- ERRATA-0045 — git checkout/pull no retry on stale index.lock (MEDIUM)
 - ERRATA-0044 — flaky stale_lock test in CI (MEDIUM)
 - ERRATA-0043 — Jules writes tests that fail on own code (MEDIUM)
 - ERRATA-0042 — init_db() not called on startup (MEDIUM)
