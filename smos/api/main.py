@@ -2413,6 +2413,11 @@ def get_provenance(node_id: int, db: Session = Depends(get_db)):
     from smos.models.ecology import ProvenanceRecord
     return db.query(ProvenanceRecord).filter(ProvenanceRecord.node_id == node_id).first()
 
+@app.get("/observatory/domain-state")
+def get_observatory_domain_state(db: Session = Depends(get_db)):
+    obs = _get_observatory(db)
+    return obs.get_domain_state()
+
 @app.get("/observatory/health")
 def get_observatory_health(db: Session = Depends(get_db)):
     obs = _get_observatory(db)

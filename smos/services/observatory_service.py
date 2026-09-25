@@ -4,6 +4,13 @@ from smos.models.ecology import ValueAssessment
 from smos.models.epistemic import IntellectualCluster
 from smos.models.discovery import LostKnowledge
 from smos.models.consensus import Proposal
+from smos.models.phenomenon import Phenomenon
+from smos.models.potential import PotentialPhenomenon, PotentialStatus
+from smos.models.prediction import Prediction
+from smos.models.domain_relation import DomainRelation
+from smos.models.models import EpistemicStatus, RelationType
+from smos.services.blockage_analysis_service import BlockageAnalysisService
+from smos.services.convergent_resonance_service import ConvergentResonanceService
 import json
 from pathlib import Path
 from typing import List, Dict, Any, Optional
@@ -170,6 +177,79 @@ class ObservatoryService:
             recommendations.append("No critical dormant knowledge identified. Continue regular monitoring.")
 
         return recommendations
+
+    def get_domain_state(self) -> Dict[str, Any]:
+        """Aggregate domain entity state for Observatory.
+
+        Reuses existing TASK 01-14 services (read-only).
+        Does NOT modify existing Observatory methods.
+        """
+        # 1. WHAT EXISTS: phenomena with epistemic_status == OBSERVED
+        phenomena = self.db.query(Phenomenon).all()
+        what_exists = []
+        what_is_emerging = []
+
+        for p in phenomena:
+            p_status = p.epistemic_status.value if isinstance(p.epistemic_status, EpistemicStatus) else str(p.epistemic_status)
+            p_status_upper = p_status.upper() if p_status else ""
+            if p_status_upper == EpistemicStatus.OBSERVED.value.upper():
+                what_exists.append(p.to_dict())
+            elif p_status_upper in (EpistemicStatus.INFERRED.value.upper(), EpistemicStatus.HYPOTHESIZED.value.upper()):
+                what_is_emerging.append(p.to_dict())
+
+        # 3. WHAT IS BLOCKED: call BlockageAnalysisService.analyze_blockage(id) for each phenomenon
+        blockage_service = BlockageAnalysisService(self.db)
+        what_is_blocked = []
+        for p in phenomena:
+            analysis = blockage_service.analyze_blockage(p.id)
+            if analysis.direct_constraints or analysis.indirect_constraints:
+                what_is_blocked.append({
+                    "phenomenon_id": p.id,
+                    "direct_count": len(analysis.direct_constraints),
+                    "indirect_count": len(analysis.indirect_constraints),
+                    "unknowns": analysis.unknowns
+                })
+
+        # 4. WHAT COULD EMERGE: PotentialPhenomenon with status == POSSIBLE
+        potentials = self.db.query(PotentialPhenomenon).all()
+        what_could_emerge = []
+        for pot in potentials:
+            pot_status = pot.status.value if isinstance(pot.status, PotentialStatus) else str(pot.status)
+            if pot_status and pot_status.upper() == PotentialStatus.POSSIBLE.value.upper():
+                what_could_emerge.append(pot.to_dict())
+
+        # 5. WHAT CHANGES THE CONTEXT: DomainRelation where relation_type in (CHANGES_CONTEXT, CREATES_CONTEXT)
+        domain_rels = self.db.query(DomainRelation).all()
+        what_changes_context = []
+        target_relation_types = {RelationType.CHANGES_CONTEXT.value.upper(), RelationType.CREATES_CONTEXT.value.upper()}
+        for rel in domain_rels:
+            rel_type = rel.relation_type.value if isinstance(rel.relation_type, RelationType) else str(rel.relation_type)
+            if rel_type and rel_type.upper() in target_relation_types:
+                what_changes_context.append(rel.to_dict())
+
+        # 6. WHAT RESONATES: ConvergentResonanceService.detect()
+        resonance_service = ConvergentResonanceService(self.db)
+        candidates = resonance_service.detect()
+        what_resonates = [c.to_dict() for c in candidates]
+
+        # 7. WHAT IS PREDICTED: predictions with epistemic_status == PREDICTED
+        predictions = self.db.query(Prediction).all()
+        what_is_predicted = []
+        for pred in predictions:
+            pred_status = pred.epistemic_status.value if isinstance(pred.epistemic_status, EpistemicStatus) else str(pred.epistemic_status)
+            if pred_status and pred_status.upper() == EpistemicStatus.PREDICTED.value.upper():
+                what_is_predicted.append(pred.to_dict())
+
+        return {
+            "what_exists": what_exists,
+            "what_is_emerging": what_is_emerging,
+            "what_is_blocked": what_is_blocked,
+            "what_could_emerge": what_could_emerge,
+            "what_changes_context": what_changes_context,
+            "what_changes_the_context": what_changes_context,
+            "what_resonates": what_resonates,
+            "what_is_predicted": what_is_predicted,
+        }
 
     def generate_forecasts(self) -> List[Dict[str, Any]]:
         """Cosmo-Initiate Forecasts: Eight future research hypotheses"""
