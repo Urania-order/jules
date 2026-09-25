@@ -26,6 +26,7 @@ import smos.models.experience  # noqa: F401, E402
 import smos.models.epistemic  # noqa: F401, E402
 import smos.models.phenomenon  # noqa: F401, E402
 import smos.models.prediction  # noqa: F401, E402
+import smos.models.domain_event  # noqa: F401, E402
 import smos.models.discovery  # noqa: F401, E402
 import smos.models.coevolution  # noqa: F401, E402
 import smos.models.ecology  # noqa: F401, E402

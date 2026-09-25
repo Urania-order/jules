@@ -5,6 +5,7 @@ from smos.models.potential import PotentialPhenomenon, PotentialStatus
 from smos.models.domain_relation import DomainRelation
 from smos.models.context_exposure import ContextExposure, AgentType
 from smos.models.prediction import Prediction
+from smos.models.domain_event import DomainEvent, DomainEventType
 
 __all__ = [
     "Phenomenon",
@@ -19,4 +20,6 @@ __all__ = [
     "ContextExposure",
     "AgentType",
     "Prediction",
+    "DomainEvent",
+    "DomainEventType",
 ]
