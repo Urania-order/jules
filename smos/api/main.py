@@ -35,6 +35,17 @@ from smos.services.economy_service import EconomyService
 from smos.services.observatory_service import ObservatoryService
 from smos.services.commons_service import CommonsService
 
+# Domain Services (TASK 15)
+from smos.services.phenomenon_service import PhenomenonService
+from smos.services.context_service import ContextService
+from smos.services.potential_service import PotentialService
+from smos.services.constraint_service import ConstraintService
+from smos.services.domain_relation_service import DomainRelationService
+from smos.services.prediction_service import PredictionService
+from smos.services.convergent_resonance_service import ConvergentResonanceService
+from smos.services.blockage_analysis_service import BlockageAnalysisService
+from smos.services.emergence_analysis_service import EmergenceAnalysisService
+
 # Core & Adapters
 from smos.core.state import StateManager, normalize_created_at_state
 from smos.core.queue import QueueManager
@@ -446,6 +457,131 @@ class AdminRunRequest(BaseModel):
 class AdminQueueAddRequest(BaseModel):
     text: str
     verify_task: Optional[str] = None
+
+# Domain Resource Schemas (TASK 15)
+class PhenomenonCreate(BaseModel):
+    name: str
+    description: Optional[str] = None
+    epistemic_status: Optional[str] = "OBSERVED"
+    source: Optional[str] = None
+    provenance: Optional[Dict[str, Any]] = None
+
+class PhenomenonUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    epistemic_status: Optional[str] = None
+    source: Optional[str] = None
+    provenance: Optional[Dict[str, Any]] = None
+
+class ContextCreate(BaseModel):
+    name: str
+    description: Optional[str] = None
+    components: Optional[List[Any]] = None
+    source: Optional[str] = None
+    epistemic_status: Optional[str] = "OBSERVED"
+    temporal_scope: Optional[str] = None
+    spatial_scope: Optional[str] = None
+    provenance: Optional[Dict[str, Any]] = None
+
+class ContextUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    components: Optional[List[Any]] = None
+    source: Optional[str] = None
+    epistemic_status: Optional[str] = None
+    temporal_scope: Optional[str] = None
+    spatial_scope: Optional[str] = None
+    provenance: Optional[Dict[str, Any]] = None
+
+class ConstraintCreate(BaseModel):
+    name: str
+    description: Optional[str] = None
+    type: Optional[str] = "UNKNOWN"
+    strength: Optional[float] = None
+    status: Optional[str] = "UNKNOWN"
+    evidence: Optional[List[Any]] = None
+    context: Optional[str] = None
+    confidence: Optional[float] = 0.5
+    provenance: Optional[Dict[str, Any]] = None
+
+class ConstraintUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    type: Optional[str] = None
+    strength: Optional[float] = None
+    status: Optional[str] = None
+    evidence: Optional[List[Any]] = None
+    context: Optional[str] = None
+    confidence: Optional[float] = None
+    provenance: Optional[Dict[str, Any]] = None
+
+class PotentialPhenomenonCreate(BaseModel):
+    phenomenon: str
+    status: Optional[str] = "UNKNOWN"
+    required_conditions: Optional[List[Any]] = None
+    supporting_contexts: Optional[List[Any]] = None
+    blocking_constraints: Optional[List[Any]] = None
+    dependencies: Optional[List[Any]] = None
+    expected_impacts: Optional[List[Dict[str, Any]]] = None
+    provenance: Optional[Dict[str, Any]] = None
+
+class PotentialPhenomenonUpdate(BaseModel):
+    phenomenon: Optional[str] = None
+    status: Optional[str] = None
+    required_conditions: Optional[List[Any]] = None
+    supporting_contexts: Optional[List[Any]] = None
+    blocking_constraints: Optional[List[Any]] = None
+    dependencies: Optional[List[Any]] = None
+    expected_impacts: Optional[List[Dict[str, Any]]] = None
+    provenance: Optional[Dict[str, Any]] = None
+
+class DomainRelationCreate(BaseModel):
+    source_type: str
+    source_id: int
+    target_type: str
+    target_id: int
+    relation_type: str
+    provenance: Optional[Dict[str, Any]] = None
+    epistemic_status: Optional[str] = None
+    confidence: Optional[float] = None
+    evidence: Optional[List[Any]] = None
+
+class DomainRelationUpdate(BaseModel):
+    source_type: Optional[str] = None
+    source_id: Optional[int] = None
+    target_type: Optional[str] = None
+    target_id: Optional[int] = None
+    relation_type: Optional[str] = None
+    provenance: Optional[Dict[str, Any]] = None
+    epistemic_status: Optional[str] = None
+    confidence: Optional[float] = None
+    evidence: Optional[List[Any]] = None
+
+class PredictionCreate(BaseModel):
+    expected_state: Dict[str, Any]
+    source_hypothesis_type: Optional[str] = None
+    source_hypothesis_id: Optional[int] = None
+    conditions: Optional[List[Any]] = None
+    confidence: Optional[float] = None
+    prediction_time: Optional[datetime] = None
+    expected_at: Optional[datetime] = None
+    provenance: Optional[Dict[str, Any]] = None
+
+class PredictionUpdate(BaseModel):
+    expected_state: Optional[Dict[str, Any]] = None
+    conditions: Optional[List[Any]] = None
+    confidence: Optional[float] = None
+    expected_at: Optional[datetime] = None
+    provenance: Optional[Dict[str, Any]] = None
+
+class ResonanceDetectRequest(BaseModel):
+    min_agents: Optional[int] = 2
+    max_context_overlap: Optional[float] = 0.5
+    min_confidence: Optional[float] = 0.0
+    limit: Optional[int] = 500
+
+class BlockageAnalyzeRequest(BaseModel):
+    indirect_max_hops: Optional[int] = 2
 
 RUN_JOBS: Dict[str, Dict[str, Any]] = {}
 
@@ -2350,3 +2486,329 @@ def search_memory(q: str, user_id: int, limit: int = 20, db: Session = Depends(g
         }
         for r in results
     ]
+
+# --- CANONICAL DOMAIN API ENDPOINTS (TASK 15) ---
+
+# --- PHENOMENA ---
+
+@app.get("/api/phenomena")
+def list_phenomena(limit: int = 50, offset: int = 0, db: Session = Depends(get_db)):
+    svc = PhenomenonService(db)
+    items = svc.list(limit=limit, offset=offset)
+    return [item.to_dict() for item in items]
+
+@app.post("/api/phenomena", dependencies=[Depends(require_operator)])
+def create_phenomenon(req: PhenomenonCreate, db: Session = Depends(get_db)):
+    svc = PhenomenonService(db)
+    item = svc.create(
+        name=req.name,
+        description=req.description,
+        epistemic_status=req.epistemic_status or "OBSERVED",
+        source=req.source,
+        provenance=req.provenance
+    )
+    return item.to_dict()
+
+@app.get("/api/phenomena/{id}")
+def get_phenomenon(id: int, db: Session = Depends(get_db)):
+    svc = PhenomenonService(db)
+    item = svc.get(id)
+    if not item:
+        return _error_response(code="NOT_FOUND", message=f"Phenomenon '{id}' not found", status_code=404)
+    return item.to_dict()
+
+@app.put("/api/phenomena/{id}", dependencies=[Depends(require_operator)])
+def update_phenomenon(id: int, req: PhenomenonUpdate, db: Session = Depends(get_db)):
+    svc = PhenomenonService(db)
+    fields = req.model_dump(exclude_unset=True)
+    item = svc.update(id, **fields)
+    if not item:
+        return _error_response(code="NOT_FOUND", message=f"Phenomenon '{id}' not found", status_code=404)
+    return item.to_dict()
+
+@app.delete("/api/phenomena/{id}", dependencies=[Depends(require_operator)])
+def delete_phenomenon(id: int, db: Session = Depends(get_db)):
+    svc = PhenomenonService(db)
+    success = svc.delete(id)
+    if not success:
+        return _error_response(code="NOT_FOUND", message=f"Phenomenon '{id}' not found", status_code=404)
+    return {"status": "success", "id": id}
+
+# --- CONTEXTS ---
+
+@app.get("/api/contexts")
+def list_contexts(limit: int = 50, offset: int = 0, db: Session = Depends(get_db)):
+    svc = ContextService(db)
+    items = svc.list(limit=limit, offset=offset)
+    return [item.to_dict() for item in items]
+
+@app.post("/api/contexts", dependencies=[Depends(require_operator)])
+def create_context(req: ContextCreate, db: Session = Depends(get_db)):
+    svc = ContextService(db)
+    item = svc.create(
+        name=req.name,
+        description=req.description,
+        components=req.components,
+        source=req.source,
+        epistemic_status=req.epistemic_status or "OBSERVED",
+        temporal_scope=req.temporal_scope,
+        spatial_scope=req.spatial_scope,
+        provenance=req.provenance
+    )
+    return item.to_dict()
+
+@app.get("/api/contexts/{id}")
+def get_context(id: int, db: Session = Depends(get_db)):
+    svc = ContextService(db)
+    item = svc.get(id)
+    if not item:
+        return _error_response(code="NOT_FOUND", message=f"Context '{id}' not found", status_code=404)
+    return item.to_dict()
+
+@app.put("/api/contexts/{id}", dependencies=[Depends(require_operator)])
+def update_context(id: int, req: ContextUpdate, db: Session = Depends(get_db)):
+    svc = ContextService(db)
+    fields = req.model_dump(exclude_unset=True)
+    item = svc.update(id, **fields)
+    if not item:
+        return _error_response(code="NOT_FOUND", message=f"Context '{id}' not found", status_code=404)
+    return item.to_dict()
+
+@app.delete("/api/contexts/{id}", dependencies=[Depends(require_operator)])
+def delete_context(id: int, db: Session = Depends(get_db)):
+    svc = ContextService(db)
+    success = svc.delete(id)
+    if not success:
+        return _error_response(code="NOT_FOUND", message=f"Context '{id}' not found", status_code=404)
+    return {"status": "success", "id": id}
+
+# --- POTENTIAL PHENOMENA ---
+
+@app.get("/api/potential-phenomena")
+def list_potential_phenomena(limit: int = 50, offset: int = 0, status: Optional[str] = None, db: Session = Depends(get_db)):
+    svc = PotentialService(db)
+    items = svc.list(limit=limit, offset=offset, status=status)
+    return [item.to_dict() for item in items]
+
+@app.post("/api/potential-phenomena", dependencies=[Depends(require_operator)])
+def create_potential_phenomenon(req: PotentialPhenomenonCreate, db: Session = Depends(get_db)):
+    svc = PotentialService(db)
+    item = svc.create(
+        phenomenon=req.phenomenon,
+        status=req.status or "UNKNOWN",
+        required_conditions=req.required_conditions,
+        supporting_contexts=req.supporting_contexts,
+        blocking_constraints=req.blocking_constraints,
+        dependencies=req.dependencies,
+        expected_impacts=req.expected_impacts,
+        provenance=req.provenance
+    )
+    return item.to_dict()
+
+@app.get("/api/potential-phenomena/{id}")
+def get_potential_phenomenon(id: int, db: Session = Depends(get_db)):
+    svc = PotentialService(db)
+    item = svc.get(id)
+    if not item:
+        return _error_response(code="NOT_FOUND", message=f"Potential phenomenon '{id}' not found", status_code=404)
+    return item.to_dict()
+
+@app.put("/api/potential-phenomena/{id}", dependencies=[Depends(require_operator)])
+def update_potential_phenomenon(id: int, req: PotentialPhenomenonUpdate, db: Session = Depends(get_db)):
+    svc = PotentialService(db)
+    fields = req.model_dump(exclude_unset=True)
+    item = svc.update(id, **fields)
+    if not item:
+        return _error_response(code="NOT_FOUND", message=f"Potential phenomenon '{id}' not found", status_code=404)
+    return item.to_dict()
+
+@app.delete("/api/potential-phenomena/{id}", dependencies=[Depends(require_operator)])
+def delete_potential_phenomenon(id: int, db: Session = Depends(get_db)):
+    svc = PotentialService(db)
+    success = svc.delete(id)
+    if not success:
+        return _error_response(code="NOT_FOUND", message=f"Potential phenomenon '{id}' not found", status_code=404)
+    return {"status": "success", "id": id}
+
+# --- CONSTRAINTS ---
+
+@app.get("/api/constraints")
+def list_constraints(limit: int = 50, offset: int = 0, type: Optional[str] = None, status: Optional[str] = None, db: Session = Depends(get_db)):
+    svc = ConstraintService(db)
+    items = svc.list(limit=limit, offset=offset, type=type, status=status)
+    return [item.to_dict() for item in items]
+
+@app.post("/api/constraints", dependencies=[Depends(require_operator)])
+def create_constraint(req: ConstraintCreate, db: Session = Depends(get_db)):
+    svc = ConstraintService(db)
+    item = svc.create(
+        name=req.name,
+        description=req.description,
+        type=req.type or "UNKNOWN",
+        strength=req.strength,
+        status=req.status or "UNKNOWN",
+        evidence=req.evidence,
+        context=req.context,
+        confidence=req.confidence if req.confidence is not None else 0.5,
+        provenance=req.provenance
+    )
+    return item.to_dict()
+
+@app.get("/api/constraints/{id}")
+def get_constraint(id: int, db: Session = Depends(get_db)):
+    svc = ConstraintService(db)
+    item = svc.get(id)
+    if not item:
+        return _error_response(code="NOT_FOUND", message=f"Constraint '{id}' not found", status_code=404)
+    return item.to_dict()
+
+@app.put("/api/constraints/{id}", dependencies=[Depends(require_operator)])
+def update_constraint(id: int, req: ConstraintUpdate, db: Session = Depends(get_db)):
+    svc = ConstraintService(db)
+    fields = req.model_dump(exclude_unset=True)
+    item = svc.update(id, **fields)
+    if not item:
+        return _error_response(code="NOT_FOUND", message=f"Constraint '{id}' not found", status_code=404)
+    return item.to_dict()
+
+@app.delete("/api/constraints/{id}", dependencies=[Depends(require_operator)])
+def delete_constraint(id: int, db: Session = Depends(get_db)):
+    svc = ConstraintService(db)
+    success = svc.delete(id)
+    if not success:
+        return _error_response(code="NOT_FOUND", message=f"Constraint '{id}' not found", status_code=404)
+    return {"status": "success", "id": id}
+
+# --- DOMAIN RELATIONS ---
+
+@app.get("/api/domain-relations")
+def list_domain_relations(source_type: Optional[str] = None, target_type: Optional[str] = None, relation_type: Optional[str] = None, limit: int = 50, offset: int = 0, db: Session = Depends(get_db)):
+    svc = DomainRelationService(db)
+    items = svc.list(source_type=source_type, target_type=target_type, relation_type=relation_type, limit=limit, offset=offset)
+    return [item.to_dict() for item in items]
+
+@app.post("/api/domain-relations", dependencies=[Depends(require_operator)])
+def create_domain_relation(req: DomainRelationCreate, db: Session = Depends(get_db)):
+    svc = DomainRelationService(db)
+    item = svc.create(
+        source_type=req.source_type,
+        source_id=req.source_id,
+        target_type=req.target_type,
+        target_id=req.target_id,
+        relation_type=req.relation_type,
+        provenance=req.provenance,
+        epistemic_status=req.epistemic_status,
+        confidence=req.confidence,
+        evidence=req.evidence
+    )
+    return item.to_dict()
+
+@app.get("/api/domain-relations/{id}")
+def get_domain_relation(id: int, db: Session = Depends(get_db)):
+    svc = DomainRelationService(db)
+    item = svc.get(id)
+    if not item:
+        return _error_response(code="NOT_FOUND", message=f"Domain relation '{id}' not found", status_code=404)
+    return item.to_dict()
+
+@app.put("/api/domain-relations/{id}", dependencies=[Depends(require_operator)])
+def update_domain_relation(id: int, req: DomainRelationUpdate, db: Session = Depends(get_db)):
+    svc = DomainRelationService(db)
+    fields = req.model_dump(exclude_unset=True)
+    item = svc.update(id, **fields)
+    if not item:
+        return _error_response(code="NOT_FOUND", message=f"Domain relation '{id}' not found", status_code=404)
+    return item.to_dict()
+
+@app.delete("/api/domain-relations/{id}", dependencies=[Depends(require_operator)])
+def delete_domain_relation(id: int, db: Session = Depends(get_db)):
+    svc = DomainRelationService(db)
+    success = svc.delete(id)
+    if not success:
+        return _error_response(code="NOT_FOUND", message=f"Domain relation '{id}' not found", status_code=404)
+    return {"status": "success", "id": id}
+
+# --- PREDICTIONS ---
+
+@app.get("/api/predictions")
+def list_predictions(limit: int = 50, offset: int = 0, db: Session = Depends(get_db)):
+    svc = PredictionService(db)
+    items = svc.list(limit=limit, offset=offset)
+    return [item.to_dict() for item in items]
+
+@app.post("/api/predictions", dependencies=[Depends(require_operator)])
+def create_prediction(req: PredictionCreate, db: Session = Depends(get_db)):
+    svc = PredictionService(db)
+    item = svc.create_prediction(
+        expected_state=req.expected_state,
+        source_hypothesis_type=req.source_hypothesis_type,
+        source_hypothesis_id=req.source_hypothesis_id,
+        conditions=req.conditions,
+        confidence=req.confidence,
+        prediction_time=req.prediction_time,
+        expected_at=req.expected_at,
+        provenance=req.provenance
+    )
+    return item.to_dict()
+
+@app.get("/api/predictions/{id}")
+def get_prediction(id: int, db: Session = Depends(get_db)):
+    svc = PredictionService(db)
+    item = svc.get(id)
+    if not item:
+        return _error_response(code="NOT_FOUND", message=f"Prediction '{id}' not found", status_code=404)
+    return item.to_dict()
+
+@app.put("/api/predictions/{id}", dependencies=[Depends(require_operator)])
+def update_prediction(id: int, req: PredictionUpdate, db: Session = Depends(get_db)):
+    svc = PredictionService(db)
+    prediction = svc.get(id)
+    if not prediction:
+        return _error_response(code="NOT_FOUND", message=f"Prediction '{id}' not found", status_code=404)
+
+    fields = req.model_dump(exclude_unset=True)
+    if "expected_state" in fields and fields["expected_state"] is not None:
+        prediction.expected_state = dict(fields["expected_state"])
+    if "conditions" in fields and fields["conditions"] is not None:
+        prediction.conditions = list(fields["conditions"])
+    if "confidence" in fields:
+        prediction.confidence = fields["confidence"]
+    if "expected_at" in fields:
+        prediction.expected_at = fields["expected_at"]
+    if "provenance" in fields and fields["provenance"] is not None:
+        prediction.provenance = dict(fields["provenance"])
+
+    db.commit()
+    db.refresh(prediction)
+    return prediction.to_dict()
+
+# --- ANALYSIS ENDPOINTS ---
+
+@app.post("/api/resonance/detect", dependencies=[Depends(require_operator)])
+def detect_resonance(req: Optional[ResonanceDetectRequest] = None, db: Session = Depends(get_db)):
+    svc = ConvergentResonanceService(db)
+    min_agents = req.min_agents if (req and req.min_agents is not None) else 2
+    max_context_overlap = req.max_context_overlap if (req and req.max_context_overlap is not None) else 0.5
+    min_confidence = req.min_confidence if (req and req.min_confidence is not None) else 0.0
+    limit = req.limit if (req and req.limit is not None) else 500
+
+    candidates = svc.detect(
+        min_agents=min_agents,
+        max_context_overlap=max_context_overlap,
+        min_confidence=min_confidence,
+        limit=limit
+    )
+    return [candidate.to_dict() for candidate in candidates]
+
+@app.post("/api/blockage/analyze/{phenomenon_id}", dependencies=[Depends(require_operator)])
+def analyze_blockage(phenomenon_id: int, req: Optional[BlockageAnalyzeRequest] = None, db: Session = Depends(get_db)):
+    svc = BlockageAnalysisService(db)
+    indirect_max_hops = req.indirect_max_hops if (req and req.indirect_max_hops is not None) else 2
+    analysis = svc.analyze_blockage(phenomenon_id=phenomenon_id, indirect_max_hops=indirect_max_hops)
+    return analysis.to_dict()
+
+@app.post("/api/emergence/analyze/{phenomenon_id}", dependencies=[Depends(require_operator)])
+def analyze_emergence(phenomenon_id: int, db: Session = Depends(get_db)):
+    svc = EmergenceAnalysisService(db)
+    analysis = svc.analyze_emergence(phenomenon_id=phenomenon_id)
+    return analysis.to_dict()
