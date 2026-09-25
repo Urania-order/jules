@@ -14,6 +14,10 @@ from smos.services.convergent_resonance_service import (
     ConvergentResonanceService,
     ResonanceCandidate,
 )
+from smos.services.blockage_analysis_service import (
+    BlockageAnalysisService,
+    BlockageAnalysis,
+)
 
 __all__ = [
     "PhenomenonService",
@@ -28,4 +32,6 @@ __all__ = [
     "ContextExposureService",
     "ConvergentResonanceService",
     "ResonanceCandidate",
+    "BlockageAnalysisService",
+    "BlockageAnalysis",
 ]
