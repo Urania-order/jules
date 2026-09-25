@@ -22,6 +22,7 @@ from smos.services.emergence_analysis_service import (
     EmergenceAnalysisService,
     EmergenceAnalysis,
 )
+from smos.services.prediction_service import PredictionService
 
 __all__ = [
     "PhenomenonService",
@@ -40,4 +41,5 @@ __all__ = [
     "BlockageAnalysis",
     "EmergenceAnalysisService",
     "EmergenceAnalysis",
+    "PredictionService",
 ]

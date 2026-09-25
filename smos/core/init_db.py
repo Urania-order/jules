@@ -13,6 +13,7 @@ from smos.models.constraint import Constraint, ConstraintType, ConstraintStatus
 from smos.models.potential import PotentialPhenomenon, PotentialStatus
 from smos.models.domain_relation import DomainRelation
 from smos.models.context_exposure import ContextExposure, AgentType
+from smos.models.prediction import Prediction
 from smos.models.discovery import LostKnowledge, Hypothesis, DiscoveryRecovery
 from smos.models.coevolution import UnderstandingValidation, ComprehensionTest
 from smos.models.entities import BehaviorProfile, LLMProfile

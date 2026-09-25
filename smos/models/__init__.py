@@ -4,6 +4,7 @@ from smos.models.constraint import Constraint, ConstraintType, ConstraintStatus
 from smos.models.potential import PotentialPhenomenon, PotentialStatus
 from smos.models.domain_relation import DomainRelation
 from smos.models.context_exposure import ContextExposure, AgentType
+from smos.models.prediction import Prediction
 
 __all__ = [
     "Phenomenon",
@@ -17,4 +18,5 @@ __all__ = [
     "DomainRelation",
     "ContextExposure",
     "AgentType",
+    "Prediction",
 ]
