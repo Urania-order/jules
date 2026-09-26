@@ -637,3 +637,15 @@ def test_frontend_contract_sort_uses_id_fallback():
 
     assert 'function sortTasksByCreatedAt(' in content
     assert 'id.match(/^task-(\\d{4})(\\d{2})(\\d{2})-(\\d{2})(\\d{2})(\\d{2})/' in content
+
+
+def test_frontend_contract_ontology():
+    """Verify ontology view, nav button, graph SVG, and filters exist in frontend/index.html."""
+    content = INDEX_PATH.read_text()
+
+    assert 'data-view="ontology"' in content
+    assert 'id="view-ontology"' in content
+    assert 'id="ontology-graph-svg"' in content
+    assert 'id="ontology-filters"' in content
+    assert 'id="ontology-detail-panel"' in content
+    assert 'renderOntologyGraph' in content

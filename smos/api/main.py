@@ -2037,21 +2037,154 @@ def retry_task(id: str):
     return new_task.model_dump()
 
 @app.get("/api/graph")
-def get_task_graph():
+def get_task_graph(db: Session = Depends(get_db)):
+    nodes = []
+    edges = []
+
+    # 1. Existing task nodes (type="task")
     qm = QueueManager()
     tasks = qm.list_all_tasks()
-    nodes = []
     for t in tasks:
         st_val = t.status.value if isinstance(t.status, TaskStatus) else str(t.status)
         nodes.append({
             "id": t.id,
+            "type": "task",
             "status": st_val,
             "priority": t.priority,
             "title": t.title or t.request or t.id
         })
+
+    # 2. Phenomenon nodes
+    phen_svc = PhenomenonService(db)
+    phenomena = phen_svc.list(limit=500)
+    phen_map = {}
+    for p in phenomena:
+        st_val = p.epistemic_status.value if hasattr(p.epistemic_status, 'value') else str(p.epistemic_status)
+        node_id = f"phenomenon:{p.id}"
+        phen_map[p.name.lower()] = node_id
+        nodes.append({
+            "id": node_id,
+            "type": "phenomenon",
+            "label": p.name,
+            "status": st_val,
+            "description": p.description or ""
+        })
+
+    # 3. Context nodes
+    ctx_svc = ContextService(db)
+    contexts = ctx_svc.list(limit=500)
+    for c in contexts:
+        nodes.append({
+            "id": f"context:{c.id}",
+            "type": "context",
+            "label": c.name,
+            "description": c.description or ""
+        })
+
+    # 4. Constraint nodes
+    const_svc = ConstraintService(db)
+    constraints = const_svc.list(limit=500)
+    for c in constraints:
+        st_val = c.status.value if hasattr(c.status, 'value') else str(c.status)
+        type_val = c.type.value if hasattr(c.type, 'value') else str(c.type)
+        nodes.append({
+            "id": f"constraint:{c.id}",
+            "type": "constraint",
+            "label": c.name,
+            "status": st_val,
+            "constraint_type": type_val,
+            "description": c.description or ""
+        })
+
+    # 5. Potential nodes
+    pot_svc = PotentialService(db)
+    potentials = pot_svc.list(limit=500)
+    for p in potentials:
+        st_val = p.status.value if hasattr(p.status, 'value') else str(p.status)
+        node_id = f"potential:{p.id}"
+        nodes.append({
+            "id": node_id,
+            "type": "potential",
+            "label": p.phenomenon,
+            "status": st_val,
+            "required_conditions": p.required_conditions or [],
+            "supporting_contexts": p.supporting_contexts or [],
+            "blocking_constraints": p.blocking_constraints or []
+        })
+
+        if p.phenomenon and p.phenomenon.lower() in phen_map:
+            edges.append({
+                "source": node_id,
+                "target": phen_map[p.phenomenon.lower()],
+                "type": "POTENTIAL_FOR"
+            })
+
+        for c_item in (p.blocking_constraints or []):
+            try:
+                c_id = int(c_item)
+                edges.append({
+                    "source": f"constraint:{c_id}",
+                    "target": node_id,
+                    "type": "BLOCKS"
+                })
+            except (ValueError, TypeError):
+                pass
+
+        for ctx_item in (p.supporting_contexts or []):
+            try:
+                ctx_id = int(ctx_item)
+                edges.append({
+                    "source": f"context:{ctx_id}",
+                    "target": node_id,
+                    "type": "ENABLES"
+                })
+            except (ValueError, TypeError):
+                pass
+
+    # 6. Prediction nodes
+    pred_svc = PredictionService(db)
+    predictions = pred_svc.list(limit=500)
+    for p in predictions:
+        st_val = p.epistemic_status.value if hasattr(p.epistemic_status, 'value') else str(p.epistemic_status)
+        pred_id = f"prediction:{p.id}"
+        exp_str = str(p.expected_state) if not isinstance(p.expected_state, str) else p.expected_state
+        summary = exp_str[:50] + "..." if len(exp_str) > 50 else exp_str
+        nodes.append({
+            "id": pred_id,
+            "type": "prediction",
+            "label": summary,
+            "status": st_val,
+            "expected_state": p.expected_state,
+            "source_hypothesis_type": p.source_hypothesis_type,
+            "source_hypothesis_id": p.source_hypothesis_id
+        })
+
+        if p.source_hypothesis_type and p.source_hypothesis_id:
+            src_type = str(p.source_hypothesis_type).lower()
+            target_id = f"{src_type}:{p.source_hypothesis_id}"
+            edges.append({
+                "source": pred_id,
+                "target": target_id,
+                "type": "PREDICTS"
+            })
+
+    # 7. DomainRelation edges
+    rel_svc = DomainRelationService(db)
+    domain_rels = rel_svc.list(limit=500)
+    for rel in domain_rels:
+        rel_type_val = rel.relation_type.value if hasattr(rel.relation_type, 'value') else str(rel.relation_type)
+        src_type = str(rel.source_type).lower()
+        tgt_type = str(rel.target_type).lower()
+        edges.append({
+            "source": f"{src_type}:{rel.source_id}",
+            "target": f"{tgt_type}:{rel.target_id}",
+            "type": rel_type_val,
+            "confidence": rel.confidence
+        })
+
     return {
         "nodes": nodes,
-        "edges": []
+        "edges": edges
     }
 
 @app.get("/api/search")

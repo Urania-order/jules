@@ -869,6 +869,24 @@
     .queue-led-blue { background-color: #3b82f6; }
     .queue-led-yellow { background-color: #eab308; animation: pulse 1.5s infinite; }
     .queue-led-red { background-color: #ef4444; }
+
+    /* Ontology View Styles */
+    .ontology-filters-bar { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+    .filter-chip { display: flex; align-items: center; gap: 0.3rem; background: var(--bg-secondary); padding: 0.3rem 0.6rem; border-radius: 4px; font-size: 0.85rem; cursor: pointer; border: 1px solid var(--border-color); }
+    .ontology-layout { display: flex; gap: 1rem; margin-top: 1rem; }
+    #ontology-graph-svg { background: #0f172a; border-radius: 8px; }
+    .ontology-node { cursor: pointer; transition: all 0.2s ease; }
+    .ontology-node:hover circle { stroke: #ffffff; stroke-width: 3px; }
+    .ontology-node text { font-size: 11px; fill: #e2e8f0; pointer-events: none; text-anchor: middle; }
+    .ontology-edge { stroke: #475569; stroke-width: 1.5px; opacity: 0.6; transition: all 0.2s; }
+    .ontology-edge:hover { stroke: #f97316; stroke-width: 3px; opacity: 1; }
+    .ontology-edge-text { font-size: 9px; fill: #94a3b8; text-anchor: middle; }
+    .node-type-phenomenon { fill: #3b82f6; }
+    .node-type-context { fill: #10b981; }
+    .node-type-constraint { fill: #ef4444; }
+    .node-type-potential { fill: #eab308; }
+    .node-type-prediction { fill: #a855f7; }
+    .node-type-task { fill: #6b7280; }
   </style>
 </head>
 <body>
@@ -899,6 +917,7 @@
       <button class="nav-btn" data-view="proposals">Proposals</button>
       <button class="nav-btn" data-view="events">Events</button>
       <button class="nav-btn" data-view="history">History</button>
+      <button class="nav-btn" data-view="ontology">🧠 Ontology</button>
       <button class="nav-btn" data-view="consult">Consult</button>
       <button class="nav-btn" data-view="admin">Admin</button>
     </nav>
@@ -1374,6 +1393,31 @@
       <div class="history-log" id="history-log"></div>
     </section>
 
+    <!-- ONTOLOGY GRAPH VIEW -->
+    <section id="view-ontology" class="view">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+        <h2 style="margin: 0;">🧠 Domain Ontology Graph</h2>
+        <div id="ontology-filters" class="ontology-filters-bar">
+          <label class="filter-chip"><input type="checkbox" id="filter-phenomenon" checked onchange="renderOntologyGraph()"> Phenomenon</label>
+          <label class="filter-chip"><input type="checkbox" id="filter-context" checked onchange="renderOntologyGraph()"> Context</label>
+          <label class="filter-chip"><input type="checkbox" id="filter-constraint" checked onchange="renderOntologyGraph()"> Constraint</label>
+          <label class="filter-chip"><input type="checkbox" id="filter-potential" checked onchange="renderOntologyGraph()"> Potential</label>
+          <label class="filter-chip"><input type="checkbox" id="filter-prediction" checked onchange="renderOntologyGraph()"> Prediction</label>
+          <label class="filter-chip"><input type="checkbox" id="filter-task" checked onchange="renderOntologyGraph()"> Task</label>
+        </div>
+      </div>
+
+      <div class="ontology-layout">
+        <div id="ontology-graph-container" class="card" style="flex: 1; min-height: 550px; position: relative; overflow: hidden; padding: 0;">
+          <svg id="ontology-graph-svg" width="100%" height="550" viewBox="0 0 1000 600" preserveAspectRatio="xMidYMid meet"></svg>
+        </div>
+        <div id="ontology-detail-panel" class="card" style="width: 320px; min-height: 550px; display: none;">
+          <h3 id="ontology-detail-title">Entity Details</h3>
+          <div id="ontology-detail-body"></div>
+        </div>
+      </div>
+    </section>
+
     <!-- ADMIN WEB TERMINAL PANEL -->
     <section id="view-admin" class="view">
       <h2>Admin Web Terminal</h2>
@@ -1818,6 +1862,7 @@
         renderConsultView();
         renderResetCenter();
         renderAdminQueueStatus();
+        renderOntologyGraph();
 
         pollQueueLed();
       } catch (e) {
@@ -3764,6 +3809,246 @@
       } catch (err) {
         // ignore errors on status refresh
       }
+    }
+
+    let currentGraphData = { nodes: [], edges: [] };
+
+    async function renderOntologyGraph() {
+      const svg = document.getElementById('ontology-graph-svg');
+      if (!svg) return;
+
+      try {
+        currentGraphData = await fetchJSON(`${API_BASE}/graph`);
+      } catch (err) {
+        console.error('Error fetching graph data:', err);
+      }
+
+      const phenChecked = document.getElementById('filter-phenomenon')?.checked ?? true;
+      const ctxChecked = document.getElementById('filter-context')?.checked ?? true;
+      const constChecked = document.getElementById('filter-constraint')?.checked ?? true;
+      const potChecked = document.getElementById('filter-potential')?.checked ?? true;
+      const predChecked = document.getElementById('filter-prediction')?.checked ?? true;
+      const taskChecked = document.getElementById('filter-task')?.checked ?? true;
+
+      const visibleTypes = new Set();
+      if (phenChecked) visibleTypes.add('phenomenon');
+      if (ctxChecked) visibleTypes.add('context');
+      if (constChecked) visibleTypes.add('constraint');
+      if (potChecked) visibleTypes.add('potential');
+      if (predChecked) visibleTypes.add('prediction');
+      if (taskChecked) visibleTypes.add('task');
+
+      const visibleNodes = (currentGraphData.nodes || []).filter(n => visibleTypes.has(n.type));
+      const visibleNodeIds = new Set(visibleNodes.map(n => n.id));
+
+      const visibleEdges = (currentGraphData.edges || []).filter(e =>
+        visibleNodeIds.has(e.source) && visibleNodeIds.has(e.target)
+      );
+
+      const colMap = {
+        task: 0,
+        phenomenon: 1,
+        context: 2,
+        constraint: 3,
+        potential: 4,
+        prediction: 5
+      };
+
+      const typeGroups = {
+        task: [],
+        phenomenon: [],
+        context: [],
+        constraint: [],
+        potential: [],
+        prediction: []
+      };
+
+      visibleNodes.forEach(n => {
+        if (typeGroups[n.type]) {
+          typeGroups[n.type].push(n);
+        }
+      });
+
+      const positions = {};
+      const colWidth = 150;
+      const startX = 100;
+      const startY = 80;
+      const maxY = 520;
+
+      Object.keys(typeGroups).forEach(t => {
+        const group = typeGroups[t];
+        const colIdx = colMap[t] ?? 0;
+        const x = startX + colIdx * colWidth;
+        const count = group.length;
+
+        group.forEach((node, idx) => {
+          let y = startY + (idx + 1) * (maxY - startY) / (count + 1);
+          if (count === 1) y = (startY + maxY) / 2;
+          positions[node.id] = { x, y, node };
+        });
+      });
+
+      svg.innerHTML = `
+        <defs>
+          <marker id="arrow" viewBox="0 0 10 10" refX="28" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="#64748b"/>
+          </marker>
+          <marker id="arrow-active" viewBox="0 0 10 10" refX="28" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="#f97316"/>
+          </marker>
+        </defs>
+      `;
+
+      const colLabels = [
+        { label: "TASKS", x: 100 },
+        { label: "PHENOMENA", x: 250 },
+        { label: "CONTEXTS", x: 400 },
+        { label: "CONSTRAINTS", x: 550 },
+        { label: "POTENTIALS", x: 700 },
+        { label: "PREDICTIONS", x: 850 }
+      ];
+
+      colLabels.forEach(col => {
+        const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        text.setAttribute('x', col.x);
+        text.setAttribute('y', 35);
+        text.setAttribute('fill', '#64748b');
+        text.setAttribute('font-size', '12');
+        text.setAttribute('font-weight', 'bold');
+        text.setAttribute('text-anchor', 'middle');
+        text.textContent = col.label;
+        svg.appendChild(text);
+      });
+
+      visibleEdges.forEach(e => {
+        const src = positions[e.source];
+        const tgt = positions[e.target];
+        if (!src || !tgt) return;
+
+        const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+
+        const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        line.setAttribute('x1', src.x);
+        line.setAttribute('y1', src.y);
+        line.setAttribute('x2', tgt.x);
+        line.setAttribute('y2', tgt.y);
+        line.setAttribute('class', 'ontology-edge');
+        line.setAttribute('marker-end', 'url(#arrow)');
+
+        const midX = (src.x + tgt.x) / 2;
+        const midY = (src.y + tgt.y) / 2;
+        const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        text.setAttribute('x', midX);
+        text.setAttribute('y', midY - 4);
+        text.setAttribute('class', 'ontology-edge-text');
+        text.textContent = e.type || '';
+
+        g.appendChild(line);
+        g.appendChild(text);
+        svg.appendChild(g);
+      });
+
+      const colors = {
+        phenomenon: '#3b82f6',
+        context: '#10b981',
+        constraint: '#ef4444',
+        potential: '#eab308',
+        prediction: '#a855f7',
+        task: '#6b7280'
+      };
+
+      visibleNodes.forEach(node => {
+        const pos = positions[node.id];
+        if (!pos) return;
+
+        const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+        g.setAttribute('class', 'ontology-node');
+        g.setAttribute('onclick', `showOntologyDetail('${node.id}')`);
+
+        const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        circle.setAttribute('cx', pos.x);
+        circle.setAttribute('cy', pos.y);
+        circle.setAttribute('r', 18);
+        circle.setAttribute('fill', colors[node.type] || '#64748b');
+
+        if (['BLOCKED', 'TEMPORARILY_BLOCKED', 'STRUCTURALLY_BLOCKED', 'REFUTED'].includes(node.status)) {
+          circle.setAttribute('stroke', '#ef4444');
+          circle.setAttribute('stroke-width', '4');
+        } else {
+          circle.setAttribute('stroke', '#1e293b');
+          circle.setAttribute('stroke-width', '2');
+        }
+
+        const labelText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        labelText.setAttribute('x', pos.x);
+        labelText.setAttribute('y', pos.y + 4);
+        labelText.setAttribute('text-anchor', 'middle');
+        labelText.setAttribute('fill', '#ffffff');
+        labelText.setAttribute('font-size', '10');
+        labelText.setAttribute('font-weight', 'bold');
+        labelText.textContent = (node.label || node.title || node.id).substring(0, 5);
+
+        const fullTitle = document.createElementNS('http://www.w3.org/2000/svg', 'title');
+        fullTitle.textContent = `${node.type.toUpperCase()}: ${node.label || node.title || node.id}\nStatus: ${node.status || 'N/A'}`;
+
+        g.appendChild(circle);
+        g.appendChild(labelText);
+        g.appendChild(fullTitle);
+        svg.appendChild(g);
+      });
+    }
+
+    function showOntologyDetail(nodeId) {
+      const panel = document.getElementById('ontology-detail-panel');
+      const titleEl = document.getElementById('ontology-detail-title');
+      const bodyEl = document.getElementById('ontology-detail-body');
+      if (!panel || !bodyEl) return;
+
+      const node = (currentGraphData.nodes || []).find(n => n.id === nodeId);
+      if (!node) return;
+
+      panel.style.display = 'block';
+      if (titleEl) titleEl.textContent = `${node.type.toUpperCase()} Details`;
+
+      const inEdges = (currentGraphData.edges || []).filter(e => e.target === nodeId);
+      const outEdges = (currentGraphData.edges || []).filter(e => e.source === nodeId);
+
+      const renderConnectedNode = (otherId, relType, direction) => {
+        const otherNode = (currentGraphData.nodes || []).find(n => n.id === otherId);
+        const name = otherNode ? (otherNode.label || otherNode.title || otherNode.id) : otherId;
+        const typeBadge = otherNode ? otherNode.type : 'node';
+        return `<li style="margin-bottom: 0.4rem; font-size: 0.85rem;">
+          <span style="color: var(--text-secondary); font-size: 0.75rem;">${direction} [${escapeHTML(relType)}]</span><br>
+          <a href="javascript:void(0)" onclick="showOntologyDetail('${escapeHTML(otherId)}')" style="color: var(--accent-blue); text-decoration: underline;">
+            ${escapeHTML(typeBadge.toUpperCase())}: ${escapeHTML(name)}
+          </a>
+        </li>`;
+      };
+
+      let html = `
+        <div style="margin-bottom: 1rem;">
+          <div style="font-size: 0.8rem; color: var(--text-secondary);">ID: ${escapeHTML(node.id)}</div>
+          <h4 style="margin: 0.3rem 0; font-size: 1.1rem; color: var(--text-primary);">${escapeHTML(node.label || node.title || node.id)}</h4>
+          <span class="status-badge" style="display: inline-block; padding: 0.2rem 0.5rem; font-size: 0.75rem; border-radius: 4px; background: var(--bg-secondary); border: 1px solid var(--border-color);">
+            Status: ${escapeHTML(node.status || 'N/A')}
+          </span>
+          ${node.description ? `<p style="margin-top: 0.5rem; font-size: 0.85rem; color: var(--text-secondary);">${escapeHTML(node.description)}</p>` : ''}
+        </div>
+        <div style="border-top: 1px solid var(--border-color); padding-top: 0.5rem; margin-top: 0.8rem;">
+          <h5 style="margin: 0.5rem 0 0.3rem 0; font-size: 0.9rem;">Outgoing Relations</h5>
+          <ul style="padding-left: 1rem; margin: 0;">
+            ${outEdges.length > 0 ? outEdges.map(e => renderConnectedNode(e.target, e.type, '→')).join('') : '<li style="color: var(--text-secondary); font-size: 0.8rem;">None</li>'}
+          </ul>
+        </div>
+        <div style="border-top: 1px solid var(--border-color); padding-top: 0.5rem; margin-top: 0.8rem;">
+          <h5 style="margin: 0.5rem 0 0.3rem 0; font-size: 0.9rem;">Incoming Relations</h5>
+          <ul style="padding-left: 1rem; margin: 0;">
+            ${inEdges.length > 0 ? inEdges.map(e => renderConnectedNode(e.source, e.type, '←')).join('') : '<li style="color: var(--text-secondary); font-size: 0.8rem;">None</li>'}
+          </ul>
+        </div>
+      `;
+
+      bodyEl.innerHTML = html;
     }
 
     async function adminAddToQueue() {
