@@ -16,6 +16,19 @@ from smos.models.conclusion_contract import (
     get_confidence,
     validate_conclusion,
 )
+from smos.models.recipe_contract import (
+    SOURCE_EXPOSURE_IDS,
+    SOURCE_PREDICTION_IDS,
+    SOURCE_EVENT_IDS,
+    KNOWLEDGE_IDS,
+    EVALUATION_SUMMARY,
+    CREATED_AT,
+    LEARNING_EVIDENCE_SCHEMA_DOC,
+    LEARNING_LOOP_DOC,
+    normalize_learning_evidence,
+    validate_learning_evidence,
+    get_sources,
+)
 
 __all__ = [
     "Phenomenon",
@@ -40,4 +53,15 @@ __all__ = [
     "get_claim",
     "get_confidence",
     "validate_conclusion",
+    "SOURCE_EXPOSURE_IDS",
+    "SOURCE_PREDICTION_IDS",
+    "SOURCE_EVENT_IDS",
+    "KNOWLEDGE_IDS",
+    "EVALUATION_SUMMARY",
+    "CREATED_AT",
+    "LEARNING_EVIDENCE_SCHEMA_DOC",
+    "LEARNING_LOOP_DOC",
+    "normalize_learning_evidence",
+    "validate_learning_evidence",
+    "get_sources",
 ]
