@@ -22,6 +22,7 @@ from sqlalchemy.orm import Session
 from smos.models.context_exposure import ContextExposure, AgentType
 from smos.models.models import EpistemicStatus
 from smos.services.context_exposure_service import ContextExposureService
+from smos.models.conclusion_contract import get_claim, get_confidence
 
 
 @dataclass
@@ -48,10 +49,7 @@ class ResonanceCandidate:
 
 
 def _get_claim(conclusion: Optional[Dict[str, Any]]) -> str:
-    if not isinstance(conclusion, dict):
-        return ""
-    claim = conclusion.get("claim") or conclusion.get("text") or ""
-    return str(claim).strip().lower()
+    return get_claim(conclusion).lower()
 
 
 class ConvergentResonanceService:
@@ -147,9 +145,9 @@ class ConvergentResonanceService:
 
             # Compute confidence
             confidences = [
-                e.conclusion.get("confidence")
+                conf
                 for e in group
-                if isinstance(e.conclusion, dict) and isinstance(e.conclusion.get("confidence"), (int, float))
+                if (conf := get_confidence(e.conclusion)) is not None
             ]
             base = sum(confidences) / len(confidences) if confidences else 0.5
             scaled = min(1.0, base * (len(group) / max(min_agents, 1)) ** 0.5)

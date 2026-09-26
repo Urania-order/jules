@@ -6,6 +6,16 @@ from smos.models.domain_relation import DomainRelation
 from smos.models.context_exposure import ContextExposure, AgentType
 from smos.models.prediction import Prediction
 from smos.models.domain_event import DomainEvent, DomainEventType
+from smos.models.conclusion_contract import (
+    CLAIM,
+    TEXT,
+    CONFIDENCE,
+    CONCLUSION_SCHEMA_DOC,
+    normalize_conclusion,
+    get_claim,
+    get_confidence,
+    validate_conclusion,
+)
 
 __all__ = [
     "Phenomenon",
@@ -22,4 +32,12 @@ __all__ = [
     "Prediction",
     "DomainEvent",
     "DomainEventType",
+    "CLAIM",
+    "TEXT",
+    "CONFIDENCE",
+    "CONCLUSION_SCHEMA_DOC",
+    "normalize_conclusion",
+    "get_claim",
+    "get_confidence",
+    "validate_conclusion",
 ]

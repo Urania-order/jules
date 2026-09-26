@@ -37,6 +37,9 @@ class ContextExposure(Base):
     Records which context was visible to an agent when it generated
     a conclusion.
 
+    See smos.models.conclusion_contract for the canonical conclusion JSON schema,
+    constants, and validation helpers.
+
     IMPORTANT: this is a SIGNAL for convergence analysis,
     NOT evidence of truth.
 

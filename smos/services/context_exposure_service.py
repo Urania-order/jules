@@ -2,6 +2,7 @@ from typing import Any, Dict, List, Optional
 from sqlalchemy.orm import Session
 from smos.models.context_exposure import ContextExposure, AgentType
 from smos.models.models import EpistemicStatus
+from smos.models.conclusion_contract import normalize_conclusion
 
 class ContextExposureService:
     def __init__(self, db: Session):
@@ -26,7 +27,7 @@ class ContextExposureService:
             context_ids=list(context_ids or []),
             knowledge_ids=list(knowledge_ids or []),
             hidden_context_ids=list(hidden_context_ids or []),
-            conclusion=dict(conclusion or {}),
+            conclusion=normalize_conclusion(conclusion),
             epistemic_status=epistemic_status or EpistemicStatus.OBSERVED,
             provenance=dict(provenance or {}),
         )
