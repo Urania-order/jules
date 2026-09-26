@@ -1,0 +1,335 @@
+import pytest
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from fastapi.testclient import TestClient
+
+from smos.core.database import Base, get_db
+from smos.models.models import EpistemicStatus, RelationType
+from smos.models.constraint import ConstraintType, ConstraintStatus
+from smos.models.potential import PotentialStatus
+from smos.services.phenomenon_service import PhenomenonService
+from smos.services.context_service import ContextService
+from smos.services.constraint_service import ConstraintService
+from smos.services.potential_service import PotentialService
+from smos.services.domain_relation_service import DomainRelationService
+from smos.services.prediction_service import PredictionService
+from smos.services.blockage_analysis_service import BlockageAnalysisService
+from smos.services.emergence_analysis_service import EmergenceAnalysisService
+from smos.api.main import app
+
+
+@pytest.fixture
+def db_session():
+    engine = create_engine("sqlite:///:memory:",
+                           connect_args={"check_same_thread": False})
+    Base.metadata.create_all(bind=engine)
+    Session = sessionmaker(bind=engine)
+    session = Session()
+    try:
+        yield session
+    finally:
+        session.close()
+
+
+def _build_scenario(db_session):
+    """Helper: build the full ecological scenario. Returns dict of entities."""
+    phen_svc = PhenomenonService(db_session)
+    ctx_svc = ContextService(db_session)
+    const_svc = ConstraintService(db_session)
+    pot_svc = PotentialService(db_session)
+    rel_svc = DomainRelationService(db_session)
+
+    # --- Observed phenomenon ---
+    env_phen = phen_svc.create(
+        name="environmental_degradation",
+        description="Observed decline in regional air quality and soil health",
+        epistemic_status=EpistemicStatus.OBSERVED,
+    )
+
+    # --- Contexts ---
+    ctx_econ = ctx_svc.create(
+        name="economic_context",
+        description="Regional economic conditions",
+        epistemic_status=EpistemicStatus.OBSERVED,
+    )
+    ctx_infra = ctx_svc.create(
+        name="infrastructural_context",
+        description="Existing transport and utility infrastructure",
+        epistemic_status=EpistemicStatus.OBSERVED,
+    )
+    ctx_sec = ctx_svc.create(
+        name="security_context",
+        description="Regional security and territorial considerations",
+        epistemic_status=EpistemicStatus.OBSERVED,
+    )
+
+    # --- Constraints ---
+    c_territorial = const_svc.create(
+        name="territorial_security_risk",
+        type=ConstraintType.SECURITY,
+        status=ConstraintStatus.ACTIVE,
+        description="Territorial/security risk may limit facility placement",
+        confidence=0.6,
+    )
+    c_investment = const_svc.create(
+        name="investment_risk",
+        type=ConstraintType.ECONOMIC,
+        status=ConstraintStatus.ACTIVE,
+        description="Long payback period; investment uncertainty",
+        confidence=0.5,
+    )
+    c_infra_limit = const_svc.create(
+        name="infrastructure_limitation",
+        type=ConstraintType.INFRASTRUCTURAL,
+        status=ConstraintStatus.ACTIVE,
+        description="Limited power/water infrastructure",
+        confidence=0.7,
+    )
+    c_logistics = const_svc.create(
+        name="logistics_limitation",
+        type=ConstraintType.INFRASTRUCTURAL,
+        status=ConstraintStatus.ACTIVE,
+        description="Waste-input logistics are non-trivial",
+        confidence=0.6,
+    )
+
+    # --- Potential phenomenon (NOT a Phenomenon) ---
+    potential = pot_svc.create(
+        phenomenon="profitable_waste_processing_and_air_cleaning_facility",
+        status=PotentialStatus.POSSIBLE,
+        required_conditions=[
+            "stable investment framework",
+            "grid capacity sufficient",
+            "waste logistics resolved",
+        ],
+        supporting_contexts=[ctx_econ.id, ctx_infra.id, ctx_sec.id],
+        blocking_constraints=[
+            c_territorial.id,
+            c_investment.id,
+            c_infra_limit.id,
+            c_logistics.id,
+        ],
+        dependencies=[],
+        expected_impacts=[
+            {"target": "environmental_degradation",
+             "impact_type": "reduction",
+             "magnitude": "hypothesized"},
+        ],
+        provenance={"source": "operator", "note": "hypothesis only"},
+    )
+
+    # --- Relations (HYPOTHESIZED, NOT facts) ---
+
+    # Context ENABLES Potential
+    for ctx in (ctx_econ, ctx_infra, ctx_sec):
+        rel_svc.create(
+            source_type="context", source_id=ctx.id,
+            target_type="potential", target_id=potential.id,
+            relation_type=RelationType.ENABLES,
+            epistemic_status=EpistemicStatus.HYPOTHESIZED,
+            confidence=0.6,
+            evidence=[{"note": "hypothesized enabling condition"}],
+        )
+
+    # Constraint BLOCKS Potential
+    for c in (c_territorial, c_investment, c_infra_limit, c_logistics):
+        rel_svc.create(
+            source_type="constraint", source_id=c.id,
+            target_type="potential", target_id=potential.id,
+            relation_type=RelationType.BLOCKS,
+            epistemic_status=EpistemicStatus.HYPOTHESIZED,
+            confidence=0.6,
+            evidence=[{"note": "hypothesized blocking constraint"}],
+        )
+
+    # Potential TRANSFORMS environmental phenomenon (HYPOTHESIS)
+    rel_svc.create(
+        source_type="potential", source_id=potential.id,
+        target_type="phenomenon", target_id=env_phen.id,
+        relation_type=RelationType.TRANSFORMS,
+        epistemic_status=EpistemicStatus.HYPOTHESIZED,
+        confidence=0.4,
+        evidence=[{"note": "hypothesis, not fact"}],
+    )
+
+    return {
+        "env_phen": env_phen,
+        "ctx_econ": ctx_econ, "ctx_infra": ctx_infra, "ctx_sec": ctx_sec,
+        "c_territorial": c_territorial, "c_investment": c_investment,
+        "c_infra_limit": c_infra_limit, "c_logistics": c_logistics,
+        "potential": potential,
+        "rel_svc": rel_svc,
+    }
+
+
+# === SCENARIO TESTS ===
+
+def test_ecological_scenario_end_to_end(db_session):
+    """Full scenario: build + verify + analyze + predict."""
+    S = _build_scenario(db_session)
+    env_phen = S["env_phen"]; potential = S["potential"]
+
+    # --- Verify all entities created ---
+    assert env_phen.id is not None
+    assert potential.id is not None
+
+    # --- Verify: hypothesis relations are HYPOTHESIZED, not OBSERVED ---
+    rels = S["rel_svc"].list_for("potential", potential.id)
+    assert len(rels) >= 1
+    for r in rels:
+        assert r.epistemic_status != EpistemicStatus.OBSERVED, (
+            "Hypothetical relations MUST NOT be OBSERVED"
+        )
+
+    # --- BlockageAnalysis (TASK 11) ---
+    ba_svc = BlockageAnalysisService(db_session)
+    ba = ba_svc.analyze_blockage(env_phen.id)
+    assert ba.kind == "blockage_analysis"
+    assert ba.epistemic_status == EpistemicStatus.HYPOTHESIZED.value
+
+    # --- EmergenceAnalysis (TASK 12) ---
+    ea_svc = EmergenceAnalysisService(db_session)
+    ea = ea_svc.analyze_emergence(env_phen.id)
+    assert ea.kind == "emergence_analysis"
+    assert ea.epistemic_status == EpistemicStatus.HYPOTHESIZED.value
+
+    # --- Prediction (TASK 13) — HYPOTHESIS, NOT fact ---
+    pred_svc = PredictionService(db_session)
+    pred = pred_svc.create_prediction(
+        source_hypothesis_type="potential_phenomenon",
+        source_hypothesis_id=potential.id,
+        expected_state={"environmental_degradation_reduced": True,
+                        "note": "conditional expectation"},
+        conditions=[
+            "investment_risk mitigated",
+            "infrastructure upgraded",
+            "logistics resolved",
+        ],
+        confidence=0.5,
+    )
+    assert pred.epistemic_status == EpistemicStatus.PREDICTED
+    assert pred.epistemic_status != EpistemicStatus.OBSERVED
+
+    # --- Verify NO auto-promotion ---
+    pred_svc.attach_outcome(pred.id,
+        actual_outcome={"environmental_degradation_reduced": "partially"})
+    pred_svc.evaluate(pred.id,
+        evaluation={"match": "partial", "accuracy": 0.5})
+    pred_after = pred_svc.get(pred.id)
+    assert pred_after.epistemic_status == EpistemicStatus.PREDICTED, (
+        "Prediction MUST NOT auto-promote"
+    )
+
+
+def test_ecological_scenario_potential_is_not_phenomenon(db_session):
+    """The profitable waste facility MUST be a PotentialPhenomenon,
+    not a Phenomenon."""
+    S = _build_scenario(db_session)
+    from smos.models.phenomenon import Phenomenon
+    # No Phenomenon should exist with the facility name
+    match = db_session.query(Phenomenon).filter(
+        Phenomenon.name.like("%waste_processing%")
+    ).first()
+    assert match is None, (
+        "The waste facility MUST NOT be registered as a Phenomenon"
+    )
+    # But PotentialPhenomenon should exist
+    assert S["potential"].phenomenon == (
+        "profitable_waste_processing_and_air_cleaning_facility"
+    )
+
+
+def test_ecological_scenario_relations_are_hypothesized(db_session):
+    """All hypothesis relations carry non-OBSERVED epistemic status."""
+    S = _build_scenario(db_session)
+    potential = S["potential"]
+    rels = S["rel_svc"].list_into("potential", potential.id)
+    assert len(rels) >= 4   # at least the 4 BLOCKS relations
+    for r in rels:
+        assert r.epistemic_status == EpistemicStatus.HYPOTHESIZED
+
+
+def test_ecological_scenario_no_auto_promotion(db_session):
+    """attach_outcome + evaluate do NOT change epistemic_status."""
+    S = _build_scenario(db_session)
+    pred_svc = PredictionService(db_session)
+    pred = pred_svc.create_prediction(
+        source_hypothesis_type="potential_phenomenon",
+        source_hypothesis_id=S["potential"].id,
+        expected_state={"env_restored": True},
+        conditions=["hypothetical"],
+        confidence=0.5,
+    )
+    original_status = pred.epistemic_status
+
+    pred_svc.attach_outcome(pred.id, {"env_restored": "partial"})
+    pred_svc.evaluate(pred.id, {"match": "partial"})
+
+    pred_after = pred_svc.get(pred.id)
+    assert pred_after.epistemic_status == original_status == EpistemicStatus.PREDICTED
+
+
+def test_ecological_scenario_graph_has_all_node_types(db_session):
+    """API /api/graph represents the scenario."""
+    S = _build_scenario(db_session)
+    pred_svc = PredictionService(db_session)
+    pred = pred_svc.create_prediction(
+        source_hypothesis_type="potential_phenomenon",
+        source_hypothesis_id=S["potential"].id,
+        expected_state={"env_restored": True},
+        confidence=0.5,
+    )
+
+    app.dependency_overrides[get_db] = lambda: db_session
+    try:
+        client = TestClient(app)
+        r = client.get("/api/graph")
+        assert r.status_code == 200
+        g = r.json()
+
+        node_ids = {n["id"] for n in g["nodes"]}
+        node_types = {n["type"] for n in g["nodes"]}
+        # All 5 domain node types must be present
+        for t in ("phenomenon", "context", "constraint", "potential", "prediction"):
+            assert t in node_types, f"Node type {t} missing from graph"
+
+        # Specific nodes for the scenario
+        assert f"phenomenon:{S['env_phen'].id}" in node_ids
+        assert f"context:{S['ctx_econ'].id}" in node_ids
+        assert f"context:{S['ctx_infra'].id}" in node_ids
+        assert f"context:{S['ctx_sec'].id}" in node_ids
+        assert f"constraint:{S['c_territorial'].id}" in node_ids
+        assert f"constraint:{S['c_investment'].id}" in node_ids
+        assert f"constraint:{S['c_infra_limit'].id}" in node_ids
+        assert f"constraint:{S['c_logistics'].id}" in node_ids
+        assert f"potential:{S['potential'].id}" in node_ids
+        assert f"prediction:{pred.id}" in node_ids
+
+        # Edges: DomainRelation-derived + prediction
+        edge_keys = {(e["source"], e.get("type"), e["target"]) for e in g["edges"]}
+        assert (f"constraint:{S['c_investment'].id}", "BLOCKS",
+                f"potential:{S['potential'].id}") in edge_keys
+        assert (f"context:{S['ctx_econ'].id}", "ENABLES",
+                f"potential:{S['potential'].id}") in edge_keys
+        assert (f"potential:{S['potential'].id}", "TRANSFORMS",
+                f"phenomenon:{S['env_phen'].id}") in edge_keys
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_ecological_scenario_does_not_modify_existing_entities(db_session):
+    """Read-only analyses do NOT modify entities."""
+    S = _build_scenario(db_session)
+    env_phen = S["env_phen"]
+    env_id = env_phen.id
+    # Capture status before
+    from smos.services.phenomenon_service import PhenomenonService
+    before = PhenomenonService(db_session).get(env_id)
+    before_status = before.epistemic_status
+
+    # Run analyses
+    BlockageAnalysisService(db_session).analyze_blockage(env_id)
+    EmergenceAnalysisService(db_session).analyze_emergence(env_id)
+
+    after = PhenomenonService(db_session).get(env_id)
+    assert after.epistemic_status == before_status
