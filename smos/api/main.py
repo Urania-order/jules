@@ -574,6 +574,12 @@ class PredictionUpdate(BaseModel):
     expected_at: Optional[datetime] = None
     provenance: Optional[Dict[str, Any]] = None
 
+class PredictionOutcomeRequest(BaseModel):
+    actual_outcome: Dict[str, Any]
+
+class PredictionEvaluateRequest(BaseModel):
+    evaluation: Dict[str, Any]
+
 class ResonanceDetectRequest(BaseModel):
     min_agents: Optional[int] = 2
     max_context_overlap: Optional[float] = 0.5
@@ -2918,6 +2924,22 @@ def update_prediction(id: int, req: PredictionUpdate, db: Session = Depends(get_
 
     db.commit()
     db.refresh(prediction)
+    return prediction.to_dict()
+
+@app.post("/api/predictions/{id}/outcome", dependencies=[Depends(require_operator)])
+def attach_prediction_outcome(id: int, req: PredictionOutcomeRequest, db: Session = Depends(get_db)):
+    svc = PredictionService(db)
+    prediction = svc.attach_outcome(id, req.actual_outcome)
+    if not prediction:
+        return _error_response(code="NOT_FOUND", message=f"Prediction '{id}' not found", status_code=404)
+    return prediction.to_dict()
+
+@app.post("/api/predictions/{id}/evaluate", dependencies=[Depends(require_operator)])
+def evaluate_prediction(id: int, req: PredictionEvaluateRequest, db: Session = Depends(get_db)):
+    svc = PredictionService(db)
+    prediction = svc.evaluate(id, req.evaluation)
+    if not prediction:
+        return _error_response(code="NOT_FOUND", message=f"Prediction '{id}' not found", status_code=404)
     return prediction.to_dict()
 
 # --- ANALYSIS ENDPOINTS ---
