@@ -45,6 +45,7 @@ from smos.services.prediction_service import PredictionService
 from smos.services.convergent_resonance_service import ConvergentResonanceService
 from smos.services.blockage_analysis_service import BlockageAnalysisService
 from smos.services.emergence_analysis_service import EmergenceAnalysisService
+from smos.services.domain_event_service import DomainEventService
 
 # Core & Adapters
 from smos.core.state import StateManager, normalize_created_at_state
@@ -2972,3 +2973,41 @@ def analyze_emergence(phenomenon_id: int, db: Session = Depends(get_db)):
     svc = EmergenceAnalysisService(db)
     analysis = svc.analyze_emergence(phenomenon_id=phenomenon_id)
     return analysis.to_dict()
+
+# --- DOMAIN EVENTS API ---
+
+@app.get("/api/domain-events")
+def list_domain_events(limit: int = 50, db: Session = Depends(get_db)):
+    svc = DomainEventService(db)
+    events = svc.list_recent(limit=limit)
+    return {"events": [e.to_dict() for e in events]}
+
+@app.get("/api/domain-events/{entity_type}/{entity_id}")
+def list_domain_events_for_entity(
+    entity_type: str,
+    entity_id: int,
+    limit: int = 100,
+    offset: int = 0,
+    db: Session = Depends(get_db)
+):
+    svc = DomainEventService(db)
+    events = svc.list_for_entity(
+        entity_type=entity_type,
+        entity_id=entity_id,
+        limit=limit,
+        offset=offset
+    )
+    return {
+        "entity_type": entity_type,
+        "entity_id": entity_id,
+        "events": [e.to_dict() for e in events]
+    }
+
+@app.post("/api/domain-events/reconstruct/{entity_type}/{entity_id}", dependencies=[Depends(require_operator)])
+def reconstruct_domain_entity(
+    entity_type: str,
+    entity_id: int,
+    db: Session = Depends(get_db)
+):
+    svc = DomainEventService(db)
+    return svc.reconstruct_entity(entity_type=entity_type, entity_id=entity_id)
