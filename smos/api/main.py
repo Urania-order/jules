@@ -45,6 +45,7 @@ from smos.services.prediction_service import PredictionService
 from smos.services.convergent_resonance_service import ConvergentResonanceService
 from smos.services.blockage_analysis_service import BlockageAnalysisService
 from smos.services.emergence_analysis_service import EmergenceAnalysisService
+from smos.services.four_position_service import FourPositionService
 from smos.services.domain_event_service import DomainEventService
 
 # Core & Adapters
@@ -2973,6 +2974,12 @@ def analyze_emergence(phenomenon_id: int, db: Session = Depends(get_db)):
     svc = EmergenceAnalysisService(db)
     analysis = svc.analyze_emergence(phenomenon_id=phenomenon_id)
     return analysis.to_dict()
+
+@app.post("/api/four-position/analyze/{phenomenon_id}", dependencies=[Depends(require_operator)])
+def analyze_four_position(phenomenon_id: int, db: Session = Depends(get_db)):
+    svc = FourPositionService(db)
+    analysis = svc.build_analysis(phenomenon_id=phenomenon_id)
+    return analysis
 
 # --- DOMAIN EVENTS API ---
 
