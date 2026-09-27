@@ -29,6 +29,18 @@ from smos.models.recipe_contract import (
     validate_learning_evidence,
     get_sources,
 )
+from smos.models.four_position_contract import (
+    FourPosition,
+    FOUR_POSITION_QUESTIONS,
+    FOUR_POSITION_SCHEMA_DOC,
+    FOUR_POSITION_DOC,
+    POSITION_KEYS,
+    normalize_four_position_analysis,
+    validate_four_position_analysis,
+    get_position,
+    set_position_claim,
+    is_four_position_analysis_complete,
+)
 
 __all__ = [
     "Phenomenon",
@@ -64,4 +76,14 @@ __all__ = [
     "normalize_learning_evidence",
     "validate_learning_evidence",
     "get_sources",
+    "FourPosition",
+    "FOUR_POSITION_QUESTIONS",
+    "FOUR_POSITION_SCHEMA_DOC",
+    "FOUR_POSITION_DOC",
+    "POSITION_KEYS",
+    "normalize_four_position_analysis",
+    "validate_four_position_analysis",
+    "get_position",
+    "set_position_claim",
+    "is_four_position_analysis_complete",
 ]
