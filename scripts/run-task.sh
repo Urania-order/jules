@@ -10,6 +10,20 @@ if [ -z "$TASK_FILE" ] || [ ! -f "$TASK_FILE" ]; then
 fi
 shift
 
+cleanup_tmp_task_file() {
+  if [ -n "${TASK_FILE:-}" ] && [ -f "$TASK_FILE" ]; then
+    local real_path
+    real_path=$(realpath "$TASK_FILE" 2>/dev/null || echo "$TASK_FILE")
+    case "$real_path" in
+      /tmp/*|/var/tmp/*|${TMPDIR:-/tmp}/*)
+        echo "Cleaning up temporary task file: $TASK_FILE"
+        rm -f "$TASK_FILE" 2>/dev/null || true
+        ;;
+    esac
+  fi
+}
+trap cleanup_tmp_task_file EXIT
+
 VERIFY_TASK=""
 if [ "${1:-}" = "--verify" ] && [ -n "${2:-}" ]; then
   VERIFY_TASK="$2"
