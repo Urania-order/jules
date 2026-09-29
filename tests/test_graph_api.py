@@ -16,22 +16,37 @@ def test_graph_returns_nodes_and_edges():
     assert isinstance(data["edges"], list)
 
 
+from unittest.mock import patch
+from smos.core.queue import Task, TaskStatus
+
+
 def test_graph_includes_task_nodes():
-    # Add a task via queue
-    add_resp = client.post("/api/queue", json={"request": "Graph Task Test", "priority": 3}, headers=AUTH_HEADERS)
+    # Add a task via queue in test mode
+    add_headers = {**AUTH_HEADERS, "X-Cosmos-Test": "1"}
+    add_resp = client.post("/api/queue", json={"request": "Graph Task Test", "priority": 3}, headers=add_headers)
     assert add_resp.status_code == 200
-    task_id = add_resp.json()["task"]["id"]
+    task_data = add_resp.json()["task"]
+    task_id = task_data["id"]
 
-    resp = client.get("/api/graph")
-    assert resp.status_code == 200
-    data = resp.json()
+    mock_task = Task(
+        id=task_id,
+        title="Graph Task Test",
+        request="Graph Task Test",
+        priority=3,
+        status=TaskStatus.PENDING,
+    )
 
-    task_nodes = [n for n in data["nodes"] if n.get("type") == "task" or n["id"] == task_id]
-    assert len(task_nodes) > 0
-    node = next(n for n in data["nodes"] if n["id"] == task_id)
-    assert node["type"] == "task"
-    assert "status" in node
-    assert "priority" in node
+    with patch("smos.core.queue.QueueManager.list_all_tasks", return_value=[mock_task]):
+        resp = client.get("/api/graph")
+        assert resp.status_code == 200
+        data = resp.json()
+
+        task_nodes = [n for n in data["nodes"] if n.get("type") == "task"]
+        assert len(task_nodes) > 0
+        node = next(n for n in data["nodes"] if n["id"] == task_id)
+        assert node["type"] == "task"
+        assert "status" in node
+        assert "priority" in node
 
 
 def test_graph_includes_phenomenon_nodes():

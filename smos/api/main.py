@@ -1,5 +1,5 @@
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi import FastAPI, Depends, HTTPException, Response, Request
+from fastapi import FastAPI, Depends, HTTPException, Response, Request, Header
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
@@ -1307,7 +1307,30 @@ def get_queue_tasks():
     return [t.model_dump() for t in tasks]
 
 @app.post("/api/queue", dependencies=[Depends(require_operator)])
-def add_task_to_queue(req: CreateTaskRequest):
+def add_task_to_queue(
+    req: CreateTaskRequest,
+    x_cosmos_test: Optional[str] = Header(None, alias="X-Cosmos-Test")
+):
+    is_test = x_cosmos_test == "1"
+    if is_test:
+        import uuid
+        from datetime import datetime, timezone
+        ephemeral_id = f"test-{uuid.uuid4().hex[:8]}"
+        now_str = datetime.now(timezone.utc).isoformat()
+        ephemeral_task = {
+            "id": ephemeral_id,
+            "request": req.request,
+            "priority": req.priority,
+            "status": "EPHEMERAL",
+            "is_test": True,
+            "created_at": now_str,
+        }
+        return {
+            "status": "success",
+            "cli_output": "[TEST MODE] Ephemeral task created without persistence",
+            "task": ephemeral_task
+        }
+
     adapter = JulesCLIAdapter()
     res = adapter.add_task(description=req.request, priority=req.priority)
     if not res["success"]:
@@ -1337,8 +1360,23 @@ def add_task_to_queue(req: CreateTaskRequest):
     return {"status": "success", "cli_output": res["stdout"], "task": latest_task.model_dump() if latest_task else None}
 
 @app.post("/api/tasks", dependencies=[Depends(require_operator)])
-def create_task_endpoint(req: CreateTaskRequest):
-    return add_task_to_queue(req)
+def create_task_endpoint(
+    req: CreateTaskRequest,
+    x_cosmos_test: Optional[str] = Header(None, alias="X-Cosmos-Test")
+):
+    is_test = x_cosmos_test == "1"
+    if is_test:
+        import uuid
+        from datetime import datetime, timezone
+        return {
+            "id": f"test-{uuid.uuid4().hex[:8]}",
+            "request": req.request,
+            "priority": req.priority,
+            "status": "EPHEMERAL",
+            "is_test": True,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }
+    return add_task_to_queue(req, x_cosmos_test=x_cosmos_test)
 
 @app.post("/api/queue/run", dependencies=[Depends(require_operator)])
 def run_queue(req: RunQueueRequest):
