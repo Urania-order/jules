@@ -25,6 +25,9 @@ from smos.services.emergence_analysis_service import (
 from smos.services.prediction_service import PredictionService
 from smos.services.domain_event_service import DomainEventService
 from smos.services.four_position_service import FourPositionService
+from smos.services.semantic_adapter import SemanticAdapter
+from smos.services.embedding_fallback import HashFallbackAdapter
+from smos.services.semantic_search_service import SemanticSearchService, build_canonical_semantic_text
 
 __all__ = [
     "PhenomenonService",
@@ -46,4 +49,8 @@ __all__ = [
     "PredictionService",
     "DomainEventService",
     "FourPositionService",
+    "SemanticAdapter",
+    "HashFallbackAdapter",
+    "SemanticSearchService",
+    "build_canonical_semantic_text",
 ]

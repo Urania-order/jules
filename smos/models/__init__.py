@@ -41,6 +41,7 @@ from smos.models.four_position_contract import (
     set_position_claim,
     is_four_position_analysis_complete,
 )
+from smos.models.semantic_index import SemanticIndexEntry
 
 __all__ = [
     "Phenomenon",
@@ -86,4 +87,5 @@ __all__ = [
     "get_position",
     "set_position_claim",
     "is_four_position_analysis_complete",
+    "SemanticIndexEntry",
 ]
