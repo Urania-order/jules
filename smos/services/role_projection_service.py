@@ -2,6 +2,7 @@
 
 These read-only projections answer domain-relevant questions by querying existing DomainRelation
 entries without calculating new truth or modifying models.
+Optionally extended with derived semantic retrieval signals via SemanticSearchService.
 """
 
 from typing import List, Optional, Dict, Any
@@ -9,14 +10,26 @@ from sqlalchemy.orm import Session
 from smos.models.domain_relation import DomainRelation
 from smos.models.models import RelationType
 from smos.services.domain_relation_service import DomainRelationService
+from smos.services.embedding_fallback import HashFallbackAdapter
+from smos.services.semantic_search_service import SemanticSearchService
 
 
 class PhenomenonPerspective:
     """Read-only projection answering domain questions from a Phenomenon perspective."""
 
-    def __init__(self, db: Session, domain_service: Optional[DomainRelationService] = None):
+    def __init__(
+        self,
+        db: Session,
+        domain_service: Optional[DomainRelationService] = None,
+        semantic_service: Optional[SemanticSearchService] = None,
+    ):
         self.db = db
         self.domain_service = domain_service if domain_service is not None else DomainRelationService(db)
+        self.semantic_service = (
+            semantic_service
+            if semantic_service is not None
+            else SemanticSearchService(db, HashFallbackAdapter())
+        )
 
     def what_conditions_allow_me_to_emerge(self, phenomenon_id: int) -> List[DomainRelation]:
         """DomainRelation where target=phenomenon, type in (ENABLES, REQUIRES, SUPPORTS)."""
@@ -89,9 +102,35 @@ class PhenomenonPerspective:
             .all()
         )
 
-    def to_dict(self, phenomenon_id: int) -> Dict[str, Any]:
+    def semantic_neighbors(
+        self,
+        phenomenon_id: int,
+        k: int = 10,
+    ) -> List[Dict[str, Any]]:
+        """Return semantic neighbors via SemanticSearchService.similar().
+
+        SIGNAL only. NOT evidence. NOT a DomainRelation.
+        Read-only. Each result:
+            {entity_type, entity_id, similarity, model_name}
+        """
+        return self.semantic_service.similar("phenomenon", phenomenon_id, k=k)
+
+    def semantic_search(
+        self,
+        query: str,
+        k: int = 10,
+        entity_types: Optional[List[str]] = None,
+    ) -> List[Dict[str, Any]]:
+        """Semantic search for query. SIGNAL only."""
+        return self.semantic_service.search(query, k=k, entity_types=entity_types)
+
+    def to_dict(
+        self,
+        phenomenon_id: int,
+        include_semantics: bool = False,
+    ) -> Dict[str, Any]:
         """Aggregate all phenomenon perspective answers."""
-        return {
+        result = {
             "phenomenon_id": phenomenon_id,
             "conditions_allowing_emergence": [
                 r.to_dict() for r in self.what_conditions_allow_me_to_emerge(phenomenon_id)
@@ -105,14 +144,27 @@ class PhenomenonPerspective:
                 r.to_dict() for r in self.what_context_could_i_create(phenomenon_id)
             ],
         }
+        if include_semantics:
+            result["semantic_neighbors"] = self.semantic_neighbors(phenomenon_id)
+        return result
 
 
 class ContextPerspective:
     """Read-only projection answering domain questions from a Context perspective."""
 
-    def __init__(self, db: Session, domain_service: Optional[DomainRelationService] = None):
+    def __init__(
+        self,
+        db: Session,
+        domain_service: Optional[DomainRelationService] = None,
+        semantic_service: Optional[SemanticSearchService] = None,
+    ):
         self.db = db
         self.domain_service = domain_service if domain_service is not None else DomainRelationService(db)
+        self.semantic_service = (
+            semantic_service
+            if semantic_service is not None
+            else SemanticSearchService(db, HashFallbackAdapter())
+        )
 
     def what_phenomena_do_i_enable(self, context_id: int) -> List[DomainRelation]:
         """DomainRelation where source=context, type=ENABLES, target_type=phenomenon."""
@@ -181,9 +233,33 @@ class ContextPerspective:
             .all()
         )
 
-    def to_dict(self, context_id: int) -> Dict[str, Any]:
+    def semantic_neighbors(
+        self,
+        context_id: int,
+        k: int = 10,
+    ) -> List[Dict[str, Any]]:
+        """Return semantic neighbors via SemanticSearchService.similar().
+
+        SIGNAL only. NOT evidence. NOT a DomainRelation.
+        """
+        return self.semantic_service.similar("context", context_id, k=k)
+
+    def semantic_search(
+        self,
+        query: str,
+        k: int = 10,
+        entity_types: Optional[List[str]] = None,
+    ) -> List[Dict[str, Any]]:
+        """Semantic search for query. SIGNAL only."""
+        return self.semantic_service.search(query, k=k, entity_types=entity_types)
+
+    def to_dict(
+        self,
+        context_id: int,
+        include_semantics: bool = False,
+    ) -> Dict[str, Any]:
         """Aggregate all context perspective answers."""
-        return {
+        result = {
             "context_id": context_id,
             "enabled_phenomena": [
                 r.to_dict() for r in self.what_phenomena_do_i_enable(context_id)
@@ -195,14 +271,27 @@ class ContextPerspective:
                 r.to_dict() for r in self.what_phenomena_created_or_changed_me(context_id)
             ],
         }
+        if include_semantics:
+            result["semantic_neighbors"] = self.semantic_neighbors(context_id)
+        return result
 
 
 class ConstraintPerspective:
     """Read-only projection answering domain questions from a Constraint perspective."""
 
-    def __init__(self, db: Session, domain_service: Optional[DomainRelationService] = None):
+    def __init__(
+        self,
+        db: Session,
+        domain_service: Optional[DomainRelationService] = None,
+        semantic_service: Optional[SemanticSearchService] = None,
+    ):
         self.db = db
         self.domain_service = domain_service if domain_service is not None else DomainRelationService(db)
+        self.semantic_service = (
+            semantic_service
+            if semantic_service is not None
+            else SemanticSearchService(db, HashFallbackAdapter())
+        )
 
     def what_am_i_blocking(self, constraint_id: int) -> List[DomainRelation]:
         """DomainRelation where source=constraint, type in (BLOCKS, PREVENTS, SUPPRESSES)."""
@@ -298,10 +387,34 @@ class ConstraintPerspective:
             .all()
         )
 
-    def to_dict(self, constraint_id: int) -> Dict[str, Any]:
+    def semantic_neighbors(
+        self,
+        constraint_id: int,
+        k: int = 10,
+    ) -> List[Dict[str, Any]]:
+        """Return semantic neighbors via SemanticSearchService.similar().
+
+        SIGNAL only. NOT evidence. NOT a DomainRelation.
+        """
+        return self.semantic_service.similar("constraint", constraint_id, k=k)
+
+    def semantic_search(
+        self,
+        query: str,
+        k: int = 10,
+        entity_types: Optional[List[str]] = None,
+    ) -> List[Dict[str, Any]]:
+        """Semantic search for query. SIGNAL only."""
+        return self.semantic_service.search(query, k=k, entity_types=entity_types)
+
+    def to_dict(
+        self,
+        constraint_id: int,
+        include_semantics: bool = False,
+    ) -> Dict[str, Any]:
         """Aggregate all constraint perspective answers."""
         blockage = self.is_blockage_direct_or_indirect(constraint_id)
-        return {
+        result = {
             "constraint_id": constraint_id,
             "blockages": [r.to_dict() for r in self.what_am_i_blocking(constraint_id)],
             "evidence_strength": self.how_strong_is_evidence(constraint_id),
@@ -313,26 +426,45 @@ class ConstraintPerspective:
                 r.to_dict() for r in self.what_other_constraints_depend_on_me(constraint_id)
             ],
         }
+        if include_semantics:
+            result["semantic_neighbors"] = self.semantic_neighbors(constraint_id)
+        return result
 
 
 class RoleProjectionService:
     """Aggregator/factory service for role projections."""
 
-    def __init__(self, db: Session, domain_service: Optional[DomainRelationService] = None):
+    def __init__(
+        self,
+        db: Session,
+        domain_service: Optional[DomainRelationService] = None,
+        semantic_service: Optional[SemanticSearchService] = None,
+    ):
         self.db = db
         self.domain_service = domain_service if domain_service is not None else DomainRelationService(db)
-        self._phenomenon_perspective = PhenomenonPerspective(db, self.domain_service)
-        self._context_perspective = ContextPerspective(db, self.domain_service)
-        self._constraint_perspective = ConstraintPerspective(db, self.domain_service)
+        self.semantic_service = (
+            semantic_service
+            if semantic_service is not None
+            else SemanticSearchService(db, HashFallbackAdapter())
+        )
+        self._phenomenon_perspective = PhenomenonPerspective(
+            db, self.domain_service, self.semantic_service
+        )
+        self._context_perspective = ContextPerspective(
+            db, self.domain_service, self.semantic_service
+        )
+        self._constraint_perspective = ConstraintPerspective(
+            db, self.domain_service, self.semantic_service
+        )
 
-    def phenomenon(self, phenomenon_id: int) -> Dict[str, Any]:
+    def phenomenon(self, phenomenon_id: int, include_semantics: bool = False) -> Dict[str, Any]:
         """Get aggregated role projection dict for a phenomenon."""
-        return self._phenomenon_perspective.to_dict(phenomenon_id)
+        return self._phenomenon_perspective.to_dict(phenomenon_id, include_semantics=include_semantics)
 
-    def context(self, context_id: int) -> Dict[str, Any]:
+    def context(self, context_id: int, include_semantics: bool = False) -> Dict[str, Any]:
         """Get aggregated role projection dict for a context."""
-        return self._context_perspective.to_dict(context_id)
+        return self._context_perspective.to_dict(context_id, include_semantics=include_semantics)
 
-    def constraint(self, constraint_id: int) -> Dict[str, Any]:
+    def constraint(self, constraint_id: int, include_semantics: bool = False) -> Dict[str, Any]:
         """Get aggregated role projection dict for a constraint."""
-        return self._constraint_perspective.to_dict(constraint_id)
+        return self._constraint_perspective.to_dict(constraint_id, include_semantics=include_semantics)
