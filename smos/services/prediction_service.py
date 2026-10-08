@@ -5,6 +5,8 @@ from sqlalchemy.orm import Session
 from smos.models.prediction import Prediction
 from smos.models.models import EpistemicStatus
 from smos.models.potential import PotentialPhenomenon
+from smos.services.semantic_search_service import SemanticSearchService, build_canonical_semantic_text
+from smos.services.embedding_fallback import HashFallbackAdapter
 
 
 class PredictionService:
@@ -21,8 +23,23 @@ class PredictionService:
     through an authorized mechanism if desired.
     """
 
-    def __init__(self, db: Session):
+    DEFAULT_CANDIDATE_ENTITY_TYPES = [
+        "phenomenon",
+        "context",
+        "constraint",
+        "potential_phenomenon",
+    ]
+
+    def __init__(
+        self,
+        db: Session,
+        semantic_service: Optional[SemanticSearchService] = None,
+    ):
         self.db = db
+        self.semantic_service = (
+            semantic_service
+            or SemanticSearchService(db, HashFallbackAdapter())
+        )
 
     # --- Create ---
     def create_prediction(
@@ -108,6 +125,57 @@ class PredictionService:
         self.db.refresh(prediction)
         return prediction
 
+    # --- Semantic Retrieval (TASK 30) ---
+    def semantic_conditions(
+        self,
+        prediction_id: int,
+        k: int = 10,
+        entity_types: Optional[List[str]] = None,
+    ) -> List[Dict[str, Any]]:
+        """Return semantic neighbors of a prediction as CANDIDATE signal.
+
+        IMPORTANT:
+        - This is a SIGNAL, not evidence.
+        - This is NOT a search for Prediction.conditions.
+        - The result is a set of nearby objects that MAY be considered
+          as condition candidates by an operator/system in a LATER step.
+        - Read-only. Does NOT modify any canonical entity.
+
+        By default, entity_types is limited to canonical candidate types:
+            phenomenon, context, constraint, potential_phenomenon
+
+        The prediction MUST already be present in the semantic index
+        (indexed by an existing mechanism). If it is not indexed,
+        returns [].
+        """
+        if entity_types is None:
+            entity_types = self.DEFAULT_CANDIDATE_ENTITY_TYPES
+        return self.semantic_service.similar(
+            "prediction",
+            prediction_id,
+            k=k,
+            entity_types=entity_types,
+        )
+
+    def semantic_search_conditions(
+        self,
+        query: str,
+        k: int = 10,
+        entity_types: Optional[List[str]] = None,
+    ) -> List[Dict[str, Any]]:
+        """Semantic search for a candidate query text.
+
+        SIGNAL only. Does NOT modify any canonical entity.
+        Default entity_types limited to canonical candidate types.
+        """
+        if entity_types is None:
+            entity_types = self.DEFAULT_CANDIDATE_ENTITY_TYPES
+        return self.semantic_service.search(
+            query,
+            k=k,
+            entity_types=entity_types,
+        )
+
     # --- Integration with TASK 05 / TASK 12 ---
     def from_potential_phenomenon(
         self,
@@ -117,6 +185,7 @@ class PredictionService:
         confidence: Optional[float] = None,
         expected_at: Optional[datetime] = None,
         provenance: Optional[Dict[str, Any]] = None,
+        include_semantic_conditions: bool = False,
     ) -> Optional[Prediction]:
         """Create a Prediction whose source_hypothesis is a
         PotentialPhenomenon (TASK 05).
@@ -129,6 +198,14 @@ class PredictionService:
         if conditions:
             merged_conditions.extend(conditions)
 
+        provenance_dict = dict(provenance or {})
+
+        if include_semantic_conditions:
+            query_text = build_canonical_semantic_text("potential_phenomenon", potential)
+            semantic_candidates = self.semantic_search_conditions(query_text)
+            if "semantic_candidates" not in provenance_dict:
+                provenance_dict["semantic_candidates"] = semantic_candidates
+
         return self.create_prediction(
             expected_state=expected_state,
             source_hypothesis_type="potential_phenomenon",
@@ -136,5 +213,5 @@ class PredictionService:
             conditions=merged_conditions,
             confidence=confidence,
             expected_at=expected_at,
-            provenance=provenance,
+            provenance=provenance_dict,
         )
