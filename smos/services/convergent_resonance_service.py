@@ -23,6 +23,8 @@ from smos.models.context_exposure import ContextExposure, AgentType
 from smos.models.models import EpistemicStatus
 from smos.services.context_exposure_service import ContextExposureService
 from smos.models.conclusion_contract import get_claim, get_confidence
+from smos.services.semantic_search_service import SemanticSearchService
+from smos.services.embedding_fallback import HashFallbackAdapter
 
 
 @dataclass
@@ -43,6 +45,8 @@ class ResonanceCandidate:
         "Candidate resonance — NOT fact. "
         "Requires human review; never auto-becomes truth."
     )
+    generation_source: str = "exact_claim_match"
+    semantic_candidates: List[Dict[str, Any]] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -57,8 +61,16 @@ class ConvergentResonanceService:
     DEFAULT_MAX_CONTEXT_OVERLAP = 0.5   # Jaccard <= 0.5 = independent
     DEFAULT_MIN_CONFIDENCE = 0.0
 
-    def __init__(self, db: Session):
+    def __init__(
+        self,
+        db: Session,
+        semantic_service: Optional[SemanticSearchService] = None,
+    ):
         self.db = db
+        self.semantic_service = (
+            semantic_service
+            or SemanticSearchService(db, HashFallbackAdapter())
+        )
 
     def jaccard(self, a: List[int], b: List[int]) -> float:
         """Jaccard index — 0.0 = disjoint, 1.0 = identical."""
@@ -100,29 +112,70 @@ class ConvergentResonanceService:
         max_context_overlap: float = DEFAULT_MAX_CONTEXT_OVERLAP,
         min_confidence: float = DEFAULT_MIN_CONFIDENCE,
         limit: int = 500,
+        include_semantic: bool = False,
     ) -> List[ResonanceCandidate]:
         """Detect candidate resonances. READ-ONLY.
 
-        Algorithm (minimal):
+        Algorithm:
         1. Fetch ContextExposure records (via ContextExposureService.list).
-        2. Group exposures by normalized conclusion claim.
-        3. For each group with >= min_agents:
-           a. Check that at least 2 agents have DIFFERENT roles
-              (or DIFFERENT agent_type).
-           b. Check that at least 2 agents have context Jaccard
-              <= max_context_overlap (independent trajectories).
-           c. Compute confidence from conclusions' confidence.
-           d. Build ResonanceCandidate.
-        4. Return sorted by confidence descending.
+        2. Path 1: Group exposures by normalized conclusion claim (exact claim match).
+        3. Path 2 (optional, if include_semantic=True):
+           Use semantic_service.similar("context_exposure", exposure.id) to retrieve
+           semantic neighbor references.
+        4. ALL candidate groups must pass strict TASK 10 validation:
+           - min_agents threshold
+           - role diversity + independent trajectories (Jaccard <= max_context_overlap)
+           - conclusions_match (TASK 10 rule, UNCHANGED)
+           - TASK 10 confidence formula (UNCHANGED)
+        5. Assign generation_source ("exact_claim_match", "semantic_neighbors", "both")
+           and populate semantic_candidates references.
+        6. Return sorted by confidence descending.
         """
         exposure_service = ContextExposureService(self.db)
         exposures = exposure_service.list(limit=limit)
+        exposure_map = {e.id: e for e in exposures if e.id is not None}
 
+        # Step 1: Group exposures by normalized conclusion claim
         groups: Dict[str, List[ContextExposure]] = {}
         for e in exposures:
             claim = _get_claim(e.conclusion)
             if claim:
                 groups.setdefault(claim, []).append(e)
+
+        exact_claim_claims = set()
+        semantic_references_by_claim: Dict[str, List[Dict[str, Any]]] = {}
+
+        # Step 2: Semantic candidate retrieval (if include_semantic=True)
+        if include_semantic and self.semantic_service:
+            for e in exposures:
+                if e.id is None:
+                    continue
+                claim = _get_claim(e.conclusion)
+                if not claim:
+                    continue
+
+                neighbors = self.semantic_service.similar(
+                    "context_exposure",
+                    e.id,
+                    k=10,
+                    entity_types=["context_exposure", "conclusion"],
+                )
+
+                for neighbor in neighbors:
+                    neighbor_id = neighbor.get("entity_id")
+                    neighbor_exp = exposure_map.get(neighbor_id)
+                    if not neighbor_exp:
+                        continue
+
+                    # Strictly enforce TASK 10 conclusions_match rule
+                    if self.conclusions_match(e.conclusion, neighbor_exp.conclusion):
+                        ref = {
+                            "entity_type": neighbor.get("entity_type"),
+                            "entity_id": neighbor_id,
+                            "similarity": neighbor.get("similarity"),
+                            "model_name": neighbor.get("model_name"),
+                        }
+                        semantic_references_by_claim.setdefault(claim, []).append(ref)
 
         candidates: List[ResonanceCandidate] = []
 
@@ -143,7 +196,7 @@ class ConvergentResonanceService:
             if not has_independent:
                 continue
 
-            # Compute confidence
+            # Compute confidence (strictly TASK 10 formula)
             confidences = [
                 conf
                 for e in group
@@ -154,6 +207,23 @@ class ConvergentResonanceService:
 
             if scaled < min_confidence:
                 continue
+
+            # Determine generation_source and semantic_candidates
+            claim_sem_refs = semantic_references_by_claim.get(claim, [])
+            if claim_sem_refs:
+                gen_source = "both" if claim in groups else "semantic_neighbors"
+                # Deduplicate semantic references by (entity_type, entity_id, model_name)
+                seen_refs = set()
+                deduped_refs = []
+                for ref in claim_sem_refs:
+                    ref_key = (ref["entity_type"], ref["entity_id"], ref["model_name"])
+                    if ref_key not in seen_refs:
+                        seen_refs.add(ref_key)
+                        deduped_refs.append(ref)
+                sem_candidates = deduped_refs
+            else:
+                gen_source = "exact_claim_match"
+                sem_candidates = []
 
             # Compute shared context (intersection of all context_ids in group)
             shared_set = set(group[0].context_ids or [])
@@ -186,6 +256,8 @@ class ConvergentResonanceService:
                     "Candidate resonance — NOT fact. "
                     "Requires human review; never auto-becomes truth."
                 ),
+                generation_source=gen_source,
+                semantic_candidates=sem_candidates,
             )
             candidates.append(candidate)
 
@@ -197,6 +269,7 @@ class ConvergentResonanceService:
         conclusion_claim: str,
         min_agents: int = DEFAULT_MIN_AGENTS,
         max_context_overlap: float = DEFAULT_MAX_CONTEXT_OVERLAP,
+        include_semantic: bool = False,
     ) -> Optional[ResonanceCandidate]:
         """Detect resonance for a specific conclusion claim."""
         target_claim = conclusion_claim.strip().lower()
@@ -208,6 +281,7 @@ class ConvergentResonanceService:
             max_context_overlap=max_context_overlap,
             min_confidence=0.0,
             limit=500,
+            include_semantic=include_semantic,
         )
 
         for c in candidates:
