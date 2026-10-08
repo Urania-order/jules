@@ -122,11 +122,16 @@ def normalize_four_position_analysis(
         else:
             positions[key] = {}
 
-    return {
+    result: Dict[str, Any] = {
         "phenomenon_id": phenomenon_id,
         "positions": positions,
         "created_at": created_at,
     }
+
+    if "provenance" in base and isinstance(base["provenance"], dict):
+        result["provenance"] = copy.deepcopy(base["provenance"])
+
+    return result
 
 
 def validate_four_position_analysis(

@@ -31,13 +31,25 @@ from smos.models.four_position_contract import (
     FourPosition,
     normalize_four_position_analysis,
 )
+import logging
 from smos.services.domain_relation_service import DomainRelationService
 from smos.services.emergence_analysis_service import EmergenceAnalysisService
 from smos.services.blockage_analysis_service import BlockageAnalysisService
+from smos.services.semantic_search_service import SemanticSearchService
+from smos.services.embedding_fallback import HashFallbackAdapter
+
+logger = logging.getLogger(__name__)
 
 
 class FourPositionService:
     """Orchestration service projecting canonical state into Four-Position analysis."""
+
+    DEFAULT_CANDIDATE_ENTITY_TYPES = [
+        "phenomenon",
+        "context",
+        "constraint",
+        "potential_phenomenon",
+    ]
 
     POSITION_I_RELATION_TYPES = (
         RelationType.CAUSES,
@@ -73,6 +85,7 @@ class FourPositionService:
         domain_service: Optional[DomainRelationService] = None,
         emergence_service: Optional[EmergenceAnalysisService] = None,
         blockage_service: Optional[BlockageAnalysisService] = None,
+        semantic_service: Optional[SemanticSearchService] = None,
     ):
         self.db = db
         self.domain_service = domain_service or DomainRelationService(db)
@@ -82,8 +95,15 @@ class FourPositionService:
         self.blockage_service = blockage_service or BlockageAnalysisService(
             db, self.domain_service
         )
+        self.semantic_service = semantic_service or SemanticSearchService(
+            db, HashFallbackAdapter()
+        )
 
-    def build_analysis(self, phenomenon_id: int) -> Dict[str, Any]:
+    def build_analysis(
+        self,
+        phenomenon_id: int,
+        include_semantic: bool = False,
+    ) -> Dict[str, Any]:
         """Build Four-Position analysis for a phenomenon. READ-ONLY projection."""
         phenomenon = (
             self.db.query(Phenomenon)
@@ -129,6 +149,23 @@ class FourPositionService:
             },
             "created_at": phenomenon.created_at.isoformat() if phenomenon.created_at else None,
         }
+
+        if include_semantic:
+            try:
+                neighbors = self.semantic_service.similar(
+                    "phenomenon",
+                    phenomenon_id,
+                    entity_types=self.DEFAULT_CANDIDATE_ENTITY_TYPES,
+                )
+                analysis.setdefault("provenance", {})
+                if "semantic_candidates" not in analysis["provenance"]:
+                    analysis["provenance"]["semantic_candidates"] = neighbors
+            except Exception as e:
+                logger.warning(
+                    "TASK 34: semantic retrieval for phenomenon %s failed: %s",
+                    phenomenon_id,
+                    e,
+                )
 
         return normalize_four_position_analysis(analysis)
 
