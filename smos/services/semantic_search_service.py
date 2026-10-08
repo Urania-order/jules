@@ -14,6 +14,7 @@ from smos.models.domain_relation import DomainRelation
 from smos.models.prediction import Prediction
 from smos.models.experience import Recipe
 from smos.models.context_exposure import ContextExposure
+from smos.models.conclusion_contract import get_claim, get_confidence
 
 
 def cosine_similarity(a: List[float], b: List[float]) -> float:
@@ -79,8 +80,15 @@ def build_canonical_semantic_text(entity_type: str, entity: Any) -> str:
         return f"Recipe: {title}\nDescription: {desc}".strip()
 
     elif etype in ("conclusion", "context_exposure"):
-        conclusion = getattr(entity, "conclusion", "")
-        return f"Conclusion: {conclusion}".strip()
+        conclusion = getattr(entity, "conclusion", {})
+        if not isinstance(conclusion, dict) and hasattr(entity, "to_dict"):
+            # If entity is not a dict or context exposure itself
+            conclusion = getattr(entity, "conclusion", {})
+        claim = get_claim(conclusion)
+        conf = get_confidence(conclusion)
+        if conf is not None:
+            return f"Conclusion: {claim}\nConfidence: {conf}".strip()
+        return f"Conclusion: {claim}".strip()
 
     # Generic fallback using attributes if present
     name_val = getattr(entity, "name", getattr(entity, "title", str(entity)))
