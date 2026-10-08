@@ -40,3 +40,4 @@ __pycache__/
 .jules/history/*.jsonl
 .env
 smos.db
+smos.db.bak.*
