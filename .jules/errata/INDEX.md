@@ -26,6 +26,7 @@ Known mistakes and rules to avoid them.
 
 ### Process / Orchestration
 
+- ERRATA-0047 — SQLAlchemy model change not reflected in existing dev SQLite (MEDIUM)
 - ERRATA-0046 — SHA-256 fallback embedding duplicated (LOW)
 - ERRATA-0045 — git checkout/pull no retry on stale index.lock (MEDIUM)
 - ERRATA-0044 — flaky stale_lock test in CI (MEDIUM)
