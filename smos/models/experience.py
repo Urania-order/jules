@@ -25,6 +25,9 @@ class Recipe(Base):
     parent_recipe_id = Column(Integer, ForeignKey("recipes.id"), nullable=True)
     mutations = Column(JSON, default=[])
 
+    # Provenance
+    provenance = Column(JSON, default=dict)
+
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 class RecipeExecution(Base):
