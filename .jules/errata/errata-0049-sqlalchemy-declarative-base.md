@@ -68,4 +68,4 @@ The `Base = declarative_base()` call is UNCHANGED.
   https://docs.sqlalchemy.org/en/20/changelog/migration_20.html
 
 ## Status
-CLOSED — fixed in TASK 38 (task-20261009-XXXXXX)
+CLOSED — fixed in TASK 38 (task-20261009-154015)
