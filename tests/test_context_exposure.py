@@ -238,8 +238,8 @@ def test_context_exposure_does_not_modify_agent_models(db_session):
     service.record(agent_type="LLM", agent_id=llm.id)
 
     # Verify agent models remain untouched
-    c_fetched = db_session.query(Cosmonaut).get(cosmonaut.id)
-    l_fetched = db_session.query(LLMProfile).get(llm.id)
+    c_fetched = db_session.get(Cosmonaut, cosmonaut.id)
+    l_fetched = db_session.get(LLMProfile, llm.id)
     assert c_fetched.name == "Astronaut Alice"
     assert l_fetched.role == "Analytical"
 
@@ -252,5 +252,5 @@ def test_context_exposure_does_not_modify_context_model(db_session):
     service = ContextExposureService(db_session)
     service.record(agent_type="COSMONAUT", context_ids=[ctx.id], hidden_context_ids=[ctx.id])
 
-    ctx_fetched = db_session.query(Context).get(ctx.id)
+    ctx_fetched = db_session.get(Context, ctx.id)
     assert ctx_fetched.name == "Test Context"

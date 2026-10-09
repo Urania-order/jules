@@ -24,6 +24,9 @@ class TimelineService:
         if node_ids:
             query = query.filter(MemoryNode.id.in_(node_ids))
 
+        target_timeline = self.db.get(Timeline, target_id)
+        reality_level = "REAL" if target_timeline and target_timeline.type == TimelineType.REAL else "COUNTERFACTUAL"
+
         nodes = query.all()
         transferred = []
         for node in nodes:
@@ -36,7 +39,7 @@ class TimelineService:
                 owner_id=node.owner_id,
                 workspace_id=node.workspace_id,
                 timeline_id=target_id,
-                reality_level="REAL" if self.db.query(Timeline).get(target_id).type == TimelineType.REAL else "COUNTERFACTUAL"
+                reality_level=reality_level
             )
             self.db.add(new_node)
             transferred.append(new_node)

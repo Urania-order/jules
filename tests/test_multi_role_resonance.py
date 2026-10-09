@@ -215,7 +215,7 @@ def test_group_3_non_collapse(db_session, multi_role_scenario):
         assert isinstance(e, ContextExposure)
 
     # 8. No Phenomenon-level final_conclusion is created
-    phenomenon = db_session.query(Phenomenon).get(multi_role_scenario["phenomenon"].id)
+    phenomenon = db_session.get(Phenomenon, multi_role_scenario["phenomenon"].id)
     assert not hasattr(phenomenon, "final_conclusion")
 
     # 9. No Phenomenon-level resonance aggregation field is introduced

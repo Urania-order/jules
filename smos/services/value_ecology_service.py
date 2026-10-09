@@ -18,7 +18,7 @@ class ValueEcologyService(Observable):
 
         energy = min(1.0, (usage_count * 0.1) + (impact_count * 0.2))
         resonance = sum(i.confidence for i in impacts) / impact_count if impact_count > 0 else 0.1
-        node = self.db.query(MemoryNode).get(node_id)
+        node = self.db.get(MemoryNode, node_id)
         potential = node.importance if node else 0.5
 
         return {

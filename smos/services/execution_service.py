@@ -18,7 +18,7 @@ class ExecutionService:
         self.db.add(execution)
 
         # Update recipe success rate
-        recipe = self.db.query(Recipe).get(recipe_id)
+        recipe = self.db.get(Recipe, recipe_id)
         if recipe:
             total_executions = self.db.query(RecipeExecution).filter(RecipeExecution.recipe_id == recipe_id).count() + 1
             successful_executions = self.db.query(RecipeExecution).filter(

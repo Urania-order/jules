@@ -34,7 +34,7 @@ class CoevolutionService:
         return test
 
     def sponsor_cluster(self, cluster_id: int, user_id: int):
-        cluster = self.db.query(IntellectualCluster).get(cluster_id)
+        cluster = self.db.get(IntellectualCluster, cluster_id)
         if cluster:
             cluster.human_sponsor_id = user_id
             cluster.status = "ACTIVE"

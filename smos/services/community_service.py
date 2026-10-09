@@ -15,7 +15,7 @@ class CommunityService:
         ).all()
 
         # Logic to 'inherit' would update the cosmonaut's expertise
-        cosmonaut = self.db.query(Cosmonaut).get(target_cosmonaut_id)
+        cosmonaut = self.db.get(Cosmonaut, target_cosmonaut_id)
         if cosmonaut:
             cosmonaut.expertise.extend([topic])
             self.db.commit()

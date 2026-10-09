@@ -66,7 +66,7 @@ class RecipeService:
         return recipe
 
     def update_reputation(self, cosmonaut_id: int, success: bool):
-        cosmonaut = self.db.query(Cosmonaut).get(cosmonaut_id)
+        cosmonaut = self.db.get(Cosmonaut, cosmonaut_id)
         if not cosmonaut:
             return
 
@@ -81,7 +81,7 @@ class RecipeService:
         return cosmonaut
 
     def get_trust_score(self, cosmonaut_id: int):
-        cosmonaut = self.db.query(Cosmonaut).get(cosmonaut_id)
+        cosmonaut = self.db.get(Cosmonaut, cosmonaut_id)
         if not cosmonaut:
             return 0.0
         return cosmonaut.reputation_score

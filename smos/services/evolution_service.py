@@ -27,7 +27,7 @@ class EvolutionService(Evolvable):
         mutations: List[Dict[str, Any]],
         include_semantic_neighbors: bool = False,
     ) -> Optional[Recipe]:
-        parent = self.db.query(Recipe).get(parent_id)
+        parent = self.db.get(Recipe, parent_id)
         if not parent:
             return None
 
@@ -78,7 +78,7 @@ class EvolutionService(Evolvable):
         ).all()
 
         if len(executions) >= 3: # Criteria for 'Wisdom'
-            recipe = self.db.query(Recipe).get(recipe_id)
+            recipe = self.db.get(Recipe, recipe_id)
             wisdom = Wisdom(
                 recipe_id=recipe_id,
                 domains=[recipe.problem_type],
@@ -93,7 +93,7 @@ class EvolutionService(Evolvable):
 
     def advance_lifecycle(self, node_id: int, target_state: KnowledgeLifecycleState = None):
         """Advance a knowledge node to the next state in its lifecycle"""
-        node = self.db.query(MemoryNode).get(node_id)
+        node = self.db.get(MemoryNode, node_id)
         if not node:
             return None
 
@@ -115,5 +115,5 @@ class EvolutionService(Evolvable):
         return node
 
     def get_lifecycle_state(self, entity_id: int) -> str:
-        node = self.db.query(MemoryNode).get(entity_id)
+        node = self.db.get(MemoryNode, entity_id)
         return str(node.lifecycle_state) if node else "None"

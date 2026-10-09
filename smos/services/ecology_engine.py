@@ -12,12 +12,12 @@ class EcologyEngine(Observable):
 
     def propagate_knowledge(self, node_id: int):
         """Propagate knowledge through resonance and cluster interaction"""
-        node = self.db.query(MemoryNode).get(node_id)
+        node = self.db.get(MemoryNode, node_id)
         if not node:
             return
 
         for cluster_id in node.cluster_ids:
-            cluster = self.db.query(IntellectualCluster).get(cluster_id)
+            cluster = self.db.get(IntellectualCluster, cluster_id)
             if cluster:
                 cluster.knowledge_inflow += 0.1
                 cluster.resonance = min(1.0, cluster.resonance + 0.05)
