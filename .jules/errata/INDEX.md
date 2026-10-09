@@ -26,6 +26,7 @@ Known mistakes and rules to avoid them.
 
 ### Process / Orchestration
 
+- ERRATA-0050 — anyio.abc.BlockingPortal DeprecationWarning (INFO, third-party)
 - ERRATA-0049 — SQLAlchemy legacy declarative_base() import deprecated (LOW)
 - ERRATA-0048 — SQLAlchemy legacy Query.get() deprecated (LOW)
 - ERRATA-0047 — SQLAlchemy model change not reflected in existing dev SQLite (MEDIUM)
