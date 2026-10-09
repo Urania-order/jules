@@ -113,4 +113,11 @@ While fixing `.get()`, check for other SQLAlchemy 1.x patterns:
   https://docs.sqlalchemy.org/en/20/changelog/migration_20.html
 
 ## Status
-OPEN — needs future dedicated TASK
+CLOSED — fixed in TASK 37 (task-20261009-142107)
+
+17 occurrences replaced:
+- 13 in services
+- 4 in tests
+
+Warnings: 27 -> 5 (LegacyAPIWarning: 0)
+Commit: a3be3c0
