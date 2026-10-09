@@ -919,6 +919,7 @@
       <button class="nav-btn" data-view="history">History</button>
       <button class="nav-btn" data-view="ontology">🧠 Ontology</button>
       <button class="nav-btn" data-view="consult">Consult</button>
+      <button class="nav-btn" data-view="semantic">🔎 Semantic</button>
       <button class="nav-btn" data-view="admin">Admin</button>
     </nav>
   </header>
@@ -1579,6 +1580,70 @@
           </div>
         </div>
 
+      </div>
+    </section>
+
+    <!-- SEMANTIC EXPLORATION VIEW -->
+    <section id="view-semantic" class="view">
+      <h2>🔎 Semantic Exploration</h2>
+      <div class="card" style="border-left: 4px solid var(--accent-blue); background-color: rgba(56, 189, 248, 0.05); margin-bottom: 1.5rem;">
+        <p style="font-size: 0.85rem; color: var(--text-secondary); line-height: 1.5;">
+          <strong>CRITICAL PRINCIPLE:</strong> Semantic similarity is a <em>candidate-generation signal only</em>. It is NOT evidence, causation, resonance, or epistemic truth.
+        </p>
+      </div>
+
+      <!-- SEARCH VIEW (VIEW A) -->
+      <div id="semantic-search-panel" class="card">
+        <h3>Semantic Search</h3>
+        <form id="semantic-search-form" style="margin-top: 1rem;" onsubmit="handleSemanticSearchSubmit(event)">
+          <div class="form-group">
+            <label for="semantic-query">Query Text</label>
+            <input type="text" id="semantic-query" placeholder="Enter search query..." style="width: 100%;">
+          </div>
+          <div style="display: flex; flex-wrap: wrap; gap: 1rem; align-items: flex-end; margin-top: 1rem;">
+            <div class="form-group" style="flex: 1; min-width: 200px; margin-bottom: 0;">
+              <label for="semantic-filter">Entity Type Filter (optional, comma-separated)</label>
+              <input type="text" id="semantic-filter" placeholder="e.g. phenomenon, constraint">
+            </div>
+            <div class="form-group" style="width: 140px; margin-bottom: 0;">
+              <label for="semantic-k">Count (k)</label>
+              <input type="number" id="semantic-k" min="1" max="100" value="10">
+            </div>
+            <button type="submit" id="btn-semantic-search" class="btn btn-primary" style="align-self: flex-end;">🔍 Search Candidates</button>
+          </div>
+        </form>
+        <div id="semantic-validation-msg" class="error-state" style="display: none; margin-top: 1rem;"></div>
+      </div>
+
+      <!-- SIMILAR VIEW HEADER (VIEW B) -->
+      <div id="semantic-similar-header" class="card" style="display: none;">
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+          <div>
+            <h3 style="margin-bottom: 0.25rem;">Similar Candidates</h3>
+            <div style="font-size: 0.9rem; color: var(--text-secondary);" id="semantic-source-entity-display">
+              Source: <strong id="semantic-source-type" style="color: var(--accent-blue);">phenomenon</strong> ID <strong id="semantic-source-id" style="color: var(--accent-blue);">1</strong>
+            </div>
+          </div>
+          <button type="button" id="btn-semantic-back" class="btn btn-secondary" onclick="handleSemanticBack()">&larr; Back to Search Results</button>
+        </div>
+      </div>
+
+      <!-- RESULTS CONTAINER CARD -->
+      <div class="card">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+          <h3 id="semantic-results-heading">Search Results</h3>
+          <div id="semantic-results-meta" style="font-size: 0.85rem; color: var(--text-secondary);"></div>
+        </div>
+
+        <div id="semantic-loading-state" class="loading-state" style="display: none;">
+          Searching semantic index...
+        </div>
+
+        <div id="semantic-error-state" class="error-state" style="display: none;"></div>
+
+        <div id="semantic-results-list" class="task-list">
+          <div class="empty-state">Submit a semantic search query to explore similarity candidates.</div>
+        </div>
       </div>
     </section>
 
@@ -4265,6 +4330,288 @@
         const s = await fetchJSON(API_BASE + '/queue/status');
         updateQueueLed(s);
       } catch (e) {}
+    }
+
+    // Semantic Exploration UI State
+    let retainedSearchQuery = '';
+    let retainedSearchFilter = '';
+    let retainedSearchK = 10;
+    let retainedSearchResults = null;
+
+    let currentSemanticViewMode = 'search';
+    let currentSourceEntity = null;
+
+    let activeSemanticSearchController = null;
+    let activeSemanticSimilarController = null;
+    let activeSemanticRequestToken = 0;
+
+    function parseEntityTypeFilter(inputStr) {
+      if (!inputStr || !inputStr.trim()) return null;
+      const parts = inputStr.split(',').map(s => s.trim()).filter(Boolean);
+      return parts.length > 0 ? parts : null;
+    }
+
+    function formatEntityTypeFilterForQuery(inputStr) {
+      const parsed = parseEntityTypeFilter(inputStr);
+      if (!parsed) return '';
+      return parsed.join(',');
+    }
+
+    async function handleSemanticSearchSubmit(e) {
+      if (e) e.preventDefault();
+
+      const queryInput = document.getElementById('semantic-query');
+      const filterInput = document.getElementById('semantic-filter');
+      const kInput = document.getElementById('semantic-k');
+      const valMsgEl = document.getElementById('semantic-validation-msg');
+
+      if (valMsgEl) valMsgEl.style.display = 'none';
+
+      const rawQuery = queryInput ? queryInput.value : '';
+      if (!rawQuery || !rawQuery.trim()) {
+        if (valMsgEl) {
+          valMsgEl.textContent = 'Query text cannot be empty or whitespace-only.';
+          valMsgEl.style.display = 'block';
+        }
+        return;
+      }
+
+      const kVal = parseInt(kInput ? kInput.value : '10', 10);
+      if (isNaN(kVal) || kVal < 1 || kVal > 100) {
+        if (valMsgEl) {
+          valMsgEl.textContent = 'Result count (k) must be an integer between 1 and 100.';
+          valMsgEl.style.display = 'block';
+        }
+        return;
+      }
+
+      const rawFilter = filterInput ? filterInput.value : '';
+
+      retainedSearchQuery = rawQuery;
+      retainedSearchFilter = rawFilter;
+      retainedSearchK = kVal;
+
+      currentSemanticViewMode = 'search';
+      currentSourceEntity = null;
+      updateSemanticViewHeader();
+
+      await executeSemanticSearchRequest(rawQuery, rawFilter, kVal);
+    }
+
+    async function executeSemanticSearchRequest(query, filterStr, k) {
+      const requestToken = ++activeSemanticRequestToken;
+
+      if (activeSemanticSearchController) {
+        activeSemanticSearchController.abort();
+      }
+      activeSemanticSearchController = new AbortController();
+      const signal = activeSemanticSearchController.signal;
+
+      const loadingEl = document.getElementById('semantic-loading-state');
+      const errorEl = document.getElementById('semantic-error-state');
+      const listEl = document.getElementById('semantic-results-list');
+      const metaEl = document.getElementById('semantic-results-meta');
+      const btnEl = document.getElementById('btn-semantic-search');
+
+      if (loadingEl) loadingEl.style.display = 'block';
+      if (errorEl) errorEl.style.display = 'none';
+      if (listEl) listEl.innerHTML = '';
+      if (metaEl) metaEl.textContent = '';
+      if (btnEl) btnEl.disabled = true;
+
+      try {
+        const parsedTypes = parseEntityTypeFilter(filterStr);
+        const payload = {
+          query: query,
+          k: k,
+          entity_types: parsedTypes
+        };
+
+        const res = await fetchJSON(`${API_BASE}/semantic/search`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+          signal: signal
+        });
+
+        if (requestToken !== activeSemanticRequestToken) return;
+
+        retainedSearchResults = res;
+        renderSemanticCandidateList(res, 'search');
+      } catch (err) {
+        if (err.name === 'AbortError') return;
+        if (requestToken !== activeSemanticRequestToken) return;
+
+        if (errorEl) {
+          errorEl.textContent = `Search failed: ${err.message || 'Error executing semantic search'}`;
+          errorEl.style.display = 'block';
+        }
+      } finally {
+        if (requestToken === activeSemanticRequestToken) {
+          if (loadingEl) loadingEl.style.display = 'none';
+          if (btnEl) btnEl.disabled = false;
+        }
+      }
+    }
+
+    async function handleSemanticFindSimilar(entityType, entityId) {
+      const kInput = document.getElementById('semantic-k');
+      const filterInput = document.getElementById('semantic-filter');
+      const kVal = parseInt(kInput ? kInput.value : (retainedSearchK || 10), 10);
+      const rawFilter = filterInput ? filterInput.value : (retainedSearchFilter || '');
+
+      currentSemanticViewMode = 'similar';
+      currentSourceEntity = { entity_type: entityType, entity_id: entityId };
+      updateSemanticViewHeader();
+
+      await executeSemanticSimilarRequest(entityType, entityId, rawFilter, kVal);
+    }
+
+    async function executeSemanticSimilarRequest(entityType, entityId, filterStr, k) {
+      const requestToken = ++activeSemanticRequestToken;
+
+      if (activeSemanticSimilarController) {
+        activeSemanticSimilarController.abort();
+      }
+      activeSemanticSimilarController = new AbortController();
+      const signal = activeSemanticSimilarController.signal;
+
+      const loadingEl = document.getElementById('semantic-loading-state');
+      const errorEl = document.getElementById('semantic-error-state');
+      const listEl = document.getElementById('semantic-results-list');
+      const metaEl = document.getElementById('semantic-results-meta');
+
+      if (loadingEl) loadingEl.style.display = 'block';
+      if (errorEl) errorEl.style.display = 'none';
+      if (listEl) listEl.innerHTML = '';
+      if (metaEl) metaEl.textContent = '';
+
+      try {
+        const filterQueryParam = formatEntityTypeFilterForQuery(filterStr);
+        let url = `${API_BASE}/semantic/similar/${encodeURIComponent(entityType)}/${encodeURIComponent(entityId)}?k=${k}`;
+        if (filterQueryParam) {
+          url += `&entity_types=${encodeURIComponent(filterQueryParam)}`;
+        }
+
+        const res = await fetchJSON(url, { signal: signal });
+
+        if (requestToken !== activeSemanticRequestToken) return;
+
+        renderSemanticCandidateList(res, 'similar');
+      } catch (err) {
+        if (err.name === 'AbortError') return;
+        if (requestToken !== activeSemanticRequestToken) return;
+
+        if (errorEl) {
+          errorEl.textContent = `Find similar failed: ${err.message || 'Error fetching similar candidates'}`;
+          errorEl.style.display = 'block';
+        }
+      } finally {
+        if (requestToken === activeSemanticRequestToken) {
+          if (loadingEl) loadingEl.style.display = 'none';
+        }
+      }
+    }
+
+    function handleSemanticBack() {
+      if (activeSemanticSimilarController) {
+        activeSemanticSimilarController.abort();
+      }
+      activeSemanticRequestToken++;
+
+      currentSemanticViewMode = 'search';
+      currentSourceEntity = null;
+
+      const queryInput = document.getElementById('semantic-query');
+      const filterInput = document.getElementById('semantic-filter');
+      const kInput = document.getElementById('semantic-k');
+
+      if (queryInput) queryInput.value = retainedSearchQuery || '';
+      if (filterInput) filterInput.value = retainedSearchFilter || '';
+      if (kInput) kInput.value = retainedSearchK || 10;
+
+      updateSemanticViewHeader();
+
+      const loadingEl = document.getElementById('semantic-loading-state');
+      const errorEl = document.getElementById('semantic-error-state');
+      if (loadingEl) loadingEl.style.display = 'none';
+      if (errorEl) errorEl.style.display = 'none';
+
+      if (retainedSearchResults) {
+        renderSemanticCandidateList(retainedSearchResults, 'search');
+      } else {
+        const listEl = document.getElementById('semantic-results-list');
+        if (listEl) {
+          listEl.innerHTML = '<div class="empty-state">Submit a semantic search query to explore similarity candidates.</div>';
+        }
+      }
+    }
+
+    function updateSemanticViewHeader() {
+      const similarHeader = document.getElementById('semantic-similar-header');
+      const headingEl = document.getElementById('semantic-results-heading');
+
+      if (currentSemanticViewMode === 'similar' && currentSourceEntity) {
+        if (similarHeader) similarHeader.style.display = 'block';
+        if (headingEl) headingEl.textContent = 'Similar Candidates Results';
+        const typeEl = document.getElementById('semantic-source-type');
+        const idEl = document.getElementById('semantic-source-id');
+        if (typeEl) typeEl.textContent = currentSourceEntity.entity_type;
+        if (idEl) idEl.textContent = currentSourceEntity.entity_id;
+      } else {
+        if (similarHeader) similarHeader.style.display = 'none';
+        if (headingEl) headingEl.textContent = 'Search Results';
+      }
+    }
+
+    function renderSemanticCandidateList(candidates, mode) {
+      const listEl = document.getElementById('semantic-results-list');
+      const metaEl = document.getElementById('semantic-results-meta');
+      if (!listEl) return;
+      listEl.innerHTML = '';
+
+      if (!candidates || candidates.length === 0) {
+        if (metaEl) metaEl.textContent = '0 candidates found';
+        listEl.innerHTML = '<div class="empty-state">No semantic candidates returned by service.</div>';
+        return;
+      }
+
+      if (metaEl) metaEl.textContent = `${candidates.length} candidate(s)`;
+
+      candidates.forEach((item) => {
+        const card = document.createElement('div');
+        card.className = 'task-item task-card';
+        card.style.borderColor = 'var(--border-color)';
+
+        const entType = escapeHTML(item.entity_type || 'unknown');
+        const entId = escapeHTML(String(item.entity_id ?? ''));
+        const modelName = item.model_name ? escapeHTML(item.model_name) : null;
+        const similarityVal = (typeof item.similarity === 'number') ? item.similarity.toFixed(4) : (item.similarity ?? 'N/A');
+
+        card.innerHTML = `
+          <div class="task-info" style="flex: 1 1 100%;">
+            <div style="display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;">
+              <div style="font-weight: 600; font-size: 1rem; color: var(--text-primary);">
+                <span style="color: var(--accent-blue); font-weight: bold;">${entType}</span> : ID ${entId}
+              </div>
+              <div style="font-size: 0.85rem; color: var(--text-secondary);">
+                Similarity: <strong style="color: var(--accent-green); font-family: monospace;">${similarityVal}</strong>
+              </div>
+            </div>
+            <div class="task-meta" style="margin-top: 0.3rem;">
+              <span>Type: ${entType}</span>
+              <span>ID: ${entId}</span>
+              ${modelName ? `<span>Model: ${modelName}</span>` : ''}
+            </div>
+          </div>
+          <div class="task-card-actions" style="display: flex; gap: 0.5rem; align-items: center; justify-content: flex-end; width: 100%; margin-top: 0.5rem;">
+            <button class="btn btn-secondary btn-sm btn-find-similar" onclick="handleSemanticFindSimilar('${entType}', '${entId}')">
+              🔍 Find Similar
+            </button>
+          </div>
+        `;
+        listEl.appendChild(card);
+      });
     }
 
     // Check saved job on page load and resume polling

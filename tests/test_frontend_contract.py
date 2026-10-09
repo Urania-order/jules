@@ -649,3 +649,59 @@ def test_frontend_contract_ontology():
     assert 'id="ontology-filters"' in content
     assert 'id="ontology-detail-panel"' in content
     assert 'renderOntologyGraph' in content
+
+
+def test_frontend_contract_semantic_exploration():
+    """Verify TASK 36 Semantic Exploration UI contract elements in frontend/index.html."""
+    content = INDEX_PATH.read_text()
+
+    # Navbar navigation button and view section
+    assert 'data-view="semantic"' in content
+    assert 'id="view-semantic"' in content
+
+    # Critical principle disclaimer
+    assert 'candidate-generation signal' in content
+    assert 'NOT evidence, causation, resonance, or epistemic truth' in content
+
+    # Search View elements
+    assert 'id="semantic-search-panel"' in content
+    assert 'id="semantic-query"' in content
+    assert 'id="semantic-filter"' in content
+    assert 'id="semantic-k"' in content
+    assert 'id="btn-semantic-search"' in content
+    assert 'id="semantic-validation-msg"' in content
+
+    # Similar View elements
+    assert 'id="semantic-similar-header"' in content
+    assert 'id="semantic-source-entity-display"' in content
+    assert 'id="semantic-source-type"' in content
+    assert 'id="semantic-source-id"' in content
+    assert 'id="btn-semantic-back"' in content
+
+    # Results & Status elements
+    assert 'id="semantic-results-heading"' in content
+    assert 'id="semantic-results-meta"' in content
+    assert 'id="semantic-loading-state"' in content
+    assert 'id="semantic-error-state"' in content
+    assert 'id="semantic-results-list"' in content
+
+    # JavaScript functions and state handlers
+    assert 'parseEntityTypeFilter' in content
+    assert 'handleSemanticSearchSubmit' in content
+    assert 'executeSemanticSearchRequest' in content
+    assert 'handleSemanticFindSimilar' in content
+    assert 'executeSemanticSimilarRequest' in content
+    assert 'handleSemanticBack' in content
+    assert 'updateSemanticViewHeader' in content
+    assert 'renderSemanticCandidateList' in content
+
+    # Endpoint URLs
+    assert '/semantic/search' in content
+    assert '/semantic/similar/' in content
+
+    # Request cancellation support
+    assert 'AbortController' in content
+
+    # Read-only verification: NO canonical entity creation/mutation/indexing calls
+    assert 'index_canonical' not in content
+    assert 'auto_index' not in content
