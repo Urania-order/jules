@@ -26,6 +26,7 @@ Known mistakes and rules to avoid them.
 
 ### Process / Orchestration
 
+- ERRATA-0049 — SQLAlchemy legacy declarative_base() import deprecated (LOW)
 - ERRATA-0048 — SQLAlchemy legacy Query.get() deprecated (LOW)
 - ERRATA-0047 — SQLAlchemy model change not reflected in existing dev SQLite (MEDIUM)
 - ERRATA-0046 — SHA-256 fallback embedding duplicated (LOW)
