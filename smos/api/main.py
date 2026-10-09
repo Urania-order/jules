@@ -1,5 +1,5 @@
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi import FastAPI, Depends, HTTPException, Response, Request, Header
+from fastapi import FastAPI, Depends, HTTPException, Response, Request, Header, Query
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
@@ -47,6 +47,8 @@ from smos.services.blockage_analysis_service import BlockageAnalysisService
 from smos.services.emergence_analysis_service import EmergenceAnalysisService
 from smos.services.four_position_service import FourPositionService
 from smos.services.domain_event_service import DomainEventService
+from smos.services.semantic_search_service import SemanticSearchService
+from smos.services.embedding_fallback import HashFallbackAdapter
 
 # Core & Adapters
 from smos.core.state import StateManager, normalize_created_at_state
@@ -590,6 +592,16 @@ class ResonanceDetectRequest(BaseModel):
 
 class BlockageAnalyzeRequest(BaseModel):
     indirect_max_hops: Optional[int] = 2
+
+
+class SemanticSearchRequest(BaseModel):
+    query: str = Field(..., min_length=1, description="Search query text")
+    k: int = Field(10, ge=1, le=100, description="Number of results")
+    entity_types: Optional[List[str]] = Field(
+        None,
+        description="Optional list of entity types to filter; "
+                    "if None, searches across all indexed entity types",
+    )
 
 RUN_JOBS: Dict[str, Dict[str, Any]] = {}
 
@@ -3056,3 +3068,85 @@ def reconstruct_domain_entity(
 ):
     svc = DomainEventService(db)
     return svc.reconstruct_entity(entity_type=entity_type, entity_id=entity_id)
+
+
+@app.post(
+    "/api/semantic/search",
+    dependencies=[Depends(require_operator)],
+)
+def semantic_search(
+    req: SemanticSearchRequest,
+    db: Session = Depends(get_db),
+):
+    """Read-only semantic search across the derived semantic index.
+
+    Returns list of {entity_type, entity_id, similarity, model_name}.
+    Does NOT modify any canonical entity.
+    Does NOT create DomainRelation.
+    Does NOT auto-index.
+    """
+    semantic_service = SemanticSearchService(db, HashFallbackAdapter())
+    try:
+        results = semantic_service.search(
+            req.query,
+            k=req.k,
+            entity_types=req.entity_types,
+        )
+    except Exception as e:
+        logger.warning(
+            "TASK 35: semantic search failed: %s",
+            e,
+        )
+        return _error_response(
+            "semantic_search_failed",
+            "Semantic search failed",
+        )
+    return results
+
+
+@app.get(
+    "/api/semantic/similar/{entity_type}/{entity_id}",
+    dependencies=[Depends(require_operator)],
+)
+def semantic_similar(
+    entity_type: str,
+    entity_id: int,
+    k: int = Query(10, ge=1, le=100),
+    entity_types: Optional[str] = None,
+    db: Session = Depends(get_db),
+):
+    """Read-only semantic neighbors of a canonical entity.
+
+    - entity_types: comma-separated string (optional).
+      None or empty/whitespace -> None (search all indexed types)
+    - k: validated ge=1, le=100.
+
+    Does NOT modify any canonical entity.
+    Does NOT create DomainRelation.
+    Does NOT auto-index.
+    """
+    parsed_entity_types: Optional[List[str]] = None
+    if entity_types:
+        parsed = [
+            t.strip() for t in entity_types.split(",") if t.strip()
+        ]
+        parsed_entity_types = parsed or None
+
+    semantic_service = SemanticSearchService(db, HashFallbackAdapter())
+    try:
+        results = semantic_service.similar(
+            entity_type,
+            entity_id,
+            k=k,
+            entity_types=parsed_entity_types,
+        )
+    except Exception as e:
+        logger.warning(
+            "TASK 35: semantic similar failed: %s",
+            e,
+        )
+        return _error_response(
+            "semantic_similar_failed",
+            "Semantic similar failed",
+        )
+    return results
