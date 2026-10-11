@@ -26,6 +26,7 @@ Known mistakes and rules to avoid them.
 
 ### Process / Orchestration
 
+- ERRATA-0051 — Test DB isolation broken by StaticPool (HIGH)
 - ERRATA-0050 — anyio.abc.BlockingPortal DeprecationWarning (INFO, third-party)
 - ERRATA-0049 — SQLAlchemy legacy declarative_base() import deprecated (LOW, CLOSED TASK 38)
 - ERRATA-0048 — SQLAlchemy legacy Query.get() deprecated (LOW, CLOSED TASK 37)
