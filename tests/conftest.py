@@ -39,6 +39,7 @@ _MODEL_MODULES = [
     "smos.models.models",
     "smos.models.phenomenon",
     "smos.models.potential",
+    "smos.models.observation",
     "smos.models.prediction",
     "smos.models.semantic_index",
 ]

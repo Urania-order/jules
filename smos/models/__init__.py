@@ -4,6 +4,15 @@ from smos.models.constraint import Constraint, ConstraintType, ConstraintStatus
 from smos.models.potential import PotentialPhenomenon, PotentialStatus
 from smos.models.domain_relation import DomainRelation
 from smos.models.context_exposure import ContextExposure, AgentType
+from smos.models.observation import Observation
+from smos.models.observation_contract import (
+    ALLOWED_EPISTEMIC_CLASSIFICATIONS,
+    calculate_observation_hash,
+    canonical_serialize_observation,
+    classify_conflict,
+    normalize_observation,
+    validate_observation,
+)
 from smos.models.prediction import Prediction
 from smos.models.domain_event import DomainEvent, DomainEventType
 from smos.models.conclusion_contract import (

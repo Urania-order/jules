@@ -22,6 +22,7 @@ from smos.services.emergence_analysis_service import (
     EmergenceAnalysisService,
     EmergenceAnalysis,
 )
+from smos.services.observation_service import ObservationService
 from smos.services.prediction_service import PredictionService
 from smos.services.domain_event_service import DomainEventService
 from smos.services.four_position_service import FourPositionService
