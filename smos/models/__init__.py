@@ -51,6 +51,14 @@ from smos.models.four_position_contract import (
     is_four_position_analysis_complete,
 )
 from smos.models.semantic_index import SemanticIndexEntry
+from smos.models.evaluation import EvaluationStatus, EvaluationRecord
+from smos.models.evaluation_contract import (
+    validate_evaluation_request,
+    validate_evaluation_result,
+    normalize_evaluation_result,
+    canonical_evaluation_json,
+    compute_evaluation_hash,
+)
 
 __all__ = [
     "Phenomenon",
@@ -97,4 +105,11 @@ __all__ = [
     "set_position_claim",
     "is_four_position_analysis_complete",
     "SemanticIndexEntry",
+    "EvaluationStatus",
+    "EvaluationRecord",
+    "validate_evaluation_request",
+    "validate_evaluation_result",
+    "normalize_evaluation_result",
+    "canonical_evaluation_json",
+    "compute_evaluation_hash",
 ]

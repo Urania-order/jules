@@ -29,6 +29,7 @@ from smos.services.four_position_service import FourPositionService
 from smos.services.semantic_adapter import SemanticAdapter
 from smos.services.embedding_fallback import HashFallbackAdapter
 from smos.services.semantic_search_service import SemanticSearchService, build_canonical_semantic_text
+from smos.services.evaluation_engine import EvaluationEngine
 
 __all__ = [
     "PhenomenonService",
@@ -54,4 +55,5 @@ __all__ = [
     "HashFallbackAdapter",
     "SemanticSearchService",
     "build_canonical_semantic_text",
+    "EvaluationEngine",
 ]

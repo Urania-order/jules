@@ -43,6 +43,7 @@ _MODEL_MODULES = [
     "smos.models.observation",
     "smos.models.prediction",
     "smos.models.semantic_index",
+    "smos.models.evaluation",
 ]
 
 
