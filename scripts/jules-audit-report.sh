@@ -2,13 +2,6 @@
 #
 # jules-audit-report.sh — Save an audit report from Jules UI
 #
-# Usage:
-#   ./scripts/jules-audit-report.sh <task-id>
-#
-# Behavior:
-#   - If stdin is a pipe or file, read report from stdin.
-#   - If stdin is a terminal, read report from clipboard (pbpaste on macOS).
-#
 set -euo pipefail
 
 PROJECT_ROOT="$(git rev-parse --show-toplevel)"
@@ -21,24 +14,17 @@ TASK_ID="${1:-}"
 
 if [ -z "$TASK_ID" ]; then
     echo ""
-    echo "Usage:"
-    echo "  ./scripts/jules-audit-report.sh <task-id>"
+    echo "Usage: ./scripts/jules-audit-report.sh <task-id>"
     echo ""
-    echo "The report is read from:"
-    echo "  - stdin (if piped):  cat report.md | $0 <task-id>"
-    echo "  - clipboard (macOS): copy report, then run $0 <task-id>"
-    echo ""
-    echo "Existing reports:"
-    if [ -f "$INDEX_FILE" ]; then
-        grep "^| " "$INDEX_FILE" | tail -10
-    else
-        echo "  (none yet)"
-    fi
+    exit 1
+fi
+
+if [[ ! "$TASK_ID" =~ ^task- ]]; then
+    echo "ERROR: Task ID must start with 'task-' (got: $TASK_ID)"
     exit 1
 fi
 
 mkdir -p "$REPORTS_DIR"
-
 REPORT_FILE="$REPORTS_DIR/${TASK_ID}-report.md"
 
 echo ""
@@ -50,49 +36,65 @@ echo " Task ID:     $TASK_ID"
 echo " Report file: $REPORT_FILE"
 echo ""
 
-# Determine source: stdin (pipe/file) or clipboard
 if [ -t 0 ]; then
-    # stdin is a terminal -> read from clipboard
     echo " Source:      clipboard (pbpaste)"
     echo ""
 
     if ! command -v pbpaste >/dev/null 2>&1; then
-        echo "ERROR: pbpaste not available (not macOS?)."
-        echo "Pipe the report instead:"
-        echo "  cat report.md | $0 $TASK_ID"
+        echo "ERROR: pbpaste not available."
         exit 1
     fi
 
-    if ! pbpaste > "$REPORT_FILE"; then
-        echo "ERROR: failed to read clipboard."
-        rm -f "$REPORT_FILE"
+    CLIP_LINES="$(pbpaste | wc -l | tr -d ' ')"
+    CLIP_CHARS="$(pbpaste | wc -c | tr -d ' ')"
+    CLIP_HAS_DECISION="$(pbpaste | grep -cE "Final Decision|FINAL DECISION|READY_FOR|NEED_MORE_ANALYSIS|BLOCKED_BY" || true)"
+
+    echo " Clipboard:   $CLIP_LINES lines, $CLIP_CHARS chars"
+    echo " Has decision: $CLIP_HAS_DECISION"
+    echo ""
+
+    # Multi-level validation
+    if [ "$CLIP_LINES" -eq 0 ]; then
+        echo "ERROR: Clipboard is empty. Nothing to save."
         exit 1
     fi
+
+    if [ "$CLIP_LINES" -lt 5 ]; then
+        echo "WARNING: Clipboard has only $CLIP_LINES lines."
+        read -p "Continue? [y/N] " -n 1 -r
+        echo
+        [[ ! $REPLY =~ ^[Yy]$ ]] && echo "Aborted." && exit 1
+    fi
+
+    # If clipboard is short AND has no decision — strong warning
+    if [ "$CLIP_LINES" -lt 50 ] && [ "$CLIP_HAS_DECISION" -eq 0 ]; then
+        echo "WARNING: Clipboard is short ($CLIP_LINES lines) and has no 'Final Decision' line."
+        echo "         This may be an incomplete report."
+        read -p "Continue anyway? [y/N] " -n 1 -r
+        echo
+        [[ ! $REPLY =~ ^[Yy]$ ]] && echo "Aborted." && exit 1
+    fi
+
+    pbpaste > "$REPORT_FILE"
 else
-    # stdin is a pipe or file -> read from stdin
     echo " Source:      stdin (pipe/file)"
     echo ""
     cat > "$REPORT_FILE"
 fi
 
-# Verify non-empty
 LINE_COUNT="$(wc -l < "$REPORT_FILE" | tr -d ' ')"
 if [ "$LINE_COUNT" -lt 5 ]; then
-    echo ""
     echo "ERROR: Report is empty or too short ($LINE_COUNT lines)."
-    echo "Removing $REPORT_FILE"
     rm -f "$REPORT_FILE"
     exit 1
 fi
 
-# Compute metadata
 SAVED_AT="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
 HASH="$(shasum -a 256 "$REPORT_FILE" | awk '{print $1}')"
 HEAD="$(git rev-parse --short HEAD)"
 
 DECISION="$(grep -m1 -E "Final Decision|FINAL DECISION|READY_FOR|NEED_MORE_ANALYSIS|BLOCKED_BY" "$REPORT_FILE" | head -1 | sed 's/^[[:space:]]*//' | cut -c1-60 || echo "unknown")"
 
-# Update INDEX.md
 if [ ! -f "$INDEX_FILE" ]; then
     cat > "$INDEX_FILE" <<'INDEX_HEADER'
 # Co-SMOS — Audit Reports Index
@@ -102,7 +104,6 @@ if [ ! -f "$INDEX_FILE" ]; then
 INDEX_HEADER
 fi
 
-# Remove existing entry for same task_id (idempotent)
 if grep -q "| $TASK_ID |" "$INDEX_FILE"; then
     grep -v "| $TASK_ID |" "$INDEX_FILE" > "${INDEX_FILE}.tmp"
     mv "${INDEX_FILE}.tmp" "$INDEX_FILE"
@@ -119,8 +120,35 @@ echo " HEAD:     $HEAD"
 echo " Hash:     ${HASH:0:16}..."
 echo " Index:    $INDEX_FILE"
 echo ""
-echo " Next steps:"
-echo "   git add $REPORT_FILE $INDEX_FILE"
-echo "   git commit -m \"docs: record audit report for $TASK_ID\""
-echo "   git push origin main"
+
+echo "------------------------------------------"
+echo " Git"
+echo "------------------------------------------"
+echo ""
+
+git add "$REPORT_FILE" "$INDEX_FILE"
+
+if git diff --cached --quiet; then
+    echo " No changes to commit."
+else
+    COMMIT_MSG="docs: record audit report for $TASK_ID"
+    git commit -m "$COMMIT_MSG"
+    echo ""
+    echo " Commit: $COMMIT_MSG"
+    echo ""
+fi
+
+read -p " Push to origin/main? [y/N] " -n 1 -r
+echo
+if [[ $REPLY =~ ^[Yy]$ ]]; then
+    echo ""
+    git push origin main
+    echo ""
+    echo " Pushed to origin/main."
+else
+    echo ""
+    echo " Not pushed. To push later:"
+    echo "   git push origin main"
+fi
+
 echo ""
