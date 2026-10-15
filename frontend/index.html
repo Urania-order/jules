@@ -921,6 +921,7 @@
       <button class="nav-btn" data-view="consult">Consult</button>
       <button class="nav-btn" data-view="semantic">🔎 Semantic</button>
       <button class="nav-btn" data-view="admin">Admin</button>
+      <button class="nav-btn" data-view="audit">📋 Audit</button>
     </nav>
   </header>
 
@@ -1662,6 +1663,91 @@
       </div>
     </div>
 
+    <!-- AUDIT PANEL -->
+    <section id="view-audit" class="view">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+        <h2>Audit Panel</h2>
+        <div style="display: flex; gap: 0.5rem;">
+          <button class="btn btn-secondary" onclick="refreshAuditData()">🔄 Refresh</button>
+          <button class="btn btn-primary" onclick="verifyAuditTrail()">🔍 Verify Trail</button>
+        </div>
+      </div>
+
+      <!-- ACTIVE AUDITS CARD -->
+      <div class="card" style="margin-bottom: 1.5rem;">
+        <h3>Active Audits</h3>
+        <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.75rem;">
+          Live audit task status from backend state. Active audit tasks run under <code>jules-task.sh</code> without code commits.
+        </p>
+        <div id="active-audits-container">
+          <table style="width: 100%; border-collapse: collapse; font-size: 0.9rem;">
+            <thead>
+              <tr style="text-align: left; border-bottom: 1px solid var(--border-color);">
+                <th style="padding: 0.5rem;">Task ID</th>
+                <th style="padding: 0.5rem;">Status</th>
+                <th style="padding: 0.5rem;">Started At</th>
+              </tr>
+            </thead>
+            <tbody id="active-audits-tbody">
+              <tr><td colspan="3" style="padding: 0.5rem; text-align: center; color: var(--text-secondary);">Loading active audits...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- AUDIT REPORTS INDEX CARD -->
+      <div class="card" style="margin-bottom: 1.5rem;">
+        <h3>Audit Reports Index</h3>
+        <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.75rem;">
+          Recorded audit reports from <code>docs/audit-reports/INDEX.md</code>.
+        </p>
+        <div id="audit-reports-container" style="overflow-x: auto;">
+          <table style="width: 100%; border-collapse: collapse; font-size: 0.9rem;">
+            <thead>
+              <tr style="text-align: left; border-bottom: 1px solid var(--border-color);">
+                <th style="padding: 0.5rem;">Task ID</th>
+                <th style="padding: 0.5rem;">Saved At (UTC)</th>
+                <th style="padding: 0.5rem;">Decision</th>
+                <th style="padding: 0.5rem;">Lines</th>
+                <th style="padding: 0.5rem;">HEAD</th>
+                <th style="padding: 0.5rem;">Report</th>
+              </tr>
+            </thead>
+            <tbody id="audit-reports-tbody">
+              <tr><td colspan="6" style="padding: 0.5rem; text-align: center; color: var(--text-secondary);">Loading audit reports...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- AUDIT TRAIL VISUALIZATION CARD -->
+      <div class="card" style="margin-bottom: 1.5rem;">
+        <h3>Audit Trail</h3>
+        <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.75rem;">
+          Sequential record of verified audit metadata.
+        </p>
+        <div id="audit-trail-container" style="display: flex; flex-direction: column; gap: 0.75rem;">
+          <div style="color: var(--text-secondary); font-size: 0.9rem;">Loading audit trail...</div>
+        </div>
+      </div>
+
+      <!-- QUICK SAVE / CLI COMMAND AREA -->
+      <div class="card">
+        <h3>Save Audit Report</h3>
+        <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.75rem;">
+          Copy and run the CLI command below in your terminal to save a report from clipboard/stdin. Browser direct file saves are disabled for security.
+        </p>
+        <div style="display: flex; gap: 0.5rem; align-items: center; margin-bottom: 0.75rem;">
+          <input type="text" id="audit-save-task-id" placeholder="e.g. task-20261015-122801" style="flex: 1; padding: 0.5rem; font-family: monospace;">
+          <button class="btn btn-primary" onclick="prepareSaveCommand()">Prepare Command</button>
+        </div>
+        <div id="audit-save-output" style="display: none; background: var(--bg-tertiary); padding: 0.75rem; border-radius: 4px; font-family: monospace; font-size: 0.85rem; border: 1px solid var(--border-color);">
+          <div id="audit-save-cmd-text" style="word-break: break-all; margin-bottom: 0.5rem;"></div>
+          <button class="btn btn-secondary btn-sm" onclick="copySaveCommand()">📋 Copy Command</button>
+        </div>
+      </div>
+    </section>
+
     <!-- TASK DETAIL VIEW -->
     <section id="view-task-detail" class="view">
       <button class="btn btn-secondary" id="btn-back-dashboard" style="margin-bottom: 1rem;">&larr; Back</button>
@@ -1928,6 +2014,7 @@
         renderResetCenter();
         renderAdminQueueStatus();
         renderOntologyGraph();
+        refreshAuditData();
 
         pollQueueLed();
       } catch (e) {
@@ -4612,6 +4699,131 @@
         `;
         listEl.appendChild(card);
       });
+    }
+
+    // Audit Panel JavaScript Functions
+    async function loadActiveAudits() {
+      const tbody = document.getElementById('active-audits-tbody');
+      if (!tbody) return;
+      try {
+        const data = await fetchJSON(`${API_BASE}/audit/active`);
+        if (data && data.active_task && data.active_task.id) {
+          const task = data.active_task;
+          tbody.innerHTML = `
+            <tr>
+              <td style="padding: 0.5rem; font-family: monospace;">${escapeHTML(task.id)}</td>
+              <td style="padding: 0.5rem;"><span class="badge badge-info">${escapeHTML(task.status || 'RUNNING')}</span></td>
+              <td style="padding: 0.5rem; color: var(--text-secondary);">${escapeHTML(task.started_at || 'N/A')}</td>
+            </tr>
+          `;
+        } else {
+          tbody.innerHTML = `<tr><td colspan="3" style="padding: 0.5rem; text-align: center; color: var(--text-secondary);">No active audit tasks</td></tr>`;
+        }
+      } catch (err) {
+        tbody.innerHTML = `<tr><td colspan="3" style="padding: 0.5rem; text-align: center; color: var(--danger-color);">Error loading active audits</td></tr>`;
+      }
+    }
+
+    async function loadAuditReports() {
+      const tbody = document.getElementById('audit-reports-tbody');
+      if (!tbody) return;
+      try {
+        const reports = await fetchJSON(`${API_BASE}/audit/reports`);
+        if (Array.isArray(reports) && reports.length > 0) {
+          tbody.innerHTML = reports.map(r => `
+            <tr>
+              <td style="padding: 0.5rem; font-family: monospace;">${escapeHTML(r.task_id)}</td>
+              <td style="padding: 0.5rem; color: var(--text-secondary);">${escapeHTML(r.saved_at)}</td>
+              <td style="padding: 0.5rem;"><span class="badge badge-success">${escapeHTML(r.decision)}</span></td>
+              <td style="padding: 0.5rem;">${escapeHTML(String(r.lines))}</td>
+              <td style="padding: 0.5rem; font-family: monospace;">${escapeHTML(r.head)}</td>
+              <td style="padding: 0.5rem;"><a href="${API_BASE}/audit/reports/${r.task_id}" target="_blank" class="btn btn-secondary btn-sm">View Report</a></td>
+            </tr>
+          `).join('');
+        } else {
+          tbody.innerHTML = `<tr><td colspan="6" style="padding: 0.5rem; text-align: center; color: var(--text-secondary);">No audit reports found</td></tr>`;
+        }
+      } catch (err) {
+        tbody.innerHTML = `<tr><td colspan="6" style="padding: 0.5rem; text-align: center; color: var(--danger-color);">Error loading audit reports</td></tr>`;
+      }
+    }
+
+    async function loadAuditTrail() {
+      const container = document.getElementById('audit-trail-container');
+      if (!container) return;
+      try {
+        const trail = await fetchJSON(`${API_BASE}/audit/trail`);
+        if (Array.isArray(trail) && trail.length > 0) {
+          container.innerHTML = trail.map((item) => `
+            <div style="border-left: 3px solid var(--primary-color); padding-left: 0.75rem; background: var(--bg-secondary); padding: 0.75rem; border-radius: 4px;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.25rem;">
+                <strong style="font-family: monospace;">${escapeHTML(item.task_id)}</strong>
+                <span style="font-size: 0.8rem; color: var(--text-secondary);">${escapeHTML(item.saved_at)} | HEAD: ${escapeHTML(item.head)}</span>
+              </div>
+              <div style="font-size: 0.85rem; color: var(--text-primary); margin-bottom: 0.25rem;">${escapeHTML(item.decision)}</div>
+              ${item.links && item.links.length > 0 ? `<div style="font-size: 0.8rem; color: var(--text-secondary);">Links: ${item.links.map(l => `<span class="badge badge-secondary" style="margin-right: 0.25rem;">${escapeHTML(l)}</span>`).join('')}</div>` : ''}
+            </div>
+          `).join('');
+        } else {
+          container.innerHTML = `<div style="color: var(--text-secondary); font-size: 0.9rem;">No audit trail items found.</div>`;
+        }
+      } catch (err) {
+        container.innerHTML = `<div style="color: var(--danger-color); font-size: 0.9rem;">Error loading audit trail</div>`;
+      }
+    }
+
+    async function verifyAuditTrail() {
+      try {
+        const res = await fetchJSON(`${API_BASE}/audit/verify`, { method: 'POST' });
+        if (res.status === 'ok') {
+          alert(`✅ Audit Trail Verified COMPLETE\nTotal reports: ${res.total}`);
+        } else {
+          alert(`⚠ Audit Trail INCOMPLETE\nTotal: ${res.total}\nMissing: ${res.missing ? res.missing.join(', ') : 'none'}`);
+        }
+      } catch (err) {
+        showError('Audit verification failed: ' + err.message);
+      }
+    }
+
+    async function prepareSaveCommand() {
+      const input = document.getElementById('audit-save-task-id');
+      const taskId = input ? input.value.trim() : '';
+
+      try {
+        const res = await fetch(`${API_BASE}/audit/save`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ task_id: taskId })
+        });
+        const data = await res.json();
+        const outputDiv = document.getElementById('audit-save-output');
+        const cmdText = document.getElementById('audit-save-cmd-text');
+        if (outputDiv && cmdText) {
+          cmdText.textContent = data.cli_command || `./scripts/jules-audit-report.sh ${taskId || '<task-id>'}`;
+          outputDiv.style.display = 'block';
+        }
+      } catch (err) {
+        showError('Failed to prepare command: ' + err.message);
+      }
+    }
+
+    function copySaveCommand() {
+      const cmdText = document.getElementById('audit-save-cmd-text');
+      if (cmdText) {
+        navigator.clipboard.writeText(cmdText.textContent.trim()).then(() => {
+          alert('Copied command to clipboard!');
+        }).catch(() => {
+          alert('Command: ' + cmdText.textContent.trim());
+        });
+      }
+    }
+
+    async function refreshAuditData() {
+      await Promise.all([
+        loadActiveAudits(),
+        loadAuditReports(),
+        loadAuditTrail()
+      ]);
     }
 
     // Check saved job on page load and resume polling

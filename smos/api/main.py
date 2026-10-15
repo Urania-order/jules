@@ -3104,6 +3104,178 @@ def semantic_search(
     return results
 
 
+# ============================================================
+# AUDIT API ENDPOINTS (Co-SMOS v1.2)
+# ============================================================
+
+class AuditSaveRequest(BaseModel):
+    task_id: Optional[str] = None
+
+
+@app.get("/api/audit/reports")
+def get_audit_reports():
+    """Read docs/audit-reports/INDEX.md and return parsed report list."""
+    reports_dir = Path("docs/audit-reports")
+    index_file = reports_dir / "INDEX.md"
+    if not index_file.is_file():
+        return []
+
+    reports = []
+    content = index_file.read_text(encoding="utf-8")
+    for line in content.splitlines():
+        line_str = line.strip()
+        if not line_str.startswith("|") or "Task ID" in line_str or "---" in line_str:
+            continue
+        parts = [p.strip() for p in line_str.split("|")[1:-1]]
+        if len(parts) >= 6:
+            task_id, saved_at, decision, lines_str, head, report_cell = parts[:6]
+            try:
+                lines_val = int(lines_str)
+            except ValueError:
+                lines_val = 0
+            match = re.search(r"\(([^)]+)\)", report_cell)
+            report_url = match.group(1) if match else report_cell
+            reports.append({
+                "task_id": task_id,
+                "saved_at": saved_at,
+                "decision": decision,
+                "lines": lines_val,
+                "head": head,
+                "report_url": report_url,
+            })
+    return reports
+
+
+@app.get("/api/audit/reports/{task_id}")
+def get_audit_report_by_id(task_id: str):
+    """Get single audit report by task_id with path traversal check."""
+    if not re.match(r"^task-[0-9]{8}-[0-9]{6}$", task_id):
+        return _error_response("invalid_task_id", "Invalid task ID format", status_code=400)
+
+    reports_dir = Path("docs/audit-reports").resolve()
+    target_path = (reports_dir / f"{task_id}-report.md").resolve()
+
+    try:
+        target_path.relative_to(reports_dir)
+    except ValueError:
+        return _error_response("path_traversal", "Path traversal prohibited", status_code=400)
+
+    if not target_path.is_file():
+        return _error_response("not_found", f"Audit report for task '{task_id}' not found", status_code=404)
+
+    return Response(
+        content=target_path.read_text(encoding="utf-8"),
+        media_type="text/markdown",
+    )
+
+
+@app.get("/api/audit/active")
+def get_active_audit():
+    """Return active task summary from .co-smos/state.json without exposing arbitrary fields."""
+    state_file = Path(".co-smos/state.json")
+    if not state_file.is_file():
+        return {"active_task": None}
+
+    try:
+        data = json.loads(state_file.read_text(encoding="utf-8"))
+        active = data.get("active_task")
+        if not active or not isinstance(active, dict):
+            return {"active_task": None}
+
+        return {
+            "active_task": {
+                "id": active.get("id"),
+                "status": active.get("status"),
+                "started_at": active.get("started_at"),
+            }
+        }
+    except Exception as e:
+        logger.warning("Error reading state.json in active audit API: %s", e)
+        return {"active_task": None}
+
+
+@app.get("/api/audit/trail")
+def get_audit_trail():
+    """Build audit trail from actual report metadata found in INDEX.md and report files."""
+    reports_dir = Path("docs/audit-reports")
+    index_file = reports_dir / "INDEX.md"
+    if not index_file.is_file():
+        return []
+
+    trail = []
+    content = index_file.read_text(encoding="utf-8")
+    for line in content.splitlines():
+        line_str = line.strip()
+        if not line_str.startswith("|") or "Task ID" in line_str or "---" in line_str:
+            continue
+        parts = [p.strip() for p in line_str.split("|")[1:-1]]
+        if len(parts) >= 5:
+            task_id, saved_at, decision, _lines, head = parts[:5]
+            links = []
+            report_file = reports_dir / f"{task_id}-report.md"
+            if report_file.is_file():
+                report_content = report_file.read_text(encoding="utf-8")
+                found_tasks = set(re.findall(r"task-[0-9]{8}-[0-9]{6}", report_content))
+                found_tasks.discard(task_id)
+                links = sorted(list(found_tasks))
+            trail.append({
+                "task_id": task_id,
+                "decision": decision,
+                "saved_at": saved_at,
+                "head": head,
+                "links": links,
+            })
+    return trail
+
+
+@app.post("/api/audit/verify")
+def verify_audit():
+    """Run scripts/jules-audit-verify.sh safely using argument array."""
+    project_root = Path(__file__).resolve().parent.parent.parent
+    script_path = project_root / "scripts" / "jules-audit-verify.sh"
+
+    if not script_path.is_file():
+        return _error_response("script_not_found", "jules-audit-verify.sh not found", status_code=500)
+
+    try:
+        proc = subprocess.run(
+            ["bash", str(script_path)],
+            capture_output=True,
+            text=True,
+            cwd=str(project_root),
+        )
+        stdout = proc.stdout or ""
+
+        total_match = re.search(r"Total reports:\s*(\d+)", stdout)
+        total_count = int(total_match.group(1)) if total_match else 0
+
+        missing_tasks = re.findall(r"MISSING:\s*(task-[^\s]+)", stdout)
+
+        status_str = "ok" if (proc.returncode == 0 and not missing_tasks) else "incomplete"
+
+        return {
+            "status": status_str,
+            "total": total_count,
+            "missing": missing_tasks,
+        }
+    except Exception as e:
+        logger.error("Error running audit verify script: %s", e)
+        return _error_response("verify_error", str(e), status_code=500)
+
+
+@app.post("/api/audit/save")
+def save_audit(req: Optional[AuditSaveRequest] = None):
+    """Return 501 Not Implemented with CLI command guidance."""
+    task_id = (req.task_id if req and req.task_id else None) or "<task-id>"
+    return JSONResponse(
+        status_code=501,
+        content={
+            "error": "clipboard access not available in browser",
+            "cli_command": f"./scripts/jules-audit-report.sh {task_id}",
+        },
+    )
+
+
 @app.get(
     "/api/semantic/similar/{entity_type}/{entity_id}",
     dependencies=[Depends(require_operator)],
