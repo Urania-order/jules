@@ -130,7 +130,8 @@ import json
 try:
     s = json.load(open('$STATE_FILE'))
     a = s.get('active_task') or {}
-    print(a.get('id') or '')
+    l = s.get('last_task') or {}
+    print(a.get('id') or l.get('id') or '')
 except Exception:
     print('')
 ")"
