@@ -260,3 +260,22 @@ echo ""
 echo "Check Jules sessions with:"
 echo "  jules remote list --session"
 echo ""
+
+# ============================================================
+# Next step hint
+# ============================================================
+if [ -n "${TASK_ID:-}" ]; then
+    echo ""
+    echo "=========================================="
+    echo " Next step"
+    echo "=========================================="
+    echo ""
+    echo " When Jules completes, run:"
+    echo ""
+    echo "   ./scripts/jules-complete.sh --task $TASK_ID"
+    echo ""
+    echo " Or:"
+    echo ""
+    echo "   ./scripts/jules-last.sh"
+    echo ""
+fi
